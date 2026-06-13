@@ -7,9 +7,10 @@ import { ChatbotService } from './chatbot.service';
 import { IntentService } from './intent.service';
 import { ReplyTemplateService } from './reply-template.service';
 import { UserSessionService } from './user-session.service';
+import { AiModule } from './ai.module';
 
 @Module({
-  imports: [RegistrationModule],
+  imports: [RegistrationModule, AiModule],
   providers: [
     ChatbotService,
     IntentService,

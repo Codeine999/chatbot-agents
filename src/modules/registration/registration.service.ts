@@ -71,17 +71,17 @@ export class RegistrationService {
       },
     });
 
-    if (!existingMember) {
-      return;
-    }
+    if (!existingMember) return;
 
     if (existingMember.phone === data.phoneNumber) {
-      throw new ConflictException('มีผู้ใช้เบอร์โทรนี้อยู่ในระบบแล้ว');
+      throw new ConflictException('เบอร์โทรนี้สมัครสมาชิกไปเรียบร้อยแล้ว');
     }
 
     if (existingMember.banknumber === data.bankAccount) {
-      throw new ConflictException('มีเลขบัญชีนี้อยู่ในระบบแล้ว');
+      throw new ConflictException('เลขบัญชีนี้สมัครสมาชิกไปเรียบร้อยแล้ว');
     }
+
+    throw new ConflictException('คุณสมัครสมาชิกไปเรียบร้อยแล้ว');
   }
 
   private async generateUniqueUsername(phoneNumber: string): Promise<string> {

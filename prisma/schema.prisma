@@ -4,8 +4,9 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
@@ -13,13 +14,41 @@ datasource db {
 }
 
 model Member {
-  uuid          String @id @default(uuid()) @db.Uuid
-  username      String @unique
+  uuid          String    @id @default(uuid()) @db.Uuid
+  username      String    @unique
   password      String
   firstname     String
   lastname      String
-  phone         String @unique
+  phone         String    @unique
   bankname      String
-  banknumber    String @unique
-  statusaccount String @default("pending")
+  banknumber    String    @unique
+  statusaccount String    @default("pending")
+  payments      Payment[]
+}
+
+model Payment {
+  uuid        String        @id @default(uuid()) @db.Uuid
+  username    String
+  paymentType PaymentType
+  status      PaymentStatus @default(pending)
+  createdAt   DateTime      @default(now())
+  approveBy   String?       @db.Uuid
+  approvedAt  DateTime?
+  member      Member        @relation(fields: [username], references: [username])
+
+  @@index([username])
+  @@index([status])
+  @@index([approveBy])
+}
+
+enum PaymentType {
+  QRcode
+  Slip
+}
+
+enum PaymentStatus {
+  pending
+  success
+  fail
+  reject
 }

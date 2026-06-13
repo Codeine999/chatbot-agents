@@ -214,6 +214,7 @@ export type MemberWhereInput = {
   bankname?: Prisma.StringFilter<"Member"> | string
   banknumber?: Prisma.StringFilter<"Member"> | string
   statusaccount?: Prisma.StringFilter<"Member"> | string
+  payments?: Prisma.PaymentListRelationFilter
 }
 
 export type MemberOrderByWithRelationInput = {
@@ -226,6 +227,7 @@ export type MemberOrderByWithRelationInput = {
   bankname?: Prisma.SortOrder
   banknumber?: Prisma.SortOrder
   statusaccount?: Prisma.SortOrder
+  payments?: Prisma.PaymentOrderByRelationAggregateInput
 }
 
 export type MemberWhereUniqueInput = Prisma.AtLeast<{
@@ -241,6 +243,7 @@ export type MemberWhereUniqueInput = Prisma.AtLeast<{
   lastname?: Prisma.StringFilter<"Member"> | string
   bankname?: Prisma.StringFilter<"Member"> | string
   statusaccount?: Prisma.StringFilter<"Member"> | string
+  payments?: Prisma.PaymentListRelationFilter
 }, "uuid" | "username" | "phone" | "banknumber">
 
 export type MemberOrderByWithAggregationInput = {
@@ -283,6 +286,7 @@ export type MemberCreateInput = {
   bankname: string
   banknumber: string
   statusaccount?: string
+  payments?: Prisma.PaymentCreateNestedManyWithoutMemberInput
 }
 
 export type MemberUncheckedCreateInput = {
@@ -295,6 +299,7 @@ export type MemberUncheckedCreateInput = {
   bankname: string
   banknumber: string
   statusaccount?: string
+  payments?: Prisma.PaymentUncheckedCreateNestedManyWithoutMemberInput
 }
 
 export type MemberUpdateInput = {
@@ -307,6 +312,7 @@ export type MemberUpdateInput = {
   bankname?: Prisma.StringFieldUpdateOperationsInput | string
   banknumber?: Prisma.StringFieldUpdateOperationsInput | string
   statusaccount?: Prisma.StringFieldUpdateOperationsInput | string
+  payments?: Prisma.PaymentUpdateManyWithoutMemberNestedInput
 }
 
 export type MemberUncheckedUpdateInput = {
@@ -319,6 +325,7 @@ export type MemberUncheckedUpdateInput = {
   bankname?: Prisma.StringFieldUpdateOperationsInput | string
   banknumber?: Prisma.StringFieldUpdateOperationsInput | string
   statusaccount?: Prisma.StringFieldUpdateOperationsInput | string
+  payments?: Prisma.PaymentUncheckedUpdateManyWithoutMemberNestedInput
 }
 
 export type MemberCreateManyInput = {
@@ -393,10 +400,122 @@ export type MemberMinOrderByAggregateInput = {
   statusaccount?: Prisma.SortOrder
 }
 
+export type MemberScalarRelationFilter = {
+  is?: Prisma.MemberWhereInput
+  isNot?: Prisma.MemberWhereInput
+}
+
 export type StringFieldUpdateOperationsInput = {
   set?: string
 }
 
+export type MemberCreateNestedOneWithoutPaymentsInput = {
+  create?: Prisma.XOR<Prisma.MemberCreateWithoutPaymentsInput, Prisma.MemberUncheckedCreateWithoutPaymentsInput>
+  connectOrCreate?: Prisma.MemberCreateOrConnectWithoutPaymentsInput
+  connect?: Prisma.MemberWhereUniqueInput
+}
+
+export type MemberUpdateOneRequiredWithoutPaymentsNestedInput = {
+  create?: Prisma.XOR<Prisma.MemberCreateWithoutPaymentsInput, Prisma.MemberUncheckedCreateWithoutPaymentsInput>
+  connectOrCreate?: Prisma.MemberCreateOrConnectWithoutPaymentsInput
+  upsert?: Prisma.MemberUpsertWithoutPaymentsInput
+  connect?: Prisma.MemberWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.MemberUpdateToOneWithWhereWithoutPaymentsInput, Prisma.MemberUpdateWithoutPaymentsInput>, Prisma.MemberUncheckedUpdateWithoutPaymentsInput>
+}
+
+export type MemberCreateWithoutPaymentsInput = {
+  uuid?: string
+  username: string
+  password: string
+  firstname: string
+  lastname: string
+  phone: string
+  bankname: string
+  banknumber: string
+  statusaccount?: string
+}
+
+export type MemberUncheckedCreateWithoutPaymentsInput = {
+  uuid?: string
+  username: string
+  password: string
+  firstname: string
+  lastname: string
+  phone: string
+  bankname: string
+  banknumber: string
+  statusaccount?: string
+}
+
+export type MemberCreateOrConnectWithoutPaymentsInput = {
+  where: Prisma.MemberWhereUniqueInput
+  create: Prisma.XOR<Prisma.MemberCreateWithoutPaymentsInput, Prisma.MemberUncheckedCreateWithoutPaymentsInput>
+}
+
+export type MemberUpsertWithoutPaymentsInput = {
+  update: Prisma.XOR<Prisma.MemberUpdateWithoutPaymentsInput, Prisma.MemberUncheckedUpdateWithoutPaymentsInput>
+  create: Prisma.XOR<Prisma.MemberCreateWithoutPaymentsInput, Prisma.MemberUncheckedCreateWithoutPaymentsInput>
+  where?: Prisma.MemberWhereInput
+}
+
+export type MemberUpdateToOneWithWhereWithoutPaymentsInput = {
+  where?: Prisma.MemberWhereInput
+  data: Prisma.XOR<Prisma.MemberUpdateWithoutPaymentsInput, Prisma.MemberUncheckedUpdateWithoutPaymentsInput>
+}
+
+export type MemberUpdateWithoutPaymentsInput = {
+  uuid?: Prisma.StringFieldUpdateOperationsInput | string
+  username?: Prisma.StringFieldUpdateOperationsInput | string
+  password?: Prisma.StringFieldUpdateOperationsInput | string
+  firstname?: Prisma.StringFieldUpdateOperationsInput | string
+  lastname?: Prisma.StringFieldUpdateOperationsInput | string
+  phone?: Prisma.StringFieldUpdateOperationsInput | string
+  bankname?: Prisma.StringFieldUpdateOperationsInput | string
+  banknumber?: Prisma.StringFieldUpdateOperationsInput | string
+  statusaccount?: Prisma.StringFieldUpdateOperationsInput | string
+}
+
+export type MemberUncheckedUpdateWithoutPaymentsInput = {
+  uuid?: Prisma.StringFieldUpdateOperationsInput | string
+  username?: Prisma.StringFieldUpdateOperationsInput | string
+  password?: Prisma.StringFieldUpdateOperationsInput | string
+  firstname?: Prisma.StringFieldUpdateOperationsInput | string
+  lastname?: Prisma.StringFieldUpdateOperationsInput | string
+  phone?: Prisma.StringFieldUpdateOperationsInput | string
+  bankname?: Prisma.StringFieldUpdateOperationsInput | string
+  banknumber?: Prisma.StringFieldUpdateOperationsInput | string
+  statusaccount?: Prisma.StringFieldUpdateOperationsInput | string
+}
+
+
+/**
+ * Count Type MemberCountOutputType
+ */
+
+export type MemberCountOutputType = {
+  payments: number
+}
+
+export type MemberCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  payments?: boolean | MemberCountOutputTypeCountPaymentsArgs
+}
+
+/**
+ * MemberCountOutputType without action
+ */
+export type MemberCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the MemberCountOutputType
+   */
+  select?: Prisma.MemberCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * MemberCountOutputType without action
+ */
+export type MemberCountOutputTypeCountPaymentsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.PaymentWhereInput
+}
 
 
 export type MemberSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -409,6 +528,8 @@ export type MemberSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs =
   bankname?: boolean
   banknumber?: boolean
   statusaccount?: boolean
+  payments?: boolean | Prisma.Member$paymentsArgs<ExtArgs>
+  _count?: boolean | Prisma.MemberCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["member"]>
 
 export type MemberSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -448,10 +569,18 @@ export type MemberSelectScalar = {
 }
 
 export type MemberOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"uuid" | "username" | "password" | "firstname" | "lastname" | "phone" | "bankname" | "banknumber" | "statusaccount", ExtArgs["result"]["member"]>
+export type MemberInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  payments?: boolean | Prisma.Member$paymentsArgs<ExtArgs>
+  _count?: boolean | Prisma.MemberCountOutputTypeDefaultArgs<ExtArgs>
+}
+export type MemberIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
+export type MemberIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
 
 export type $MemberPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "Member"
-  objects: {}
+  objects: {
+    payments: Prisma.$PaymentPayload<ExtArgs>[]
+  }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     uuid: string
     username: string
@@ -856,6 +985,7 @@ readonly fields: MemberFieldRefs;
  */
 export interface Prisma__MemberClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
+  payments<T extends Prisma.Member$paymentsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Member$paymentsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PaymentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -911,6 +1041,10 @@ export type MemberFindUniqueArgs<ExtArgs extends runtime.Types.Extensions.Intern
    */
   omit?: Prisma.MemberOmit<ExtArgs> | null
   /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MemberInclude<ExtArgs> | null
+  /**
    * Filter, which Member to fetch.
    */
   where: Prisma.MemberWhereUniqueInput
@@ -929,6 +1063,10 @@ export type MemberFindUniqueOrThrowArgs<ExtArgs extends runtime.Types.Extensions
    */
   omit?: Prisma.MemberOmit<ExtArgs> | null
   /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MemberInclude<ExtArgs> | null
+  /**
    * Filter, which Member to fetch.
    */
   where: Prisma.MemberWhereUniqueInput
@@ -946,6 +1084,10 @@ export type MemberFindFirstArgs<ExtArgs extends runtime.Types.Extensions.Interna
    * Omit specific fields from the Member
    */
   omit?: Prisma.MemberOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MemberInclude<ExtArgs> | null
   /**
    * Filter, which Member to fetch.
    */
@@ -995,6 +1137,10 @@ export type MemberFindFirstOrThrowArgs<ExtArgs extends runtime.Types.Extensions.
    */
   omit?: Prisma.MemberOmit<ExtArgs> | null
   /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MemberInclude<ExtArgs> | null
+  /**
    * Filter, which Member to fetch.
    */
   where?: Prisma.MemberWhereInput
@@ -1042,6 +1188,10 @@ export type MemberFindManyArgs<ExtArgs extends runtime.Types.Extensions.Internal
    * Omit specific fields from the Member
    */
   omit?: Prisma.MemberOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MemberInclude<ExtArgs> | null
   /**
    * Filter, which Members to fetch.
    */
@@ -1091,6 +1241,10 @@ export type MemberCreateArgs<ExtArgs extends runtime.Types.Extensions.InternalAr
    */
   omit?: Prisma.MemberOmit<ExtArgs> | null
   /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MemberInclude<ExtArgs> | null
+  /**
    * The data needed to create a Member.
    */
   data: Prisma.XOR<Prisma.MemberCreateInput, Prisma.MemberUncheckedCreateInput>
@@ -1138,6 +1292,10 @@ export type MemberUpdateArgs<ExtArgs extends runtime.Types.Extensions.InternalAr
    * Omit specific fields from the Member
    */
   omit?: Prisma.MemberOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MemberInclude<ExtArgs> | null
   /**
    * The data needed to update a Member.
    */
@@ -1205,6 +1363,10 @@ export type MemberUpsertArgs<ExtArgs extends runtime.Types.Extensions.InternalAr
    */
   omit?: Prisma.MemberOmit<ExtArgs> | null
   /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MemberInclude<ExtArgs> | null
+  /**
    * The filter to search for the Member to update in case it exists.
    */
   where: Prisma.MemberWhereUniqueInput
@@ -1231,6 +1393,10 @@ export type MemberDeleteArgs<ExtArgs extends runtime.Types.Extensions.InternalAr
    */
   omit?: Prisma.MemberOmit<ExtArgs> | null
   /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MemberInclude<ExtArgs> | null
+  /**
    * Filter which Member to delete.
    */
   where: Prisma.MemberWhereUniqueInput
@@ -1251,6 +1417,30 @@ export type MemberDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.Intern
 }
 
 /**
+ * Member.payments
+ */
+export type Member$paymentsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Payment
+   */
+  select?: Prisma.PaymentSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Payment
+   */
+  omit?: Prisma.PaymentOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.PaymentInclude<ExtArgs> | null
+  where?: Prisma.PaymentWhereInput
+  orderBy?: Prisma.PaymentOrderByWithRelationInput | Prisma.PaymentOrderByWithRelationInput[]
+  cursor?: Prisma.PaymentWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.PaymentScalarFieldEnum | Prisma.PaymentScalarFieldEnum[]
+}
+
+/**
  * Member without action
  */
 export type MemberDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1262,4 +1452,8 @@ export type MemberDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalA
    * Omit specific fields from the Member
    */
   omit?: Prisma.MemberOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MemberInclude<ExtArgs> | null
 }

@@ -1,17 +1,17 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable } from '@nestjs/common';
 
 export type ChatStatus =
   | 'REGISTER'
+  | 'AI_CHAT'
   | 'CHECK_STATUS'
   | 'CONTACT_ADMIN'
   | 'GENERAL_QUESTION'
   | 'CANCEL'
   | 'UNKNOWN';
 
-  
 @Injectable()
 export class IntentService {
-    detect(text: string): ChatStatus {
+  detect(text: string): ChatStatus {
     const normalized = text.trim().toLowerCase();
 
     if (
@@ -31,6 +31,10 @@ export class IntentService {
       return 'REGISTER';
     }
 
+    if (normalized === '2') {
+      return 'AI_CHAT';
+    }
+
     if (
       normalized.includes('ติดต่อแอดมิน') ||
       normalized.includes('คุยกับเจ้าหน้าที่') ||
@@ -45,6 +49,10 @@ export class IntentService {
       normalized.includes('คืออะไร') ||
       normalized.includes('ใช้งานยังไง')
     ) {
+      return 'GENERAL_QUESTION';
+    }
+
+    if (normalized.length > 0) {
       return 'GENERAL_QUESTION';
     }
 

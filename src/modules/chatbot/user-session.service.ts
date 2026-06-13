@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 export type ConversationFlow =
   | 'REGISTER'
+  | 'AI_CHAT'
   | 'CHECK_STATUS'
   | 'CONTACT_ADMIN'
   | 'GENERAL_QUESTION';
@@ -24,23 +25,8 @@ export interface ConversationSession<TData = Record<string, any>> {
 export class UserSessionService {
   private readonly sessions = new Map<string, ConversationSession>();
 
-  get(userId: string): ConversationSession {
-    const existing = this.sessions.get(userId);
-
-    if (existing) {
-      return existing;
-    }
-
-    const session: ConversationSession = {
-      userId,
-      flow: 'GENERAL_QUESTION',
-      step: 'START',
-      status: 'ACTIVE',
-      data: {},
-    };
-
-    this.sessions.set(userId, session);
-    return session;
+  get(userId: string): ConversationSession | undefined {
+    return this.sessions.get(userId);
   }
 
   set(userId: string, session: ConversationSession) {
@@ -50,5 +36,4 @@ export class UserSessionService {
   clear(userId: string) {
     this.sessions.delete(userId);
   }
-  
 }
