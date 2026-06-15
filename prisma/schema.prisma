@@ -41,6 +41,31 @@ model Payment {
   @@index([approveBy])
 }
 
+model AiSetting {
+  id              String   @id @default(uuid()) @db.Uuid
+  systemPrompt    String   @db.Text
+  tone            String?  @db.VarChar(100)
+  fallbackMessage String?  @db.Text
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now())
+}
+
+model AnswerPattern {
+  id               String   @id @default(uuid()) @db.Uuid
+  title            String   @db.VarChar(255)
+  description      String?  @db.Text
+  category         String?  @db.VarChar(100)
+  intentKey        String?  @db.VarChar(100)
+  keywords         String[] @default([])
+  questionExamples String[] @default([])
+  answer           String   @db.Text
+  priority         Int      @default(0)
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now()) @db.Timestamp(6)
+  updatedAt        DateTime @default(now()) @db.Timestamp(6)
+}
+
 enum PaymentType {
   QRcode
   Slip

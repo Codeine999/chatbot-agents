@@ -26,16 +26,16 @@ export class ChatbotService {
 
     const session = this.userSessionService.get(userId);
 
+    if (status === 'REGISTER') {
+      return this.registrationService.start(userId);
+    }
+
     if (session?.flow === 'REGISTER' && session?.status === 'ACTIVE') {
       return this.registrationService.handle(userId, input, session);
     }
 
     if (session?.flow === 'AI_CHAT' && session?.status === 'ACTIVE') {
       return this.aiChatService.answerCustomer(input);
-    }
-
-    if (status === 'REGISTER') {
-      return this.registrationService.start(userId);
     }
 
     if (status === 'AI_CHAT') {
