@@ -55,11 +55,14 @@ export class AiChatService {
         .filter(Boolean)
         .join('\n\n');
 
+        console.log(prompt)
+
       const response = await this.genAI.models.generateContent({
         model: AI_MODEL,
         contents: prompt,
         config: AI_GENERATION_CONFIG,
       });
+
 
       const reply = response.text;
 

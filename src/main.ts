@@ -19,6 +19,33 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
 
+app.enableCors({
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'https://chatbot-dashboard-r6ac.vercel.app',
+    ];
+
+    const isVercelPreview =
+      origin?.startsWith('https://chatbot-dashboard-r6ac-') &&
+      origin.endsWith('-codeines-projects-0adf5d1d.vercel.app');
+
+    if (!origin || allowedOrigins.includes(origin) || isVercelPreview) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`Not allowed by CORS: ${origin}`), false);
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'ngrok-skip-browser-warning',
+  ],
+  credentials: true,
+});
+
   app.useGlobalPipes(new ZodValidationPipe());
 
   const config = new DocumentBuilder()
@@ -54,7 +81,6 @@ async function bootstrap() {
 
   await app.listen(8080, '0.0.0.0');
   Logger.log(`Server running on ${port}`);
-
 }
 
 bootstrap();

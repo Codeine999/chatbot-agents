@@ -40,7 +40,7 @@ export class IntentService {
       normalized.includes('คุยกับเจ้าหน้าที่') ||
       normalized.includes('แจ้งปัญหา')
     ) {
-      return 'CONTACT_ADMIN';
+      return 'AI_CHAT';
     }
 
     if (

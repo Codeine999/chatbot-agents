@@ -26,12 +26,12 @@ export class ChatbotService {
 
     const session = this.userSessionService.get(userId);
 
-    if (status === 'REGISTER') {
-      return this.registrationService.start(userId);
-    }
-
     if (session?.flow === 'REGISTER' && session?.status === 'ACTIVE') {
       return this.registrationService.handle(userId, input, session);
+    }
+
+    if (status === 'REGISTER') {
+      return this.registrationService.start(userId);
     }
 
     if (session?.flow === 'AI_CHAT' && session?.status === 'ACTIVE') {
@@ -47,7 +47,7 @@ export class ChatbotService {
         data: {},
       });
 
-      return 'ได้เลยครับ ต้องการสอบถามเรื่องอะไร พิมพ์คำถามมาได้เลยครับ';
+      return 'ได้เลยค่ะ ต้องการสอบถามเรื่องอะไรคะ';
     }
 
     // if (status === 'GENERAL_QUESTION') {

@@ -13,17 +13,50 @@ datasource db {
   provider = "postgresql"
 }
 
+enum PaymentType {
+  QRcode
+  Slip
+}
+
+enum PaymentStatus {
+  pending
+  success
+  fail
+  reject
+}
+
+enum CreditWalletType {
+  LINE_MESSAGE
+  AI_USAGE
+  ADMIN_AI_QUERY
+}
+
+enum LineChatSender {
+  USER   @map("user")
+  ADMIN  @map("admin")
+  AI     @map("ai")
+  SYSTEM @map("system")
+}
+
+enum LineChatMessageType {
+  TEXT     @map("text")
+  IMAGE    @map("image")
+  STICKER  @map("sticker")
+  POSTBACK @map("postback")
+}
+
 model Member {
-  uuid          String    @id @default(uuid()) @db.Uuid
-  username      String    @unique
+  uuid          String       @id @default(uuid()) @db.Uuid
+  username      String       @unique
   password      String
   firstname     String
   lastname      String
-  phone         String    @unique
+  phone         String       @unique
   bankname      String
-  banknumber    String    @unique
-  statusaccount String    @default("pending")
+  banknumber    String       @unique
+  statusaccount String       @default("pending")
   payments      Payment[]
+  lineMembers   LineMember[]
 }
 
 model Payment {
@@ -66,14 +99,83 @@ model AnswerPattern {
   updatedAt        DateTime @default(now()) @db.Timestamp(6)
 }
 
-enum PaymentType {
-  QRcode
-  Slip
+model CreditWallet {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  type      CreditWalletType @unique
+  balance   Int              @default(0)
+  usedTotal Int              @default(0)
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("credit_wallets")
 }
 
-enum PaymentStatus {
-  pending
-  success
-  fail
-  reject
+model LineMember {
+  id String @id @default(uuid()) @db.Uuid
+
+  memberId String? @db.Uuid
+  member   Member? @relation(fields: [memberId], references: [uuid], onDelete: SetNull)
+
+  lineUserId    String  @unique
+  displayName   String
+  pictureUrl    String?
+  statusMessage String?
+
+  lastActiveAt    DateTime?
+  profileSyncedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversation  LineConversation?
+  chatHistories LineChatHistory[]
+
+  @@index([memberId])
+  @@index([lastActiveAt])
+}
+
+model LineConversation {
+  id              String              @id @default(uuid()) @db.Uuid
+  lineMemberId    String              @unique @db.Uuid
+  status          String              @default("open")
+  lastMessage     String
+  lastMessageType LineChatMessageType
+  lastMessageAt   DateTime
+  unreadCount     Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  lineMember      LineMember          @relation(fields: [lineMemberId], references: [id])
+  chatHistories   LineChatHistory[]
+
+  @@index([lastMessageAt])
+  @@index([status])
+}
+
+model LineChatHistory {
+  id                  String              @id @default(uuid()) @db.Uuid
+  conversationId      String              @db.Uuid
+  lineMemberId        String              @db.Uuid
+  sender              LineChatSender
+  messageType         LineChatMessageType
+  text                String?
+  lineMessageId       String?
+  replyToken          String?
+  stickerPackageId    String?
+  stickerId           String?
+  stickerResourceType String?
+  mediaUrl            String?
+  postbackData        String?
+  rawEvent            Json?
+  sentStatus          String              @default("received")
+  createdAt           DateTime            @default(now())
+  conversation        LineConversation    @relation(fields: [conversationId], references: [id])
+  lineMember          LineMember          @relation(fields: [lineMemberId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@index([lineMemberId])
+  @@index([lineMessageId])
 }

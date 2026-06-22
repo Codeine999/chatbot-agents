@@ -7,6 +7,7 @@ import { PipelineModule } from './modules/pipeline/pipeline.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './modules/users/users.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { CreditServiceModule } from './modules/creditService/credit.module';
 
 @Module({
   imports: [
@@ -32,6 +33,8 @@ import { PaymentsModule } from './modules/payments/payments.module';
     UsersModule,
 
     PaymentsModule,
+
+    CreditServiceModule,
   ],
 })
 export class AppModule {}

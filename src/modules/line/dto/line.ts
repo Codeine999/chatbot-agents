@@ -39,6 +39,7 @@ export type LineMessage =
       id: string;
       packageId: string;
       stickerId: string;
+      stickerResourceType?: string;
     };
 
 export type LineEventSource =
