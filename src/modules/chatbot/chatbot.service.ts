@@ -1,14 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { UserSessionService } from '../chatbot/user-session.service';
 import { ReplyTemplateService } from '../chatbot/reply-template.service';
-import { IntentService } from './intent.service';
 import { RegistrationFlowService } from '../registration/registration-flow.service';
 import { AiChatService } from './aichat.service';
+import { IntentRouterService } from './intent-router.service';
 
 @Injectable()
 export class ChatbotService {
+  private readonly logger = new Logger(ChatbotService.name);
+
   constructor(
-    private readonly intentService: IntentService,
+    private readonly intentRouterService: IntentRouterService,
     private readonly userSessionService: UserSessionService,
     private readonly registrationService: RegistrationFlowService,
     private readonly replyTemplateService: ReplyTemplateService,
@@ -17,43 +19,59 @@ export class ChatbotService {
 
   async handleTextMessage(userId: string, text: string): Promise<string> {
     const input = text.trim();
-    const status = this.intentService.detect(input);
 
-    if (status === 'CANCEL') {
-      this.userSessionService.clear(userId);
-      return this.replyTemplateService.cancelled();
-    }
+    if (!input) return this.replyTemplateService.defaultMessage();
 
     const session = this.userSessionService.get(userId);
 
-    if (session?.flow === 'REGISTER' && session?.status === 'ACTIVE') {
-      return this.registrationService.handle(userId, input, session);
+    const decision = await this.intentRouterService.resolve({ userId, input, session });
+
+    this.logger.debug(
+      `input="${input}" action=${decision.action} intent=${decision.intent} ` +
+        `source=${decision.source} confidence=${decision.confidence} reason="${decision.reason ?? ''}"`,
+    );
+
+    switch (decision.action) {
+      case 'CANCEL_SESSION':
+        this.userSessionService.clear(userId);
+        return this.replyTemplateService.cancelled();
+
+      case 'CONTINUE_REGISTER':
+        return this.registrationService.handle(userId, input, session!);
+
+      case 'START_REGISTER':
+        return this.registrationService.start(userId);
+
+      case 'START_AI_CHAT':
+        this.userSessionService.set(userId, {
+          userId,
+          flow: 'AI_CHAT',
+          step: 'WAITING_QUESTION',
+          status: 'ACTIVE',
+          data: {},
+        });
+        return this.replyTemplateService.askAiChatQuestion();
+
+      // Inside an AI_CHAT session -> general/small-talk answer (NOT knowledge).
+      case 'CONTINUE_AI_CHAT':
+        return this.aiChatService.answerGeneral(input);
+
+      // Grounded answer from the knowledge base only.
+      case 'ANSWER_KNOWLEDGE':
+        return this.aiChatService.answerCustomer(input);
+
+      // Casual/general answer without touching the knowledge base.
+      case 'ANSWER_GENERAL':
+        return this.aiChatService.answerGeneral(input);
+
+      case 'CONTACT_ADMIN':
+        return this.replyTemplateService.contactAdmin();
+
+      case 'CHECK_STATUS':
+        return this.replyTemplateService.statusUnavailable();
+
+      default:
+        return this.replyTemplateService.defaultMessage();
     }
-
-    if (status === 'REGISTER') {
-      return this.registrationService.start(userId);
-    }
-
-    if (session?.flow === 'AI_CHAT' && session?.status === 'ACTIVE') {
-      return this.aiChatService.answerCustomer(input);
-    }
-
-    if (status === 'AI_CHAT') {
-      this.userSessionService.set(userId, {
-        userId,
-        flow: 'AI_CHAT',
-        step: 'WAITING_QUESTION',
-        status: 'ACTIVE',
-        data: {},
-      });
-
-      return 'ได้เลยค่ะ ต้องการสอบถามเรื่องอะไรคะ';
-    }
-
-    // if (status === 'GENERAL_QUESTION') {
-    //   return this.aiChatService.answerCustomer(input);
-    // }
-
-    return this.replyTemplateService.defaultMessage();
   }
 }
