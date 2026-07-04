@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { Injectable, Logger } from '@nestjs/common';
 import { AI_GENERATION_CONFIG, AI_MODEL } from '../../ai/ai.constants';
 import { PrismaService } from '../../prisma/prisma.service';
-import { KnowledgeRetrievalService } from './knowledge-retrieval.service';
+import { KnowledgeRetrievalService } from './knowledge/knowledge-retrieval.service';
 import { KnowledgeItem } from './types/chat.types';
 
 const DEFAULT_SYSTEM_PROMPT = `

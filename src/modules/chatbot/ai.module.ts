@@ -2,11 +2,10 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { AiChatService } from './aichat.service';
 import { AiIntentClassifierService } from './ai-intent-classifier.service';
-import { AnswerPatternService } from './answer-pattern.service';
-import { EmbeddingService } from './embedding.service';
-import { SemanticSearchService } from './semantic-search.service';
-import { RerankService } from './rerank.service';
-import { KnowledgeRetrievalService } from './knowledge-retrieval.service';
+import { AnswerPatternService } from './knowledge/answer-pattern.service';
+import { EmbeddingService } from './knowledge/embedding.service';
+import { SemanticSearchService } from './knowledge/semantic-search.service';
+import { KnowledgeRetrievalService } from './knowledge/knowledge-retrieval.service';
 
 @Module({
   imports: [PrismaModule],
@@ -16,7 +15,6 @@ import { KnowledgeRetrievalService } from './knowledge-retrieval.service';
     AnswerPatternService,
     EmbeddingService,
     SemanticSearchService,
-    RerankService,
     KnowledgeRetrievalService,
   ],
   exports: [AiChatService, AiIntentClassifierService],

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { KnowledgeItem } from './types/chat.types';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { KnowledgeItem } from '../types/chat.types';
 
 @Injectable()
 export class AnswerPatternService {

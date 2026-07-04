@@ -1,11 +1,9 @@
 export type ChatIntent =
   | 'REGISTER'
-  | 'AI_CHAT'
   | 'GENERAL_QUESTION'
+  | 'ANSWER_KNOWLEDGE'
   | 'REGISTER_HOW_TO'
   | 'CONTACT_ADMIN'
-  | 'CHECK_STATUS'
-  | 'CHECK_PAYMENT_STATUS'
   | 'CANCEL'
   | 'UNKNOWN';
 
@@ -16,9 +14,8 @@ export type ChatAction =
   | 'CONTINUE_AI_CHAT'
   | 'START_AI_CHAT'
   | 'ANSWER_KNOWLEDGE'
+  | 'GENERAL_QUESTION'
   | 'CONTACT_ADMIN'
-  | 'CHECK_STATUS'
-  | 'ANSWER_GENERAL'
   | 'DEFAULT';
 
 export type IntentSource = 'SESSION' | 'RULE' | 'AI';
@@ -33,15 +30,6 @@ export type IntentResult = {
 export type AiIntentAnalysis = {
   intent: ChatIntent;
   confidence: number;
-  needsKnowledgeSearch: boolean;
-  needsBusinessData: boolean;
-  entities: {
-    name?: string;
-    phone?: string;
-    bankName?: string;
-    bankAccount?: string;
-    paymentRef?: string;
-  };
 };
 
 export type RouteDecision = {

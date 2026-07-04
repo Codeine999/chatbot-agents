@@ -2,18 +2,16 @@ import { GoogleGenAI } from '@google/genai';
 import { Injectable, Logger } from '@nestjs/common';
 import { AI_MODEL } from '../../ai/ai.constants';
 import { AiIntentAnalysis, ChatIntent } from './types/chat.types';
+import { classifierPrompt } from './constant/AnalyzePrompt';
 
 const VALID_INTENTS: ChatIntent[] = [
-  'REGISTER', 'AI_CHAT', 'GENERAL_QUESTION', 'REGISTER_HOW_TO',
-  'CONTACT_ADMIN', 'CHECK_STATUS', 'CHECK_PAYMENT_STATUS', 'UNKNOWN',
+  'REGISTER', 'GENERAL_QUESTION', 'REGISTER_HOW_TO',
+  'CONTACT_ADMIN', 'UNKNOWN',
 ];
 
 const FALLBACK: AiIntentAnalysis = {
   intent: 'UNKNOWN',
   confidence: 0,
-  needsKnowledgeSearch: false,
-  needsBusinessData: false,
-  entities: {},
 };
 
 @Injectable()
@@ -26,24 +24,7 @@ export class AiIntentClassifierService {
   }
 
   async analyze(input: string): Promise<AiIntentAnalysis> {
-  const prompt = `Classify this customer message. Return JSON only, no markdown.
-
-  Message: "${input.replace(/"/g, "'")}"
-
-  Valid intents: ${VALID_INTENTS.join(', ')}
-
-  Rules:
-  - "สมัคร" alone = REGISTER high confidence
-  - "สมัครยังไง"/"วิธีสมัคร"/"เปิดยูสยังไง" = REGISTER_HOW_TO + needsKnowledgeSearch:true
-  - Casual chat, identity, greeting, or conversational messages such as "คุณคือใคร", "ทำอะไรอยู่", "ว่าไง", "เป็นไงบ้าง", "งง ai ปะ" = AI_CHAT + needsKnowledgeSearch:false + needsBusinessData:false
-  - Payment/status questions = CHECK_PAYMENT_STATUS or CHECK_STATUS + needsBusinessData:true
-  - General FAQ about the platform/service = GENERAL_QUESTION + needsKnowledgeSearch:true
-  - Distinguish "I want to register" vs "How do I register?"
-  - Do not answer the customer. Only classify intent.
-
-  Return:
-  {"intent":"...","confidence":0.0,"needsKnowledgeSearch":false,"needsBusinessData":false,"entities":{"name":"","phone":"","bankName":"","bankAccount":"","paymentRef":""}}`;
-
+  const prompt = classifierPrompt(input, VALID_INTENTS);
     try {
       const res = await this.genAI.models.generateContent({
         model: AI_MODEL,

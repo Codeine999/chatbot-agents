@@ -35,7 +35,7 @@ export class RuleIntentService {
 
     if (input === '2') {
       return {
-        intent: 'AI_CHAT',
+        intent: 'GENERAL_QUESTION',
         confidence: 1,
         source: 'RULE',
         reason: 'menu ai chat',
@@ -74,19 +74,6 @@ export class RuleIntentService {
         confidence: 0.95,
         source: 'RULE',
         reason: 'contact admin keyword',
-      };
-    }
-
-    if (
-      ['โอนแล้ว', 'สลิป', 'จ่ายแล้ว', 'ผ่านไหม'].some((k) =>
-        input.includes(k),
-      )
-    ) {
-      return {
-        intent: 'CHECK_PAYMENT_STATUS',
-        confidence: 0.9,
-        source: 'RULE',
-        reason: 'payment status keyword',
       };
     }
 

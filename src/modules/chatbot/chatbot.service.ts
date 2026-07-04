@@ -24,11 +24,19 @@ export class ChatbotService {
 
     const session = this.userSessionService.get(userId);
 
-    const decision = await this.intentRouterService.resolve({ userId, input, session });
+    const decision = await this.intentRouterService.resolve({ 
+      userId, 
+      input, 
+      session 
+    });
 
     this.logger.debug(
-      `input="${input}" action=${decision.action} intent=${decision.intent} ` +
-        `source=${decision.source} confidence=${decision.confidence} reason="${decision.reason ?? ''}"`,
+      `input="${input}" 
+      action=${decision.action} 
+      intent=${decision.intent} ` +
+      `source=${decision.source} 
+      confidence=${decision.confidence} 
+      reason="${decision.reason ?? ''}"`,
     );
 
     switch (decision.action) {
@@ -37,7 +45,9 @@ export class ChatbotService {
         return this.replyTemplateService.cancelled();
 
       case 'CONTINUE_REGISTER':
-        return this.registrationService.handle(userId, input, session!);
+        return this.registrationService.handle(
+          userId, input, session!
+        );
 
       case 'START_REGISTER':
         return this.registrationService.start(userId);
@@ -50,25 +60,23 @@ export class ChatbotService {
           status: 'ACTIVE',
           data: {},
         });
-        return this.replyTemplateService.askAiChatQuestion();
+
+      return this.replyTemplateService.askAiChatQuestion();
 
       // Inside an AI_CHAT session -> general/small-talk answer (NOT knowledge).
       case 'CONTINUE_AI_CHAT':
+        return this.aiChatService.answerGeneral(input);
+
+      // Casual/general answer without touching the knowledge base.
+      case 'GENERAL_QUESTION':
         return this.aiChatService.answerGeneral(input);
 
       // Grounded answer from the knowledge base only.
       case 'ANSWER_KNOWLEDGE':
         return this.aiChatService.answerCustomer(input);
 
-      // Casual/general answer without touching the knowledge base.
-      case 'ANSWER_GENERAL':
-        return this.aiChatService.answerGeneral(input);
-
       case 'CONTACT_ADMIN':
         return this.replyTemplateService.contactAdmin();
-
-      case 'CHECK_STATUS':
-        return this.replyTemplateService.statusUnavailable();
 
       default:
         return this.replyTemplateService.defaultMessage();
