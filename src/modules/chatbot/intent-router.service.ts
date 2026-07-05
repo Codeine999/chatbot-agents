@@ -140,17 +140,27 @@ export class IntentRouterService {
       };
     }
 
-    // Priority 2: an ACTIVE session continues its current flow.
-    if (session?.status === 'ACTIVE') {
-      if (session.flow === 'REGISTER') {
+    if (session?.status === 'ACTIVE' && session.flow === 'REGISTER') {
+      if (
+        rule.confidence >= 0.9 &&
+        rule.intent !== 'UNKNOWN' &&
+        rule.intent !== 'REGISTER'
+      ) {
         return {
-          action: 'CONTINUE_REGISTER',
-          intent: 'REGISTER',
-          confidence: 1,
+          ...fromRule(rule),
           source: 'SESSION',
-          reason: 'active REGISTER session continues current flow',
+          reason: `active REGISTER session interrupted by ${rule.intent}`,
+          
         };
       }
+
+      return {
+        action: 'CONTINUE_REGISTER',
+        intent: 'REGISTER',
+        confidence: 1,
+        source: 'SESSION',
+        reason: 'active REGISTER session continues current flow',
+      };
     }
 
     if (rule.confidence >= 0.9) {
