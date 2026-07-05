@@ -56,7 +56,7 @@ export class AiChatService {
    * Knowledge-grounded answer. Use ONLY for ANSWER_KNOWLEDGE.
    * Answers strictly from retrieved DB context; falls back when nothing matches.
    */
-  async answerCustomer(message: string): Promise<string> {
+  async answerKnowLedge(message: string): Promise<string> {
     const { systemPrompt, tone, fallbackMessage } = await this.getActiveAiSetting();
 
     let items: KnowledgeItem[];

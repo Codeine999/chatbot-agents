@@ -73,7 +73,7 @@ export class ChatbotService {
 
       // Grounded answer from the knowledge base only.
       case 'ANSWER_KNOWLEDGE':
-        return this.aiChatService.answerCustomer(input);
+        return this.aiChatService.answerKnowLedge(input);
 
       case 'CONTACT_ADMIN':
         return this.replyTemplateService.contactAdmin();

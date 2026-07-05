@@ -21,5 +21,5 @@ Rules:
 - Do not answer the customer. Only classify intent.
 
 Return:
-{"intent":"...","confidence":0.0}}`;
+{"intent":"...","confidence":0.0}`;
 }

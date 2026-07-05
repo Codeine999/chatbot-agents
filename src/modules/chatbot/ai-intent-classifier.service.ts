@@ -6,7 +6,7 @@ import { classifierPrompt } from './constant/AnalyzePrompt';
 
 const VALID_INTENTS: ChatIntent[] = [
   'REGISTER', 'GENERAL_QUESTION', 'REGISTER_HOW_TO',
-  'CONTACT_ADMIN', 'UNKNOWN',
+  'CONTACT_ADMIN', 'ANSWER_KNOWLEDGE', 'UNKNOWN',
 ];
 
 const FALLBACK: AiIntentAnalysis = {
