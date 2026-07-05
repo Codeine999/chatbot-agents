@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { UserSessionService } from '../chatbot/user-session.service';
 import { ReplyTemplateService } from '../chatbot/reply-template.service';
 import { RegistrationFlowService } from '../registration/registration-flow.service';
 import { AiChatService } from './aichat.service';
 import { IntentRouterService } from './intent-router.service';
+import { NotificationService } from '../admin/notification/notification.service';
 
 @Injectable()
 export class ChatbotService {
@@ -15,7 +17,13 @@ export class ChatbotService {
     private readonly registrationService: RegistrationFlowService,
     private readonly replyTemplateService: ReplyTemplateService,
     private readonly aiChatService: AiChatService,
+    private readonly notificationService: NotificationService,
+    private readonly configService: ConfigService,
   ) {}
+
+  private canRegister(): boolean {
+    return this.configService.get<string>('CAN_REGISTER') !== 'false';
+  }
 
   async handleTextMessage(userId: string, text: string): Promise<string> {
     const input = text.trim();
@@ -45,11 +53,18 @@ export class ChatbotService {
         return this.replyTemplateService.cancelled();
 
       case 'CONTINUE_REGISTER':
+        if (!this.canRegister()) {
+          this.userSessionService.clear(userId);
+          return this.replyTemplateService.registerUnavailable();
+        }
         return this.registrationService.handle(
           userId, input, session!
         );
 
       case 'START_REGISTER':
+        if (!this.canRegister()) {
+          return this.replyTemplateService.registerUnavailable();
+        }
         return this.registrationService.start(userId);
 
       case 'START_AI_CHAT':
@@ -63,20 +78,29 @@ export class ChatbotService {
 
       return this.replyTemplateService.askAiChatQuestion();
 
-      // Inside an AI_CHAT session -> general/small-talk answer (NOT knowledge).
       case 'CONTINUE_AI_CHAT':
         return this.aiChatService.answerGeneral(input);
 
-      // Casual/general answer without touching the knowledge base.
       case 'GENERAL_QUESTION':
         return this.aiChatService.answerGeneral(input);
 
-      // Grounded answer from the knowledge base only.
       case 'ANSWER_KNOWLEDGE':
         return this.aiChatService.answerKnowLedge(input);
 
-      case 'CONTACT_ADMIN':
+      case 'CONTACT_ADMIN': {
+        const contactAdminSession = {
+          userId,
+          flow: 'CONTACT_ADMIN' as const,
+          step: 'WAITING_ADMIN',
+          status: 'ACTIVE' as const,
+          data: {},
+        };
+
+        this.userSessionService.set(userId, contactAdminSession);
+        this.notificationService.notifyContactAdmin(contactAdminSession);
+
         return this.replyTemplateService.contactAdmin();
+      }
 
       default:
         return this.replyTemplateService.defaultMessage();

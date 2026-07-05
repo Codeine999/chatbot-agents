@@ -64,6 +64,10 @@ export class ReplyTemplateService {
     ].join('\n');
   }
 
+  registerUnavailable(): string {
+    return 'ขออภัยครับ ขณะนี้ยังไม่มีระบบสมัครสมาชิก';
+  }
+
   cancelled(): string {
     return 'ยกเลิกรายการแล้วครับ หากต้องการเริ่มใหม่ พิมพ์ "สมัครสมาชิก" ได้เลยครับ';
   }
