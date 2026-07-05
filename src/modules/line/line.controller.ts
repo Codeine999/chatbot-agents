@@ -56,7 +56,7 @@ export class LineController {
         event.message.text,
       );
 
-      await this.creditService.reserveLineReplyCredit();
+      // await this.creditService.reserveLineReplyCredit();
 
       try {
         await this.lineService.replyText(event.replyToken, replyText);

@@ -97,6 +97,8 @@ model AnswerPattern {
   active           Boolean  @default(true)
   createdAt        DateTime @default(now()) @db.Timestamp(6)
   updatedAt        DateTime @default(now()) @db.Timestamp(6)
+
+  vector AnswerPatternVector?
 }
 
 model CreditWallet {
@@ -178,4 +180,20 @@ model LineChatHistory {
   @@index([conversationId, createdAt])
   @@index([lineMemberId])
   @@index([lineMessageId])
+}
+
+model AnswerPatternVector {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  answerPatternId String   @db.Uuid
+  embedding       Unsupported("vector")
+  embeddingModel  String?  @db.VarChar(100)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now())
+
+  answerPattern AnswerPattern @relation(fields: [answerPatternId], references: [id], onDelete: Cascade)
+
+  @@unique([answerPatternId])
+  @@index([answerPatternId])
+  @@index([active])
 }

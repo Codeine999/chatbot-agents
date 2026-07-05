@@ -2,10 +2,9 @@ import { Injectable } from '@nestjs/common';
 
 export type ConversationFlow =
   | 'REGISTER'
-  | 'AI_CHAT'
+  | 'GENERAL_QUESTION'
   | 'CHECK_STATUS'
-  | 'CONTACT_ADMIN'
-  | 'GENERAL_QUESTION';
+  | 'CONTACT_ADMIN';
 
 export type ConversationStatus =
   | 'ACTIVE'

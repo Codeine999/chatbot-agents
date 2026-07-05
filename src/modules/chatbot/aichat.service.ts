@@ -2,7 +2,8 @@ import { GoogleGenAI } from '@google/genai';
 import { Injectable, Logger } from '@nestjs/common';
 import { AI_GENERATION_CONFIG, AI_MODEL } from '../../ai/ai.constants';
 import { PrismaService } from '../../prisma/prisma.service';
-import { KnowledgeRetrievalService } from './knowledge/knowledge-retrieval.service';
+import { AnswerPatternService } from './knowledge/answer-pattern.service';
+import { SemanticSearchService } from './knowledge/semantic-search.service';
 import { KnowledgeItem } from './types/chat.types';
 
 const DEFAULT_SYSTEM_PROMPT = `
@@ -34,6 +35,14 @@ const GENERAL_RULES = `กฎเพิ่มเติม:
 - ถ้าลูกค้าถามเรื่องสถานะสมัคร/ชำระเงิน/ข้อมูลส่วนตัว ให้บอกว่ายังตรวจสอบไม่ได้และแนะนำให้ติดต่อแอดมิน
 - ห้ามบอกว่าคุณเป็น AI`;
 
+/**
+ * Direct-answer gate: the top answer_patterns match must score at least this
+ * (an exact question-example or full-message keyword hit reaches it)...
+ */
+const DIRECT_ANSWER_MIN_SCORE = 5;
+/** ...and be at least this far ahead of the runner-up to skip Gemini. */
+const DIRECT_ANSWER_MIN_GAP = 2;
+
 type AiRuntimeSetting = {
   systemPrompt: string;
   tone?: string;
@@ -47,35 +56,47 @@ export class AiChatService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly knowledgeRetrievalService: KnowledgeRetrievalService,
+    private readonly answerPatternService: AnswerPatternService,
+    private readonly semanticSearchService: SemanticSearchService,
   ) {
     this.genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   }
 
   /**
    * Knowledge-grounded answer. Use ONLY for ANSWER_KNOWLEDGE.
-   * Answers strictly from retrieved DB context; falls back when nothing matches.
+   *
+   * Flow (in priority order):
+   * 1. Direct DB search on answer_patterns (no embedding).
+   * 2. One clearly strong pattern -> return its stored answer verbatim (no LLM).
+   * 3. Several related patterns -> Gemini composes strictly from them.
+   * 4. No useful pattern -> embedding-based retrieval as fallback.
+   * 5. Nothing anywhere (or unrecoverable error) -> fallbackMessage.
    */
   async answerKnowLedge(message: string): Promise<string> {
-    const { systemPrompt, tone, fallbackMessage } = await this.getActiveAiSetting();
+    const setting = await this.getActiveAiSetting();
 
-    let items: KnowledgeItem[];
+    // 1) Direct DB search — errors here must not kill the flow.
+    let matches: KnowledgeItem[] = [];
     try {
-      items = await this.knowledgeRetrievalService.retrieve(message);
+      matches = await this.answerPatternService.findMatches(message);
     } catch (error) {
-      this.logger.error('knowledge retrieval failed', error as Error);
-      return fallbackMessage;
+      this.logger.error(
+        'answer_patterns direct search failed, falling back to embedding',
+        error as Error,
+      );
     }
 
-    // No knowledge found -> do not let Gemini invent an answer.
-    if (items.length === 0) return fallbackMessage;
+    if (matches.length > 0) {
+      // 2) One clearly strong match -> stored answer, no Gemini call.
+      const direct = this.tryGetDirectAnswer(matches);
+      if (direct) return direct;
 
-    // Single high-score answer pattern -> return the stored answer directly.
-    const direct = this.tryGetDirectAnswer(items, tone);
-    if (direct) return direct;
+      // 3) Multiple related matches -> Gemini, grounded on those items only.
+      return this.generateFromKnowledge(matches, message, setting);
+    }
 
-    const prompt = this.buildKnowledgePrompt({ systemPrompt, tone, items, message });
-    return this.generateText(prompt, fallbackMessage);
+    // 4) Nothing useful from answer_patterns -> embedding retrieval.
+    return this.answerFromEmbedding(message, setting);
   }
 
   /**
@@ -126,37 +147,76 @@ export class AiChatService {
   }
 
   /**
-   * Return a stored answer verbatim when exactly one strong answer pattern
-   * matched and no custom tone is configured (saves a Gemini call).
-   * When a tone is set we defer to Gemini so the tone is actually applied.
+   * Return a stored answer verbatim when the top answer pattern is strong
+   * AND clearly ahead of the runner-up. Saves a Gemini call and guarantees
+   * the admin-authored answer is delivered unchanged.
    */
-  private tryGetDirectAnswer(items: KnowledgeItem[], tone?: string): string | null {
-    if (tone) return null;
+  private tryGetDirectAnswer(items: KnowledgeItem[]): string | null {
+    const [top, second] = items;
 
-    const [first] = items;
     if (
-      items.length === 1 &&
-      first.source === 'ANSWER_PATTERN' &&
-      first.score >= 3 &&
-      first.answer
+      top?.source === 'ANSWER_PATTERN' &&
+      top.answer &&
+      top.score >= DIRECT_ANSWER_MIN_SCORE &&
+      (!second || top.score - second.score >= DIRECT_ANSWER_MIN_GAP)
     ) {
-      return first.answer.trim();
+      return top.answer.trim();
     }
     return null;
+  }
+
+  /** Gemini answer grounded strictly on the given knowledge items. */
+  private async generateFromKnowledge(
+    items: KnowledgeItem[],
+    message: string,
+    setting: AiRuntimeSetting,
+  ): Promise<string> {
+    const prompt = this.buildKnowledgePrompt({
+      systemPrompt: setting.systemPrompt,
+      tone: setting.tone,
+      fallbackMessage: setting.fallbackMessage,
+      items,
+      message,
+    });
+    return this.generateText(prompt, setting.fallbackMessage);
+  }
+
+  /**
+   * Embedding-based fallback, used only when the direct answer_patterns
+   * search found nothing useful. Any failure resolves to fallbackMessage.
+   */
+  private async answerFromEmbedding(
+    message: string,
+    setting: AiRuntimeSetting,
+  ): Promise<string> {
+    let items: KnowledgeItem[] = [];
+    try {
+      items = await this.semanticSearchService.search(message);
+    } catch (error) {
+      this.logger.error('embedding retrieval failed', error as Error);
+      return setting.fallbackMessage;
+    }
+
+    // No semantic knowledge either -> never let Gemini invent an answer.
+    if (items.length === 0) return setting.fallbackMessage;
+
+    return this.generateFromKnowledge(items, message, setting);
   }
 
   /** Build a grounded prompt that forces Gemini to answer only from DB context. */
   private buildKnowledgePrompt(params: {
     systemPrompt: string;
     tone?: string;
+    fallbackMessage: string;
     items: KnowledgeItem[];
     message: string;
   }): string {
-    const { systemPrompt, tone, items, message } = params;
+    const { systemPrompt, tone, fallbackMessage, items, message } = params;
 
     const contextBlock = items
-      .map((item) =>
+      .map((item, index) =>
         [
+          `[ข้อมูลที่ ${index + 1}]`,
           `หัวข้อ: ${item.title ?? ''}`,
           item.category ? `หมวดหมู่: ${item.category}` : null,
           item.content ? `รายละเอียด: ${item.content}` : null,
@@ -172,6 +232,7 @@ export class AiChatService {
       tone ? `โทนการตอบ: ${tone}` : null,
       `ข้อมูลจากฐานข้อมูล (ตอบโดยใช้ข้อมูลนี้เท่านั้น):\n${contextBlock}`,
       KNOWLEDGE_RULES,
+      `ถ้าข้อมูลข้างต้นไม่เพียงพอที่จะตอบคำถามลูกค้า ให้ตอบด้วยข้อความนี้เท่านั้น:\n"${fallbackMessage}"`,
       `ข้อความลูกค้า:\n${message}`,
     ]
       .filter(Boolean)

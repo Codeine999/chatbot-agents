@@ -55,7 +55,7 @@ export class ChatbotService {
       case 'START_AI_CHAT':
         this.userSessionService.set(userId, {
           userId,
-          flow: 'AI_CHAT',
+          flow: 'GENERAL_QUESTION',
           step: 'WAITING_QUESTION',
           status: 'ACTIVE',
           data: {},

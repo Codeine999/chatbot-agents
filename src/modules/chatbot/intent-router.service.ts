@@ -124,12 +124,12 @@ export class IntentRouterService {
     session: ConversationSession | undefined;
   }): Promise<RouteDecision> {
     const { input, session } = params;
+    this.logger.debug(`session = ${JSON.stringify(session, null, 2)}`);
 
     const rule = this.ruleIntentService.detect(input);
 
     this.logger.debug(`rule = ${JSON.stringify(rule, null, 2)}`);
 
-    // Priority 1: CANCEL always clears the session, even mid-flow.
     if (rule.intent === 'CANCEL') {
       return {
         action: 'CANCEL_SESSION',
