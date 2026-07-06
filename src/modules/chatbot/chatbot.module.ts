@@ -9,9 +9,10 @@ import { IntentRouterService } from './intent-router.service';
 import { ReplyTemplateService } from './reply-template.service';
 import { UserSessionService } from './user-session.service';
 import { AiModule } from './ai.module';
+import { NotificationModule } from '../admin/notification/notification.module';
 
 @Module({
-  imports: [RegistrationModule, AiModule],
+  imports: [RegistrationModule, AiModule, NotificationModule],
   providers: [
     ChatbotService,
     RuleIntentService,

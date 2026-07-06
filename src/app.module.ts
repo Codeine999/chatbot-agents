@@ -8,6 +8,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './modules/users/users.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { CreditServiceModule } from './modules/creditService/credit.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { RedisModule } from './infra/redis/redis.module';
 
 @Module({
   imports: [
@@ -15,6 +17,7 @@ import { CreditServiceModule } from './modules/creditService/credit.module';
       isGlobal: true,
     }),
 
+    RedisModule,
     PrismaModule,
 
     MongooseModule.forRootAsync({
@@ -35,6 +38,8 @@ import { CreditServiceModule } from './modules/creditService/credit.module';
     PaymentsModule,
 
     CreditServiceModule,
+
+    AdminModule,
   ],
 })
 export class AppModule {}
