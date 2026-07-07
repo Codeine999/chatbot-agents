@@ -18,7 +18,7 @@ export type ChatAction =
   | 'CONTACT_ADMIN'
   | 'DEFAULT';
 
-export type IntentSource = 'SESSION' | 'RULE' | 'AI';
+export type IntentSource = 'SESSION' | 'RULE' | 'CACHE' | 'AI';
 
 export type IntentResult = {
   intent: ChatIntent;

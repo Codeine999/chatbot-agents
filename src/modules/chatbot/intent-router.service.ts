@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConversationSession } from './user-session.service';
 import { RuleIntentService } from './rule-intent.service';
 import { AiIntentClassifierService } from './ai-intent-classifier.service';
+import { KnowledgeCandidateService } from './knowledge/knowledge-candidate.service';
 import {
   AiIntentAnalysis,
   ChatAction,
@@ -115,6 +116,7 @@ export class IntentRouterService {
   private readonly logger = new Logger(IntentRouterService.name);
   constructor(
     private readonly ruleIntentService: RuleIntentService,
+    private readonly knowledgeCandidateService: KnowledgeCandidateService,
     private readonly aiIntentClassifierService: AiIntentClassifierService,
   ) {}
 
@@ -169,6 +171,23 @@ export class IntentRouterService {
       this.logger.debug(`[fromRule] rule = ${JSON.stringify(rule, null, 2)}`);
       this.logger.debug(`[fromRule] decision = ${JSON.stringify(decision, null, 2)}`);
 
+      return decision;
+    }
+
+    // Knowledge candidate check (in-memory AnswerPattern cache) runs before
+    // the AI classifier so FAQ questions never get misrouted to GENERAL_QUESTION.
+    const candidate = this.knowledgeCandidateService.detect(input);
+    if (candidate.matched) {
+      const decision: RouteDecision = {
+        action: 'ANSWER_KNOWLEDGE',
+        intent: 'ANSWER_KNOWLEDGE',
+        confidence: candidate.confidence,
+        source: 'CACHE',
+        reason: candidate.reason,
+      };
+      this.logger.debug(
+        `[KnowledgeCandidate] decision = ${JSON.stringify(decision, null, 2)}`,
+      );
       return decision;
     }
 
