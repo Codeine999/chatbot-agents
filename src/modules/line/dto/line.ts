@@ -9,13 +9,15 @@ export type LineWebhookEvent =
   | LineUnfollowEvent
   | LinePostbackEvent;
 
+export type LineDeliveryContext = {
+  isRedelivery: boolean;
+};
+
 export type LineMessageEvent = {
   type: 'message';
   message: LineMessage;
   webhookEventId: string;
-  deliveryContext: {
-    isRedelivery: boolean;
-  };
+  deliveryContext: LineDeliveryContext;
   timestamp: number;
   source: LineEventSource;
   replyToken: string;
@@ -60,6 +62,8 @@ export type LineEventSource =
 
 export type LineFollowEvent = {
   type: 'follow';
+  webhookEventId: string;
+  deliveryContext: LineDeliveryContext;
   replyToken: string;
   source: LineEventSource;
   timestamp: number;
@@ -68,6 +72,8 @@ export type LineFollowEvent = {
 
 export type LineUnfollowEvent = {
   type: 'unfollow';
+  webhookEventId: string;
+  deliveryContext: LineDeliveryContext;
   source: LineEventSource;
   timestamp: number;
   mode: 'active' | 'standby';
@@ -75,6 +81,8 @@ export type LineUnfollowEvent = {
 
 export type LinePostbackEvent = {
   type: 'postback';
+  webhookEventId: string;
+  deliveryContext: LineDeliveryContext;
   replyToken: string;
   source: LineEventSource;
   timestamp: number;

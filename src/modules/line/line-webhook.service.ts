@@ -1,14 +1,17 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
   LineChatMessageType,
   LineChatSender,
-  type Prisma,
+  Prisma,
 } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ChatbotService } from '../chatbot/chatbot.service';
+import { CreditService } from '../creditService/credit.service';
 import type {
   LineMessageEvent,
   LinePostbackEvent,
@@ -40,10 +43,104 @@ type SavedIncomingEvent = {
 
 @Injectable()
 export class LineWebhookService {
+  private readonly logger = new Logger(LineWebhookService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly lineService: LineService,
+    private readonly chatbotService: ChatbotService,
+    private readonly creditService: CreditService,
   ) {}
+
+  /**
+   * Claims a webhook event for processing by inserting its id under a
+   * unique constraint. Returns false when the event was already claimed,
+   * so a duplicate delivery is skipped and never replied to twice.
+   */
+  async claimWebhookEvent(webhookEventId: string): Promise<boolean> {
+    try {
+      await this.prisma.processedLineWebhookEvent.create({
+        data: {
+          webhookEventId,
+        },
+      });
+
+      return true;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return false;
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Releases a claim so a retried job can process the event again.
+   * Only safe to call when no reply has been sent for the event yet.
+   */
+  async releaseWebhookEvent(webhookEventId: string): Promise<void> {
+    await this.prisma.processedLineWebhookEvent.deleteMany({
+      where: {
+        webhookEventId,
+      },
+    });
+  }
+
+  /**
+   * Full handling of a single webhook event: persist it, run the chatbot,
+   * reply to LINE, and save the outgoing chat history. Any error thrown
+   * from here means no reply has been sent yet, so the caller may release
+   * the idempotency claim and retry.
+   */
+  async processEvent(event: LineWebhookEvent): Promise<void> {
+    const savedIncomingEvent = await this.saveIncomingEvent(event);
+
+    if (event.type !== 'message') {
+      return;
+    }
+
+    if (event.message.type !== 'text') {
+      return;
+    }
+
+    if (!event.source?.userId) {
+      return;
+    }
+
+    const replyText = await this.chatbotService.handleTextMessage(
+      event.source.userId,
+      event.message.text,
+    );
+
+    // await this.creditService.reserveLineReplyCredit();
+
+    try {
+      await this.lineService.replyText(event.replyToken, replyText);
+    } catch (error) {
+      await this.creditService.refundLineReplyCredit();
+      throw error;
+    }
+
+    if (savedIncomingEvent) {
+      try {
+        await this.saveSystemReplyMessage(
+          savedIncomingEvent.conversationId,
+          savedIncomingEvent.lineMemberId,
+          replyText,
+        );
+      } catch (error) {
+        // The reply is already sent; retrying the job now would reply twice.
+        this.logger.error(
+          `Failed to save outgoing chat history for conversation ${savedIncomingEvent.conversationId}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
+  }
 
   async saveIncomingEvent(
     event: LineWebhookEvent,

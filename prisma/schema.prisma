@@ -197,3 +197,11 @@ model AnswerPatternVector {
   @@index([answerPatternId])
   @@index([active])
 }
+
+model ProcessedLineWebhookEvent {
+  id             String   @id @default(uuid()) @db.Uuid
+  webhookEventId String   @unique
+  processedAt    DateTime @default(now())
+
+  @@index([processedAt])
+}

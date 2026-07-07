@@ -2,77 +2,55 @@ import {
   Body,
   Controller,
   Get,
-  Headers,
   HttpCode,
   Param,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import type { LineWebhookBody } from './dto/line';
 import {
   GetLineMessagesQueryDto,
   SendLineMessageDto,
 } from './dto/line-admin.dto';
-import { LineService } from './line-reply.service';
+import {
+  LINE_EVENT_JOB,
+  LINE_EVENTS_QUEUE,
+  type LineEventJobData,
+} from './line-events.queue';
+import { LineSignatureGuard } from './line-signature.guard';
 import { LineWebhookService } from './line-webhook.service';
-import { ChatbotService } from '../chatbot/chatbot.service';
-import { CreditService } from '../creditService/credit.service';
 
 @Controller('api/line')
 export class LineController {
   constructor(
-    private readonly lineService: LineService,
-    private readonly chatbotService: ChatbotService,
-    private readonly creditService: CreditService,
     private readonly lineWebhookService: LineWebhookService,
+    @InjectQueue(LINE_EVENTS_QUEUE)
+    private readonly lineEventsQueue: Queue<LineEventJobData>,
   ) {}
 
   @Post('webhooks')
   @HttpCode(200)
-  async handleWebhook(
-    @Headers('x-line-signature') signature: string,
-    @Body() body: LineWebhookBody,
-  ) {
-    void signature;
+  @UseGuards(LineSignatureGuard)
+  async handleWebhook(@Body() body: LineWebhookBody) {
+    const events = (body.events ?? []).filter(
+      (event) =>
+        Boolean(event.webhookEventId) &&
+        event.deliveryContext?.isRedelivery !== true,
+    );
 
-    for (const event of body.events ?? []) {
-      const savedIncomingEvent =
-        await this.lineWebhookService.saveIncomingEvent(event);
-
-      if (event.type !== 'message') {
-        continue;
-      }
-
-      if (event.message.type !== 'text') {
-        continue;
-      }
-
-      if (!event.source?.userId) {
-        continue;
-      }
-
-      const replyText = await this.chatbotService.handleTextMessage(
-        event.source.userId,
-        event.message.text,
-      );
-
-      // await this.creditService.reserveLineReplyCredit();
-
-      try {
-        await this.lineService.replyText(event.replyToken, replyText);
-      } catch (error) {
-        await this.creditService.refundLineReplyCredit();
-        throw error;
-      }
-
-      if (savedIncomingEvent) {
-        await this.lineWebhookService.saveSystemReplyMessage(
-          savedIncomingEvent.conversationId,
-          savedIncomingEvent.lineMemberId,
-          replyText,
-        );
-      }
-    }
+    // webhookEventId as jobId makes BullMQ drop duplicate deliveries.
+    await Promise.all(
+      events.map((event) =>
+        this.lineEventsQueue.add(
+          LINE_EVENT_JOB,
+          { event },
+          { jobId: event.webhookEventId },
+        ),
+      ),
+    );
 
     return { ok: true };
   }
