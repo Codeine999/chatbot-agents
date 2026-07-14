@@ -125,7 +125,7 @@ export class IntentRouterService {
     input: string;
     session: ConversationSession | undefined;
   }): Promise<RouteDecision> {
-    const { input, session } = params;
+    const { userId, input, session } = params;
     this.logger.debug(`session = ${JSON.stringify(session, null, 2)}`);
 
     const rule = this.ruleIntentService.detect(input);
@@ -191,7 +191,7 @@ export class IntentRouterService {
       return decision;
     }
 
-    const ai = await this.aiIntentClassifierService.analyze(input);
+    const ai = await this.aiIntentClassifierService.analyze(input, userId);
     this.logger.debug(`[AI] result = ${JSON.stringify(ai, null, 2)}`);
 
     const decision = fromAi(ai);

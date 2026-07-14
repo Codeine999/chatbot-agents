@@ -10,6 +10,7 @@ import { NotificationService } from '../admin/notification/notification.service'
 @Injectable()
 export class ChatbotService {
   private readonly logger = new Logger(ChatbotService.name);
+  private readonly aiMaxMessageLength: number;
 
   constructor(
     private readonly intentRouterService: IntentRouterService,
@@ -19,7 +20,11 @@ export class ChatbotService {
     private readonly aiChatService: AiChatService,
     private readonly notificationService: NotificationService,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    this.aiMaxMessageLength = Number(
+      this.configService.get('AI_MAX_MESSAGE_LENGTH') ?? 1000,
+    );
+  }
 
   private canRegister(): boolean {
     return this.configService.get<string>('CAN_REGISTER') !== 'false';
@@ -30,12 +35,19 @@ export class ChatbotService {
 
     if (!input) return this.replyTemplateService.defaultMessage();
 
-    const session = this.userSessionService.get(userId);
+    if (input.length > this.aiMaxMessageLength) {
+      this.logger.warn(
+        `message from ${userId} too long for AI: ${input.length} > ${this.aiMaxMessageLength}`,
+      );
+      return this.replyTemplateService.messageTooLong();
+    }
+
+    const session = await this.userSessionService.get(userId);
 
     const decision = await this.intentRouterService.resolve({ 
-      userId, 
-      input, 
-      session 
+      userId,
+      input,
+      session,
     });
 
     this.logger.debug(
@@ -49,17 +61,15 @@ export class ChatbotService {
 
     switch (decision.action) {
       case 'CANCEL_SESSION':
-        this.userSessionService.clear(userId);
+        await this.userSessionService.clear(userId);
         return this.replyTemplateService.cancelled();
 
       case 'CONTINUE_REGISTER':
         if (!this.canRegister()) {
-          this.userSessionService.clear(userId);
+          await this.userSessionService.clear(userId);
           return this.replyTemplateService.registerUnavailable();
         }
-        return this.registrationService.handle(
-          userId, input, session!
-        );
+        return this.registrationService.handle(userId, input, session!);
 
       case 'START_REGISTER':
         if (!this.canRegister()) {
@@ -68,7 +78,7 @@ export class ChatbotService {
         return this.registrationService.start(userId);
 
       case 'START_AI_CHAT':
-        this.userSessionService.set(userId, {
+        await this.userSessionService.set(userId, {
           userId,
           flow: 'GENERAL_QUESTION',
           step: 'WAITING_QUESTION',
@@ -76,16 +86,16 @@ export class ChatbotService {
           data: {},
         });
 
-      return this.replyTemplateService.askAiChatQuestion();
+        return this.replyTemplateService.askAiChatQuestion();
 
       case 'CONTINUE_AI_CHAT':
-        return this.aiChatService.answerGeneral(input);
+        return this.aiChatService.answerGeneral(input, userId);
 
       case 'GENERAL_QUESTION':
-        return this.aiChatService.answerGeneral(input);
+        return this.aiChatService.answerGeneral(input, userId);
 
       case 'ANSWER_KNOWLEDGE':
-        return this.aiChatService.answerKnowLedge(input);
+        return this.aiChatService.answerKnowLedge(input, userId);
 
       case 'CONTACT_ADMIN': {
         const contactAdminSession = {
@@ -96,7 +106,7 @@ export class ChatbotService {
           data: {},
         };
 
-        this.userSessionService.set(userId, contactAdminSession);
+        await this.userSessionService.set(userId, contactAdminSession);
         this.notificationService.notifyContactAdmin(contactAdminSession);
 
         return this.replyTemplateService.contactAdmin();

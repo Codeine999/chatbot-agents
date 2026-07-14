@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { Injectable, Logger } from '@nestjs/common';
 import { AI_MODEL } from '../../ai/ai.constants';
+import { AiBudgetService } from '../../infra/rate-limit/ai-budget.service';
 import { AiIntentAnalysis, ChatIntent } from './types/chat.types';
 import { classifierPrompt } from './constant/AnalyzePrompt';
 
@@ -19,12 +20,18 @@ export class AiIntentClassifierService {
   private readonly genAI: GoogleGenAI;
   private readonly logger = new Logger(AiIntentClassifierService.name);
 
-  constructor() {
+  constructor(private readonly aiBudgetService: AiBudgetService) {
     this.genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   }
 
-  async analyze(input: string): Promise<AiIntentAnalysis> {
-  const prompt = classifierPrompt(input, VALID_INTENTS);
+  async analyze(input: string, userId?: string): Promise<AiIntentAnalysis> {
+    // Over-budget requests skip Gemini; the UNKNOWN fallback routes to a
+    // safe general answer instead of an AI classification.
+    if (!(await this.aiBudgetService.tryConsume(userId))) {
+      return FALLBACK;
+    }
+
+    const prompt = classifierPrompt(input, VALID_INTENTS);
     try {
       const res = await this.genAI.models.generateContent({
         model: AI_MODEL,

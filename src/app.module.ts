@@ -10,7 +10,12 @@ import { UsersModule } from './modules/users/users.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { CreditServiceModule } from './modules/creditService/credit.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 import { RedisModule } from './infra/redis/redis.module';
+import { RateLimitModule } from './infra/rate-limit/rate-limit.module';
+import { AbuseModule } from './infra/abuse/abuse.module';
+import { AuthModule } from './infra/auth/auth.module';
 
 @Module({
   imports: [
@@ -19,6 +24,9 @@ import { RedisModule } from './infra/redis/redis.module';
     }),
 
     RedisModule,
+    RateLimitModule,
+    AbuseModule,
+    AuthModule,
     PrismaModule,
 
     BullModule.forRootAsync({
@@ -53,5 +61,7 @@ import { RedisModule } from './infra/redis/redis.module';
 
     AdminModule,
   ],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}

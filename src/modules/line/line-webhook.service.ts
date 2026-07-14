@@ -118,12 +118,13 @@ export class LineWebhookService {
 
     // await this.creditService.reserveLineReplyCredit();
 
-    try {
-      await this.lineService.replyText(event.replyToken, replyText);
-    } catch (error) {
-      await this.creditService.refundLineReplyCredit();
-      throw error;
-    }
+    const replySent = await this.lineService.replyText(
+      event.replyToken,
+      replyText,
+    );
+
+    if (!replySent) return;
+    
 
     if (savedIncomingEvent) {
       try {

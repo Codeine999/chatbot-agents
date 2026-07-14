@@ -1,5 +1,10 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { RateLimitService } from '../../infra/rate-limit/rate-limit.service';
 
 export type LineProfile = {
   userId: string;
@@ -10,7 +15,17 @@ export type LineProfile = {
 
 @Injectable()
 export class LineService {
-  constructor(private readonly configService: ConfigService) {}
+  private readonly logger = new Logger(LineService.name);
+  private readonly globalReplyLimitPerSec: number;
+
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly rateLimitService: RateLimitService,
+  ) {
+    this.globalReplyLimitPerSec = Number(
+      configService.get('LINE_GLOBAL_REPLY_LIMIT_PER_SEC') ?? 30,
+    );
+  }
 
   private getAccessToken(): string {
     return this.configService.getOrThrow<string>('LINE_CHANNEL_ACCESS_TOKEN');
@@ -39,7 +54,25 @@ export class LineService {
     return response.json() as Promise<LineProfile>;
   }
 
-  async replyText(replyToken: string, text: string): Promise<void> {
+  /**
+   * Replies via the LINE reply API, gated by the global reply limit.
+   * Returns false when the reply was dropped by the limiter — a safe drop
+   * is preferred over retrying with a reply token that may expire.
+   */
+  async replyText(replyToken: string, text: string): Promise<boolean> {
+    const replyBudget = await this.rateLimitService.consume(
+      'rl:line:global:reply',
+      this.globalReplyLimitPerSec,
+      1,
+    );
+
+    if (!replyBudget.allowed) {
+      this.logger.warn(
+        `global reply limit exceeded: ${replyBudget.current}/${replyBudget.limit} per sec, dropping reply`,
+      );
+      return false;
+    }
+
     const accessToken = this.getAccessToken();
 
     const response = await fetch('https://api.line.me/v2/bot/message/reply', {
@@ -64,6 +97,8 @@ export class LineService {
       console.error('LINE reply error:', errorText);
       throw new InternalServerErrorException('Failed to reply LINE message');
     }
+
+    return true;
   }
 
   async pushText(lineUserId: string, text: string): Promise<void> {

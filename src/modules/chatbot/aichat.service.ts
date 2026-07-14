@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { Injectable, Logger } from '@nestjs/common';
 import { AI_GENERATION_CONFIG, AI_MODEL } from '../../ai/ai.constants';
+import { AiBudgetService } from '../../infra/rate-limit/ai-budget.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AnswerPatternService } from './knowledge/answer-pattern.service';
 import { SemanticSearchService } from './knowledge/semantic-search.service';
@@ -58,6 +59,7 @@ export class AiChatService {
     private readonly prisma: PrismaService,
     private readonly answerPatternService: AnswerPatternService,
     private readonly semanticSearchService: SemanticSearchService,
+    private readonly aiBudgetService: AiBudgetService,
   ) {
     this.genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   }
@@ -72,7 +74,7 @@ export class AiChatService {
    * 4. No useful pattern -> embedding-based retrieval as fallback.
    * 5. Nothing anywhere (or unrecoverable error) -> fallbackMessage.
    */
-  async answerKnowLedge(message: string): Promise<string> {
+  async answerKnowLedge(message: string, userId?: string): Promise<string> {
     const setting = await this.getActiveAiSetting();
 
     // 1) Direct DB search — errors here must not kill the flow.
@@ -92,21 +94,21 @@ export class AiChatService {
       if (direct) return direct;
 
       // 3) Multiple related matches -> Gemini, grounded on those items only.
-      return this.generateFromKnowledge(matches, message, setting);
+      return this.generateFromKnowledge(matches, message, setting, userId);
     }
 
     // 4) Nothing useful from answer_patterns -> embedding retrieval.
-    return this.answerFromEmbedding(message, setting);
+    return this.answerFromEmbedding(message, setting, userId);
   }
 
   /**
    * General / small-talk answer. Use for casual chat.
    * Never touches the knowledge base and never claims business status.
    */
-  async answerGeneral(message: string): Promise<string> {
+  async answerGeneral(message: string, userId?: string): Promise<string> {
     const { systemPrompt, tone, fallbackMessage } = await this.getActiveAiSetting();
     const prompt = this.buildGeneralPrompt({ systemPrompt, tone, message });
-    return this.generateText(prompt, fallbackMessage);
+    return this.generateText(prompt, fallbackMessage, userId);
   }
 
   // --- private helpers ------------------------------------------------------
@@ -132,7 +134,15 @@ export class AiChatService {
   }
 
   /** Call Gemini and return trimmed text, or the fallback on empty/error. */
-  private async generateText(prompt: string, fallbackMessage: string): Promise<string> {
+  private async generateText(
+    prompt: string,
+    fallbackMessage: string,
+    userId?: string,
+  ): Promise<string> {
+    if (!(await this.aiBudgetService.tryConsume(userId))) {
+      return fallbackMessage;
+    }
+
     try {
       const response = await this.genAI.models.generateContent({
         model: AI_MODEL,
@@ -170,6 +180,7 @@ export class AiChatService {
     items: KnowledgeItem[],
     message: string,
     setting: AiRuntimeSetting,
+    userId?: string,
   ): Promise<string> {
     const prompt = this.buildKnowledgePrompt({
       systemPrompt: setting.systemPrompt,
@@ -178,7 +189,7 @@ export class AiChatService {
       items,
       message,
     });
-    return this.generateText(prompt, setting.fallbackMessage);
+    return this.generateText(prompt, setting.fallbackMessage, userId);
   }
 
   /**
@@ -188,6 +199,7 @@ export class AiChatService {
   private async answerFromEmbedding(
     message: string,
     setting: AiRuntimeSetting,
+    userId?: string,
   ): Promise<string> {
     let items: KnowledgeItem[] = [];
     try {
@@ -200,7 +212,7 @@ export class AiChatService {
     // No semantic knowledge either -> never let Gemini invent an answer.
     if (items.length === 0) return setting.fallbackMessage;
 
-    return this.generateFromKnowledge(items, message, setting);
+    return this.generateFromKnowledge(items, message, setting, userId);
   }
 
   /** Build a grounded prompt that forces Gemini to answer only from DB context. */

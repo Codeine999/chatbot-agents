@@ -23,7 +23,7 @@ export class RegistrationFlowService {
     private readonly registerValidator: RegisterValidator,
   ) {}
 
-  start(userId: string): string {
+  async start(userId: string): Promise<string> {
     const session: ConversationSession<RegisterSessionData> = {
       userId,
       flow: 'REGISTER',
@@ -32,7 +32,7 @@ export class RegistrationFlowService {
       data: {},
     };
 
-    this.userSessionService.set(userId, session);
+    await this.userSessionService.set(userId, session);
 
     return this.handleWaitingRegisterForm(userId, session);
   }
@@ -42,7 +42,9 @@ export class RegistrationFlowService {
     input: string,
     session: ConversationSession,
   ): Promise<string> {
-    switch (session.step) {
+    const step = session.step as RegisterStep;
+
+    switch (step) {
       case RegisterStep.WAITING_REGISTER_FORM:
         return this.handleWaitingRegisterForm(userId, session);
 
@@ -63,16 +65,16 @@ export class RegistrationFlowService {
       }
 
       default:
-        this.userSessionService.clear(userId);
+        await this.userSessionService.clear(userId);
         return this.replyTemplateService.defaultMessage();
     }
   }
 
-  private handleWaitingRegisterForm(
+  private async handleWaitingRegisterForm(
     userId: string,
     session: ConversationSession,
-  ): string {
-    this.userSessionService.set(userId, {
+  ): Promise<string> {
+    await this.userSessionService.set(userId, {
       ...session,
       step: RegisterStep.SEND_REGISTER_FORM,
       data: session.data ?? {},
@@ -81,11 +83,11 @@ export class RegistrationFlowService {
     return this.replyTemplateService.askRegisterIntent();
   }
 
-  private handleSendRegisterForm(
+  private async handleSendRegisterForm(
     userId: string,
     input: string,
     session: ConversationSession,
-  ): Promise<string> | string {
+  ): Promise<string> {
     const oldData = session.data as RegisterSessionData;
     const parsedData = this.registerParser.parse(input, oldData);
 
@@ -94,7 +96,7 @@ export class RegistrationFlowService {
       ...parsedData,
     };
 
-    this.userSessionService.set(userId, {
+    await this.userSessionService.set(userId, {
       ...session,
       step: RegisterStep.SEND_REGISTER_FORM,
       data: mergedData,
@@ -128,7 +130,7 @@ export class RegistrationFlowService {
     session: ConversationSession,
     data: CompleteRegisterSessionData,
   ): Promise<string> {
-    this.userSessionService.set(userId, {
+    await this.userSessionService.set(userId, {
       ...session,
       step: RegisterStep.CURRENT_REGISTER,
       data,
@@ -137,19 +139,22 @@ export class RegistrationFlowService {
     try {
       const auth = await this.registrationService.register(data);
 
-      this.userSessionService.set(userId, {
-        ...session,
-        step: RegisterStep.CURRENT_REGISTER,
-        status: 'COMPLETED',
-        data: {
-          ...data,
-          username: auth.username,
-        },
-      });
+      //   this.userSessionService.set(userId, {
+      //   ...session,
+      //   step: RegisterStep.CURRENT_REGISTER,
+      //   status: 'COMPLETED',
+      //   data: {
+      //     ...data,
+      //     username: auth.username,
+      //   },
+      // });
+      // Registration data contains PII and must not remain in Redis after the
+      // flow completes.
+      await this.userSessionService.clear(userId);
 
       return this.replyTemplateService.sendAuthToUser(auth);
     } catch (error) {
-      this.userSessionService.set(userId, {
+      await this.userSessionService.set(userId, {
         ...session,
         step: RegisterStep.SEND_REGISTER_FORM,
         data,
