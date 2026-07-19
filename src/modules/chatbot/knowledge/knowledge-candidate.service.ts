@@ -3,9 +3,12 @@ import {
   AnswerPatternCacheEntry,
   AnswerPatternCacheService,
 } from './answer-pattern-cache.service';
+import { normalizeText } from '../../../utils/text.utils';
 
 export type KnowledgeCandidateResult = {
   matched: boolean;
+  /** Whole normalized message equals a question example or keyword. */
+  exact: boolean;
   confidence: number;
   score: number;
   reason: string;
@@ -49,7 +52,7 @@ export class KnowledgeCandidateService {
    * Pure in-memory pre-router check — it never produces the final answer.
    */
   detect(input: string): KnowledgeCandidateResult {
-    const normalized = this.normalizeText(input);
+    const normalized = normalizeText(input);
     if (!normalized) {
       return this.noMatch(0, 'empty input');
     }
@@ -83,6 +86,7 @@ export class KnowledgeCandidateService {
 
     return {
       matched: true,
+      exact: this.isExactMatch(best.entry, normalized),
       confidence,
       score: best.score,
       reason: `knowledge candidate "${best.entry.title}" matched (score=${best.score})`,
@@ -92,7 +96,22 @@ export class KnowledgeCandidateService {
   }
 
   private noMatch(score: number, reason: string): KnowledgeCandidateResult {
-    return { matched: false, confidence: 0, score, reason };
+    return { matched: false, exact: false, confidence: 0, score, reason };
+  }
+
+  /**
+   * Whole-message equality with a question example or keyword. Unlike a
+   * composed partial score, such a match is unambiguous even when the user
+   * is mid-conversation, so the router may trust it without an AI rewrite.
+   */
+  private isExactMatch(
+    entry: AnswerPatternCacheEntry,
+    normalized: string,
+  ): boolean {
+    return (
+      entry.questionExamples.some((raw) => normalizeText(raw) === normalized) ||
+      entry.keywords.some((raw) => normalizeText(raw) === normalized)
+    );
   }
 
   private scoreEntry(
@@ -109,7 +128,7 @@ export class KnowledgeCandidateService {
       tokens,
     );
 
-    const intentKey = this.normalizeText(entry.intentKey ?? '');
+    const intentKey = normalizeText(entry.intentKey ?? '');
     if (
       intentKey &&
       (tokens.includes(intentKey) || this.contains(normalized, intentKey))
@@ -117,12 +136,12 @@ export class KnowledgeCandidateService {
       score += WEIGHT.INTENT_KEY;
     }
 
-    const title = this.normalizeText(entry.title);
+    const title = normalizeText(entry.title);
     if (title && this.contains(normalized, title)) {
       score += WEIGHT.TITLE;
     }
 
-    const category = this.normalizeText(entry.category ?? '');
+    const category = normalizeText(entry.category ?? '');
     if (category && this.contains(normalized, category)) {
       score += WEIGHT.CATEGORY;
     }
@@ -139,7 +158,7 @@ export class KnowledgeCandidateService {
     let matched = 0;
 
     for (const raw of keywords) {
-      const keyword = this.normalizeText(raw);
+      const keyword = normalizeText(raw);
       if (!keyword) continue;
 
       let current = 0;
@@ -172,7 +191,7 @@ export class KnowledgeCandidateService {
     let best = 0;
 
     for (const raw of examples) {
-      const example = this.normalizeText(raw);
+      const example = normalizeText(raw);
       if (!example) continue;
 
       if (example === normalized) {
@@ -195,18 +214,6 @@ export class KnowledgeCandidateService {
     }
 
     return best;
-  }
-
-  /**
-   * Lowercase, strip punctuation, collapse whitespace.
-   * \p{M} keeps Thai vowel/tone combining marks intact.
-   */
-  private normalizeText(text: string): string {
-    return text
-      .toLowerCase()
-      .replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
   }
 
   private tokenize(normalized: string): string[] {

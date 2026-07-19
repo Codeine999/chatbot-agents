@@ -17,6 +17,7 @@ export type LineProfile = {
 export class LineService {
   private readonly logger = new Logger(LineService.name);
   private readonly globalReplyLimitPerSec: number;
+  private readonly httpTimeoutMs: number;
 
   constructor(
     private readonly configService: ConfigService,
@@ -24,6 +25,9 @@ export class LineService {
   ) {
     this.globalReplyLimitPerSec = Number(
       configService.get('LINE_GLOBAL_REPLY_LIMIT_PER_SEC') ?? 30,
+    );
+    this.httpTimeoutMs = Number(
+      configService.get('LINE_HTTP_TIMEOUT_MS') ?? 8_000,
     );
   }
 
@@ -42,6 +46,7 @@ export class LineService {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
+        signal: AbortSignal.timeout(this.httpTimeoutMs),
       },
     );
 
@@ -90,6 +95,7 @@ export class LineService {
           },
         ],
       }),
+      signal: AbortSignal.timeout(this.httpTimeoutMs),
     });
 
     if (!response.ok) {
@@ -119,6 +125,7 @@ export class LineService {
           },
         ],
       }),
+      signal: AbortSignal.timeout(this.httpTimeoutMs),
     });
 
     if (!response.ok) {
@@ -127,5 +134,4 @@ export class LineService {
       throw new InternalServerErrorException('Failed to push LINE message');
     }
   }
-
 }

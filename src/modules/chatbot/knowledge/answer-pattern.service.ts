@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { AnswerPattern } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { KnowledgeItem } from '../types/chat.types';
+import { normalizeText } from '../../../utils/text.utils';
 
 /**
  * Score weights for direct (non-embedding) answer_patterns matching.
@@ -53,7 +54,7 @@ export class AnswerPatternService {
    * the strongest matches sorted by score desc, then priority desc.
    */
   async findMatches(message: string): Promise<KnowledgeItem[]> {
-    const normalized = this.normalizeText(message);
+    const normalized = normalizeText(message);
     if (!normalized) return [];
 
     const tokens = this.tokenize(normalized);
@@ -88,18 +89,6 @@ export class AnswerPatternService {
   }
 
   /**
-   * Lowercase, strip punctuation, collapse whitespace.
-   * \p{M} keeps Thai vowel/tone combining marks (e.g. อั อ่ อ้) intact.
-   */
-  private normalizeText(text: string): string {
-    return text
-      .toLowerCase()
-      .replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  /**
    * Whitespace tokens. Unspaced Thai text stays a single token and is
    * matched via substring containment instead.
    */
@@ -121,7 +110,7 @@ export class AnswerPatternService {
       tokens,
     );
 
-    const intentKey = this.normalizeText(pattern.intentKey ?? '');
+    const intentKey = normalizeText(pattern.intentKey ?? '');
     if (
       intentKey &&
       (tokens.includes(intentKey) || this.contains(normalized, intentKey))
@@ -129,17 +118,17 @@ export class AnswerPatternService {
       score += WEIGHT.INTENT_KEY;
     }
 
-    const title = this.normalizeText(pattern.title);
+    const title = normalizeText(pattern.title);
     if (title && this.contains(normalized, title)) {
       score += WEIGHT.TITLE;
     }
 
-    const category = this.normalizeText(pattern.category ?? '');
+    const category = normalizeText(pattern.category ?? '');
     if (category && this.contains(normalized, category)) {
       score += WEIGHT.CATEGORY;
     }
 
-    const description = this.normalizeText(pattern.description ?? '');
+    const description = normalizeText(pattern.description ?? '');
     if (
       description &&
       (this.contains(description, normalized) ||
@@ -167,7 +156,7 @@ export class AnswerPatternService {
     let matched = 0;
 
     for (const raw of keywords) {
-      const keyword = this.normalizeText(raw);
+      const keyword = normalizeText(raw);
       if (!keyword) continue;
 
       let current = 0;
@@ -203,7 +192,7 @@ export class AnswerPatternService {
     let best = 0;
 
     for (const raw of examples) {
-      const example = this.normalizeText(raw);
+      const example = normalizeText(raw);
       if (!example) continue;
 
       if (example === normalized) {

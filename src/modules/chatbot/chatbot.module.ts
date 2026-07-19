@@ -10,6 +10,7 @@ import { ReplyTemplateService } from './reply-template.service';
 import { UserSessionService } from './user-session.service';
 import { AiModule } from './ai.module';
 import { NotificationModule } from '../admin/notification/notification.module';
+import { LoadContextService } from './context/load-context.service';
 
 @Module({
   imports: [RegistrationModule, AiModule, NotificationModule],
@@ -19,10 +20,16 @@ import { NotificationModule } from '../admin/notification/notification.module';
     IntentRouterService,
     ReplyTemplateService,
     UserSessionService,
+    LoadContextService,
     RegistrationFlowService,
     RegisterParser,
     RegisterValidator,
   ],
-  exports: [ChatbotService, ReplyTemplateService, UserSessionService],
+  exports: [
+    ChatbotService,
+    ReplyTemplateService,
+    UserSessionService,
+    LoadContextService,
+  ],
 })
 export class ChatbotModule {}

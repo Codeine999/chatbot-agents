@@ -19,9 +19,9 @@ import { LineWebhookService } from './line-webhook.service';
     duration: 1000,
   },
 })
-
 export class LineEventsProcessor extends WorkerHost {
   private readonly logger = new Logger(LineEventsProcessor.name);
+  private readonly userProcessingTails = new Map<string, Promise<void>>();
 
   private readonly userBurstLimit: number;
   private readonly userBurstWindowSec: number;
@@ -47,6 +47,30 @@ export class LineEventsProcessor extends WorkerHost {
   }
 
   async process(job: Job<LineEventJobData>): Promise<void> {
+    const userId = job.data.event.source?.userId;
+
+    if (!userId) {
+      await this.processInOrder(job);
+      return;
+    }
+
+    const previous = this.userProcessingTails.get(userId) ?? Promise.resolve();
+    const current = previous
+      .catch(() => undefined)
+      .then(() => this.processInOrder(job));
+
+    this.userProcessingTails.set(userId, current);
+
+    try {
+      await current;
+    } finally {
+      if (this.userProcessingTails.get(userId) === current) {
+        this.userProcessingTails.delete(userId);
+      }
+    }
+  }
+
+  private async processInOrder(job: Job<LineEventJobData>): Promise<void> {
     const { event } = job.data;
     const webhookEventId = event.webhookEventId;
 
@@ -64,7 +88,8 @@ export class LineEventsProcessor extends WorkerHost {
 
     if (!allowed) return;
 
-    const claimed = await this.lineWebhookService.claimWebhookEvent(webhookEventId);
+    const claimed =
+      await this.lineWebhookService.claimWebhookEvent(webhookEventId);
 
     if (!claimed) {
       this.logger.log(
@@ -88,14 +113,14 @@ export class LineEventsProcessor extends WorkerHost {
     const userId = event.source?.userId;
 
     if (!userId) return true;
-    
+
     if (await this.banService.isBanned(userId)) {
       this.logger.debug(`Dropping event from banned user ${userId}`);
       return false;
     }
 
     if (isRetry) return true;
-    
+
     const burst = await this.rateLimitService.consume(
       `rl:line:user:${userId}:burst`,
       this.userBurstLimit,

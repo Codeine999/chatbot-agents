@@ -29,6 +29,12 @@ export class EmbeddingService {
     const response = await this.genAI.models.embedContent({
       model: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001',
       contents: input,
+      config: {
+        taskType: 'RETRIEVAL_QUERY',
+        httpOptions: {
+          timeout: 8_000,
+        },
+      },
     });
 
     const values = response.embeddings?.[0]?.values;
@@ -36,9 +42,7 @@ export class EmbeddingService {
     if (!values?.length) {
       throw new Error('Gemini embedding response is empty');
     }
-    
     this.logger.debug(`Embedding generated. dimension=${values.length}`);
-    
     return values;
   }
 }

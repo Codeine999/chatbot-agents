@@ -1,8 +1,12 @@
 # Service Flows & Dependency Diagram
 
+> **เอกสารนี้เป็น architecture review รุ่นเก่าและหลายส่วนไม่ตรงกับโค้ดปัจจุบันแล้ว**
+> สำหรับ LINE flow ปัจจุบันที่มี signature guard, BullMQ, Redis session/context,
+> idempotency และ rate limits ให้ใช้ [line-message-e2e-current.md](./line-message-e2e-current.md)
+
 > Companion docs: [ai-chatbot-architecture.md](./ai-chatbot-architecture.md) · [erd-database.md](./erd-database.md)
 >
-> All diagrams describe **current behavior as implemented** (stubs and dead branches are marked). Target behavior is in the architecture doc §7.
+> The diagrams below are retained as a **historical architecture-review snapshot**. Target behavior from that review is in the architecture doc §7.
 
 ---
 

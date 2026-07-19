@@ -11,6 +11,7 @@ import {
 } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ChatbotService } from '../chatbot/chatbot.service';
+import { LoadContextService } from '../chatbot/context/load-context.service';
 import { CreditService } from '../creditService/credit.service';
 import type {
   LineMessageEvent,
@@ -22,6 +23,7 @@ import type {
   SendLineMessageDto,
 } from './dto/line-admin.dto';
 import { LineService } from './line-reply.service';
+import { LINE_EVENT_MAX_AGE_MS } from './line-events.queue';
 
 type IncomingLineChatMessage = {
   messageType: LineChatMessageType;
@@ -49,6 +51,7 @@ export class LineWebhookService {
     private readonly prisma: PrismaService,
     private readonly lineService: LineService,
     private readonly chatbotService: ChatbotService,
+    private readonly loadContextService: LoadContextService,
     private readonly creditService: CreditService,
   ) {}
 
@@ -111,27 +114,38 @@ export class LineWebhookService {
       return;
     }
 
-    const replyText = await this.chatbotService.handleTextMessage(
-      event.source.userId,
-      event.message.text,
-    );
+    const recentMessages = savedIncomingEvent
+      ? await this.loadContextService.load(savedIncomingEvent.conversationId)
+      : [];
+
+    const response = await this.chatbotService.handleTextMessage({
+      userId: event.source.userId,
+      text: event.message.text,
+      recentMessages,
+    });
+
+    if (Date.now() - event.timestamp > LINE_EVENT_MAX_AGE_MS) {
+      this.logger.warn(
+        `Skipping stale LINE reply for webhookEventId=${event.webhookEventId}`,
+      );
+      return;
+    }
 
     // await this.creditService.reserveLineReplyCredit();
 
     const replySent = await this.lineService.replyText(
       event.replyToken,
-      replyText,
+      response.text,
     );
 
     if (!replySent) return;
-    
 
     if (savedIncomingEvent) {
       try {
         await this.saveSystemReplyMessage(
           savedIncomingEvent.conversationId,
           savedIncomingEvent.lineMemberId,
-          replyText,
+          response.text,
         );
       } catch (error) {
         // The reply is already sent; retrying the job now would reply twice.
@@ -139,6 +153,18 @@ export class LineWebhookService {
           `Failed to save outgoing chat history for conversation ${savedIncomingEvent.conversationId}`,
           error instanceof Error ? error.stack : String(error),
         );
+      }
+
+      if (response.contextPolicy === 'INCLUDE') {
+        await this.loadContextService.appendTurn({
+          conversationId: savedIncomingEvent.conversationId,
+          eventId: event.webhookEventId,
+          userText: event.message.text,
+          response,
+          createdAt: event.timestamp || Date.now(),
+        });
+      } else if (response.contextPolicy === 'CLEAR') {
+        await this.loadContextService.clear(savedIncomingEvent.conversationId);
       }
     }
   }
