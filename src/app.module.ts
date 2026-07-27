@@ -16,6 +16,7 @@ import { RedisModule } from './infra/redis/redis.module';
 import { RateLimitModule } from './infra/rate-limit/rate-limit.module';
 import { AbuseModule } from './infra/abuse/abuse.module';
 import { AuthModule } from './infra/auth/auth.module';
+import { AiProviderModule } from './modules/ai/ai-provider.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AuthModule } from './infra/auth/auth.module';
     AbuseModule,
     AuthModule,
     PrismaModule,
+    AiProviderModule,
 
     BullModule.forRootAsync({
       inject: [ConfigService],

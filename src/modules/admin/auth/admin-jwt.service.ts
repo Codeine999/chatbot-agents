@@ -60,24 +60,28 @@ export class AdminJwtService {
 
     if (!payload) return null;
 
-    const admin = await this.prisma.admin.findUnique({
+    const admin = await this.prisma.adminMember.findUnique({
       where: { id: payload.sub },
       select: {
         id: true,
         username: true,
-        firstName: true,
-        lastName: true,
+        firstname: true,
+        lastname: true,
         email: true,
         phone: true,
-        picture: true,
+        image: true,
         role: true,
       },
     });
 
     if (!admin || !isAdminRole(admin.role)) return null;
 
+    const { firstname, lastname, ...adminWithoutNames } = admin;
+
     return {
-      ...admin,
+      ...adminWithoutNames,
+      firstName: firstname,
+      lastName: lastname,
       role: admin.role,
     };
   }

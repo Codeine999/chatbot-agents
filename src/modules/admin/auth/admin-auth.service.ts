@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '../../../generated/prisma/client';
+import { allowedProvidersForAdminRole } from '../../ai/admin-ai-provider.policy';
 import { AdminJwtService } from './admin-jwt.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
@@ -13,11 +14,11 @@ import { CreateAdminDto } from './dto/create-admin.dto';
 const ADMIN_PUBLIC_SELECT = {
   id: true,
   username: true,
-  firstName: true,
-  lastName: true,
+  firstname: true,
+  lastname: true,
   email: true,
   phone: true,
-  picture: true,
+  image: true,
   role: true,
   createdAt: true,
   updatedAt: true,
@@ -31,7 +32,7 @@ export class AdminAuthService {
   ) {}
 
   async login(input: AdminLoginDto) {
-    const admin = await this.prisma.admin.findUnique({
+    const admin = await this.prisma.adminMember.findUnique({
       where: { username: input.username },
     });
 
@@ -59,15 +60,28 @@ export class AdminAuthService {
     const password = await bcrypt.hash(input.password, 12);
 
     try {
-      return await this.prisma.admin.create({
+      return await this.prisma.adminMember.create({
         data: {
-          ...input,
+          username: input.username,
+          firstname: input.firstName,
+          lastname: input.lastName,
           email: input.email.toLowerCase(),
-          picture: input.picture ?? null,
+          phone: input.phone,
+          image: input.image ?? null,
           password,
+          role: input.role,
+          aiProviderSetting: {
+            create: {
+              allowedProviders: [...allowedProvidersForAdminRole(input.role)],
+            },
+          },
         },
         select: ADMIN_PUBLIC_SELECT,
-      });
+      }).then(({ firstname, lastname, ...admin }) => ({
+        ...admin,
+        firstName: firstname,
+        lastName: lastname,
+      }));
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {

@@ -230,7 +230,10 @@ export class AnswerPatternService {
     return hits / source.length;
   }
 
-  private toKnowledgeItem(pattern: AnswerPattern, score: number): KnowledgeItem {
+  private toKnowledgeItem(
+    pattern: AnswerPattern,
+    score: number,
+  ): KnowledgeItem {
     return {
       source: 'ANSWER_PATTERN',
       id: pattern.id,

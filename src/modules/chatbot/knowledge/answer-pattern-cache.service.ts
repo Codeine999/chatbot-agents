@@ -22,7 +22,9 @@ const CACHE_TTL_MS = 240_000;
 const MAX_CACHED_PATTERNS = 500;
 
 @Injectable()
-export class AnswerPatternCacheService implements OnModuleInit, OnModuleDestroy {
+export class AnswerPatternCacheService
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(AnswerPatternCacheService.name);
 
   private entries: AnswerPatternCacheEntry[] = [];

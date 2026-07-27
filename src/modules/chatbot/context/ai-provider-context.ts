@@ -1,25 +1,25 @@
-import type { Content } from '@google/genai';
+import type { AiProviderMessage } from '../../../ai-provider/types/ai-provider.types';
 import { ChatContextMessage } from '../types/chat.types';
 
 const MAX_RECENT_CONTEXT_CHARACTERS = 6_000;
 
-/** Converts validated chat context to Gemini roles and appends current input. */
-export function toGeminiContents(
+/** Converts validated chat context to provider-neutral messages. */
+export function toAiProviderMessages(
   recentMessages: readonly ChatContextMessage[],
   currentInput: string,
-): Content[] {
+): AiProviderMessage[] {
   const selectedMessages = selectNewestMessagesWithinBudget(recentMessages);
-  const contents: Content[] = selectedMessages.map((message) => ({
-    role: message.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: message.text }],
+  const messages: AiProviderMessage[] = selectedMessages.map((message) => ({
+    role: message.role,
+    text: message.text,
   }));
 
-  contents.push({
+  messages.push({
     role: 'user',
-    parts: [{ text: currentInput }],
+    text: currentInput,
   });
 
-  return contents;
+  return messages;
 }
 
 function selectNewestMessagesWithinBudget(

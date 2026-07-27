@@ -51,6 +51,17 @@ enum LineChatMessageType {
   POSTBACK @map("postback")
 }
 
+enum AiProviderScope {
+  USER
+  ADMIN
+}
+
+enum AiProviderName {
+  GEMINI
+  OPENAI
+  ANTHROPIC
+}
+
 model Member {
   uuid          String       @id @default(uuid()) @db.Uuid
   username      String       @unique
@@ -65,18 +76,33 @@ model Member {
   lineMembers   LineMember[]
 }
 
-model Admin {
-  id        String    @id @default(uuid()) @db.Uuid
-  username  String    @unique @db.VarChar(100)
-  password  String
-  firstName String    @db.VarChar(100)
-  lastName  String    @db.VarChar(100)
-  email     String    @unique @db.VarChar(255)
-  phone     String    @unique @db.VarChar(30)
-  picture   String?
-  role      AdminRole
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+model AdminMember {
+  id                String                  @id @default(uuid()) @db.Uuid
+  username          String                  @unique @db.VarChar(100)
+  password          String
+  firstname         String                  @db.VarChar(100)
+  lastname          String                  @db.VarChar(100)
+  email             String                  @unique @db.VarChar(255)
+  phone             String                  @unique @db.VarChar(30)
+  image             String?
+  role              AdminRole
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  aiProviderSetting AdminAiProviderSetting?
+}
+
+model AdminAiProviderSetting {
+  id               String           @id @default(uuid()) @db.Uuid
+  adminMemberId    String           @unique @db.Uuid
+  enabled          Boolean          @default(true)
+  allowedProviders AiProviderName[] @default([GEMINI, OPENAI, ANTHROPIC])
+  provider         AiProviderName   @default(GEMINI)
+  model            String           @default("gemini-3.1-flash-lite") @db.VarChar(150)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  adminMember      AdminMember      @relation(fields: [adminMemberId], references: [id], onDelete: Cascade)
+
+  @@map("admin_ai_provider_settings")
 }
 
 model Payment {
@@ -104,17 +130,35 @@ model AiSetting {
   updatedAt       DateTime @default(now())
 }
 
+model AiProviderSetting {
+  id        String          @id @default(uuid()) @db.Uuid
+  scope     AiProviderScope @unique
+  provider  AiProviderName
+  model     String          @db.VarChar(150)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@map("ai_provider_settings")
+}
+
 model AnswerPattern {
   id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String?  @db.Uuid
+  
   title            String   @db.VarChar(255)
   description      String?  @db.Text
   category         String?  @db.VarChar(100)
   intentKey        String?  @db.VarChar(100)
+
   keywords         String[] @default([])
   questionExamples String[] @default([])
+
   answer           String   @db.Text
+  language         String   @default("th") @db.VarChar(10)
+
   priority         Int      @default(0)
   active           Boolean  @default(true)
+  
   createdAt        DateTime @default(now()) @db.Timestamp(6)
   updatedAt        DateTime @default(now()) @db.Timestamp(6)
 
@@ -203,13 +247,13 @@ model LineChatHistory {
 }
 
 model AnswerPatternVector {
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  answerPatternId String   @db.Uuid
-  embedding       Unsupported("vector")
-  embeddingModel  String?  @db.VarChar(100)
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @default(now())
+  id              String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  answerPatternId String                     @db.Uuid
+  embedding       Unsupported("vector(1536)")
+  embeddingModel  String?                    @db.VarChar(100)
+  active          Boolean                    @default(true)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @default(now())
 
   answerPattern AnswerPattern @relation(fields: [answerPatternId], references: [id], onDelete: Cascade)
 

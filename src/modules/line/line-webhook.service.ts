@@ -12,6 +12,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { ChatbotService } from '../chatbot/chatbot.service';
 import { LoadContextService } from '../chatbot/context/load-context.service';
+import type { ChatResponse } from '../chatbot/types/chat.types';
 import { CreditService } from '../creditService/credit.service';
 import type {
   LineMessageEvent,
@@ -102,27 +103,48 @@ export class LineWebhookService {
   async processEvent(event: LineWebhookEvent): Promise<void> {
     const savedIncomingEvent = await this.saveIncomingEvent(event);
 
-    if (event.type !== 'message') {
-      return;
-    }
+    if (event.type !== 'message') return;
+    
 
-    if (event.message.type !== 'text') {
-      return;
-    }
-
-    if (!event.source?.userId) {
-      return;
-    }
+    if (event.message.type !== 'text' && 
+      event.message.type !== 'image') {
+        return
+      };
+  
+    if (!event.source?.userId)  return;
+    
 
     const recentMessages = savedIncomingEvent
       ? await this.loadContextService.load(savedIncomingEvent.conversationId)
       : [];
 
-    const response = await this.chatbotService.handleTextMessage({
-      userId: event.source.userId,
-      text: event.message.text,
-      recentMessages,
-    });
+    let response: ChatResponse;
+    let contextUserText: string;
+
+    if (event.message.type === 'text') {
+      contextUserText = event.message.text;
+      response = await this.chatbotService.handleTextMessage({
+        userId: event.source.userId,
+        text: event.message.text,
+        recentMessages,
+      });
+    } else {
+      contextUserText = '[image]';
+      if (event.message.contentProvider?.type === 'external') {
+        response = {
+          text: 'ขออภัย ระบบยังไม่รองรับรูปภาพจากผู้ให้บริการภายนอก',
+          source: 'SYSTEM',
+          contextPolicy: 'EXCLUDE',
+        };
+      } else {
+        const image = await this.lineService.getImageContent(event.message.id);
+        response = await this.chatbotService.handleImageMessage({
+          userId: event.source.userId,
+          image,
+          recentMessages,
+        });
+      }
+    }
 
     if (Date.now() - event.timestamp > LINE_EVENT_MAX_AGE_MS) {
       this.logger.warn(
@@ -159,7 +181,7 @@ export class LineWebhookService {
         await this.loadContextService.appendTurn({
           conversationId: savedIncomingEvent.conversationId,
           eventId: event.webhookEventId,
-          userText: event.message.text,
+          userText: contextUserText,
           response,
           createdAt: event.timestamp || Date.now(),
         });

@@ -18,7 +18,7 @@ export interface AuthenticatedAdmin {
   lastName: string;
   email: string;
   phone: string;
-  picture: string | null;
+  image: string | null;
   role: AdminRole;
 }
 

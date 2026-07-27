@@ -34,7 +34,13 @@ export type LineMessage =
   | {
       type: 'image';
       id: string;
-      contentProvider?: unknown;
+      contentProvider?:
+        | { type: 'line' }
+        | {
+            type: 'external';
+            originalContentUrl: string;
+            previewImageUrl: string;
+          };
     }
   | {
       type: 'sticker';

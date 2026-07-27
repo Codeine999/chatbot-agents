@@ -1,11 +1,15 @@
-import { GoogleGenAI, type Content } from '@google/genai';
 import { Injectable, Logger } from '@nestjs/common';
-import { AI_GENERATION_CONFIG, AI_MODEL } from '../../ai/ai.constants';
+import { AI_GENERATION_CONFIG } from '../../ai-provider/utils/ai-provider.config';
+import { UsersAiProviderService } from '../ai/users-ai-provider.service';
+import type {
+  AiProviderImage,
+  AiProviderMessage,
+} from '../../ai-provider/types/ai-provider.types';
 import { AiBudgetService } from '../../infra/rate-limit/ai-budget.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AnswerPatternService } from './knowledge/answer-pattern.service';
 import { SemanticSearchService } from './knowledge/semantic-search.service';
-import { toGeminiContents } from './context/gemini-context';
+import { toAiProviderMessages } from './context/ai-provider-context';
 import {
   DEFAULT_FALLBACK_MESSAGE,
   DEFAULT_SYSTEM_PROMPT,
@@ -24,7 +28,6 @@ import { AiRuntimeSetting } from './types/ai-runtime.types';
 
 @Injectable()
 export class AiChatService {
-  private readonly genAI: GoogleGenAI;
   private readonly logger = new Logger(AiChatService.name);
 
   constructor(
@@ -32,9 +35,8 @@ export class AiChatService {
     private readonly answerPatternService: AnswerPatternService,
     private readonly semanticSearchService: SemanticSearchService,
     private readonly aiBudgetService: AiBudgetService,
-  ) {
-    this.genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  }
+    private readonly usersAiProviderService: UsersAiProviderService,
+  ) {}
 
   /**
    * Knowledge-grounded answer. Use ONLY for ANSWER_KNOWLEDGE.
@@ -42,7 +44,7 @@ export class AiChatService {
    * Flow (in priority order):
    * 1. Direct DB search on answer_patterns (no embedding).
    * 2. One clearly strong pattern -> return its stored answer verbatim (no LLM).
-   * 3. Several related patterns -> Gemini composes strictly from them.
+   * 3. Several related patterns -> the selected provider composes strictly from them.
    * 4. No useful pattern -> embedding-based retrieval as fallback.
    * 5. Nothing anywhere (or unrecoverable error) -> fallbackMessage.
    */
@@ -65,11 +67,11 @@ export class AiChatService {
     }
 
     if (matches.length > 0) {
-      // 2) One clearly strong match -> stored answer, no Gemini call.
+      // 2) One clearly strong match -> stored answer, no AI call.
       const direct = this.tryGetDirectAnswer(matches);
       if (direct) return { text: direct, isFallback: false };
 
-      // 3) Multiple related matches -> Gemini, grounded on those items only.
+      // 3) Multiple related matches -> provider, grounded on those items only.
       return this.generateFromKnowledge(matches, message, setting, context);
     }
 
@@ -96,20 +98,53 @@ export class AiChatService {
       tone,
     });
     
-    const contents = toGeminiContents(context.recentMessages ?? [], message);
+    const messages = toAiProviderMessages(
+      context.recentMessages ?? [],
+      message,
+    );
 
     return this.generateText(
-      contents,
+      messages,
       systemInstruction,
       fallbackMessage,
       context.userId,
     );
   }
 
-  /** Return the configured fallback literally; never call Gemini. */
+  /** Return the configured fallback literally; never call an AI provider. */
   async answerFallback(): Promise<AiAnswerResult> {
     const { fallbackMessage } = await this.getActiveAiSetting();
     return { text: fallbackMessage, isFallback: true };
+  }
+
+  async answerImage(
+    image: AiProviderImage,
+    context: AiRequestContext = {},
+  ): Promise<AiAnswerResult> {
+    const { systemPrompt, tone, fallbackMessage } =
+      await this.getActiveAiSetting();
+    const systemInstruction = [
+      this.buildGeneralSystemInstruction({ systemPrompt, tone }),
+      'วิเคราะห์เฉพาะสิ่งที่มองเห็นหรืออ่านข้อความได้จากภาพ ห้ามแต่งข้อมูลที่ไม่ปรากฏในภาพ',
+      'หากภาพเป็นหลักฐานการชำระเงิน สามารถอ่านข้อความได้ แต่ห้ามยืนยันว่าระบบได้รับเงินแล้ว',
+    ].join('\n\n');
+    const messages = toAiProviderMessages(
+      context.recentMessages ?? [],
+      'ช่วยวิเคราะห์และอธิบายภาพนี้เป็นภาษาไทย',
+    );
+    const lastIndex = messages.length - 1;
+    const currentMessage = messages[lastIndex];
+
+    if (currentMessage) {
+      messages[lastIndex] = { ...currentMessage, images: [image] };
+    }
+
+    return this.generateText(
+      messages,
+      systemInstruction,
+      fallbackMessage,
+      context.userId,
+    );
   }
 
   // --- private helpers ------------------------------------------------------
@@ -141,9 +176,9 @@ export class AiChatService {
     }
   }
 
-  /** Call Gemini and return trimmed text, or the fallback on empty/error. */
+  /** Generate text and return the fallback on empty/error. */
   private async generateText(
-    contents: Content[],
+    messages: readonly AiProviderMessage[],
     systemInstruction: string,
     fallbackMessage: string,
     userId?: string,
@@ -153,27 +188,25 @@ export class AiChatService {
     }
 
     try {
-      const response = await this.genAI.models.generateContent({
-        model: AI_MODEL,
-        contents,
-        config: {
-          ...AI_GENERATION_CONFIG,
-          systemInstruction,
-        },
+      const response = await this.usersAiProviderService.generate({
+        messages,
+        systemInstruction,
+        temperature: AI_GENERATION_CONFIG.temperature,
+        maxOutputTokens: AI_GENERATION_CONFIG.maxOutputTokens,
       });
-      const text = response.text?.trim();
+      const text = response.text.trim();
       return text
         ? { text, isFallback: false }
         : { text: fallbackMessage, isFallback: true };
     } catch (error) {
-      this.logger.error('Gemini generateContent failed', error as Error);
+      this.logger.error('AI generation failed', error as Error);
       return { text: fallbackMessage, isFallback: true };
     }
   }
 
   /**
    * Return a stored answer verbatim when the top answer pattern is strong
-   * AND clearly ahead of the runner-up. Saves a Gemini call and guarantees
+   * AND clearly ahead of the runner-up. Saves an AI call and guarantees
    * the admin-authored answer is delivered unchanged.
    */
   private tryGetDirectAnswer(items: KnowledgeItem[]): string | null {
@@ -190,7 +223,7 @@ export class AiChatService {
     return null;
   }
 
-  /** Gemini answer grounded strictly on the given knowledge items. */
+  /** Provider answer grounded strictly on the given knowledge items. */
   private async generateFromKnowledge(
     items: KnowledgeItem[],
     message: string,
@@ -203,10 +236,13 @@ export class AiChatService {
       fallbackMessage: setting.fallbackMessage,
       items,
     });
-    const contents = toGeminiContents(context.recentMessages ?? [], message);
+    const messages = toAiProviderMessages(
+      context.recentMessages ?? [],
+      message,
+    );
 
     return this.generateText(
-      contents,
+      messages,
       systemInstruction,
       setting.fallbackMessage,
       context.userId,
@@ -225,13 +261,16 @@ export class AiChatService {
   ): Promise<AiAnswerResult> {
     let items: KnowledgeItem[] = [];
     try {
-      items = await this.semanticSearchService.search(retrievalQuery);
+      items = await this.semanticSearchService.search(
+        retrievalQuery,
+        context.userId,
+      );
     } catch (error) {
       this.logger.error('embedding retrieval failed', error as Error);
       return { text: setting.fallbackMessage, isFallback: true };
     }
 
-    // No semantic knowledge either -> never let Gemini invent an answer.
+    // No semantic knowledge either -> never let an AI provider invent an answer.
     if (items.length === 0) {
       return { text: setting.fallbackMessage, isFallback: true };
     }

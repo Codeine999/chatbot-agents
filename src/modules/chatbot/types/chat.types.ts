@@ -73,6 +73,12 @@ export type ChatRequest = Readonly<{
   recentMessages?: readonly ChatContextMessage[];
 }>;
 
+export type ImageChatRequest = Readonly<{
+  userId: string;
+  image: AiProviderImage;
+  recentMessages?: readonly ChatContextMessage[];
+}>;
+
 export type AiRequestContext = Readonly<{
   userId?: string;
   recentMessages?: readonly ChatContextMessage[];
@@ -98,3 +104,4 @@ export type KnowledgeItem = {
   score: number;
   metadata?: Record<string, unknown>;
 };
+import type { AiProviderImage } from '../../../ai-provider/types/ai-provider.types';

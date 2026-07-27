@@ -10,7 +10,7 @@ export class CreateAdminDto extends createZodDto(
     lastName: z.string().trim().min(1).max(100),
     email: z.string().trim().email().max(255),
     phone: z.string().trim().min(3).max(30),
-    picture: z.string().trim().url().nullable().optional(),
+    image: z.string().trim().url().nullable().optional(),
     role: z.enum(ADMIN_ROLES),
   }),
 ) {}

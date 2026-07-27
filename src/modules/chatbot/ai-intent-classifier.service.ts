@@ -1,6 +1,5 @@
-import { GoogleGenAI } from '@google/genai';
 import { Injectable, Logger } from '@nestjs/common';
-import { AI_MODEL } from '../../ai/ai.constants';
+import { UsersAiProviderService } from '../ai/users-ai-provider.service';
 import { AiBudgetService } from '../../infra/rate-limit/ai-budget.service';
 import {
   AiIntentAnalysis,
@@ -12,24 +11,24 @@ import {
   CLASSIFIER_SYSTEM_INSTRUCTION,
   VALID_INTENTS,
 } from './constants/ai-intent.constants';
-import { toGeminiContents } from './context/gemini-context';
+import { toAiProviderMessages } from './context/ai-provider-context';
 import { classifierPrompt } from './constants/classifier.prompt';
 import { stripJsonCodeFence } from '../../utils/json.utils';
 
 @Injectable()
 export class AiIntentClassifierService {
-  private readonly genAI: GoogleGenAI;
   private readonly logger = new Logger(AiIntentClassifierService.name);
 
-  constructor(private readonly aiBudgetService: AiBudgetService) {
-    this.genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  }
+  constructor(
+    private readonly aiBudgetService: AiBudgetService,
+    private readonly usersAiProviderService: UsersAiProviderService,
+  ) {}
 
   async analyze(
     input: string,
     context: AiRequestContext = {},
   ): Promise<AiIntentAnalysis> {
-    // Over-budget requests skip Gemini; the UNKNOWN fallback routes to the
+    // Over-budget requests skip AI; the UNKNOWN fallback routes to the
     // exact configured fallback instead of another AI answer call.
     if (!(await this.aiBudgetService.tryConsume(context.userId))) {
       return { ...AI_CLASSIFIER_FALLBACK, standaloneQuery: input };
@@ -37,40 +36,14 @@ export class AiIntentClassifierService {
 
     const prompt = classifierPrompt(input, VALID_INTENTS);
     try {
-      const res = await this.genAI.models.generateContent({
-        model: AI_MODEL,
-        contents: toGeminiContents(context.recentMessages ?? [], prompt),
-        config: {
-          systemInstruction: CLASSIFIER_SYSTEM_INSTRUCTION,
-          httpOptions: {
-            timeout: 8_000,
-          },
-          temperature: 0,
-          maxOutputTokens: 300,
-          responseMimeType: 'application/json',
-          responseJsonSchema: {
-            type: 'object',
-            properties: {
-              intent: {
-                type: 'string',
-                enum: VALID_INTENTS,
-              },
-              confidence: {
-                type: 'number',
-                minimum: 0,
-                maximum: 1,
-              },
-              standaloneQuery: {
-                type: 'string',
-              },
-            },
-            required: ['intent', 'confidence', 'standaloneQuery'],
-            additionalProperties: false,
-          },
-        },
+      const response = await this.usersAiProviderService.generate({
+        systemInstruction: CLASSIFIER_SYSTEM_INSTRUCTION,
+        messages: toAiProviderMessages(context.recentMessages ?? [], prompt),
+        temperature: 0,
+        maxOutputTokens: 300,
       });
 
-      const rawResponseText = res.text?.trim() ?? '';
+      const rawResponseText = response.text.trim();
       const jsonText = stripJsonCodeFence(rawResponseText);
       const parsed: unknown = JSON.parse(jsonText);
 

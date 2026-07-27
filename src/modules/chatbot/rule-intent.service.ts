@@ -52,9 +52,7 @@ export class RuleIntentService {
     }
 
     if (
-      ['สมัครยังไง', 'วิธีสมัคร', 'เปิดยูสยังไง'].some((k) =>
-        input.includes(k),
-      )
+      ['สมัครยังไง', 'วิธีสมัคร', 'เปิดยูสยังไง'].some((k) => input.includes(k))
     ) {
       return {
         intent: 'REGISTER_HOW_TO',

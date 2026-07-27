@@ -11,6 +11,7 @@ import {
   ChatRequest,
   ChatResponse,
   ChatResponseSource,
+  ImageChatRequest,
 } from './types/chat.types';
 
 @Injectable()
@@ -103,14 +104,13 @@ export class ChatbotService {
 
       case 'START_REGISTER':
         if (!this.canRegister()) {
-
           return this.response(
             this.replyTemplateService.registerUnavailable(),
             'REGISTRATION',
             'CLEAR',
           );
         }
-        
+
         return this.response(
           await this.registrationService.start(userId),
           'REGISTRATION',
@@ -191,6 +191,16 @@ export class ChatbotService {
           'CLEAR',
         );
     }
+  }
+
+  async handleImageMessage(request: ImageChatRequest): Promise<ChatResponse> {
+    return this.aiResponse(
+      await this.aiChatService.answerImage(request.image, {
+        userId: request.userId,
+        recentMessages: request.recentMessages,
+      }),
+      'AI',
+    );
   }
 
   private response(
