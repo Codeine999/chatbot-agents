@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { Public } from './infra/auth/public.decorator';
+import { Public } from './shared/guards/public.decorator';
 import { AppService } from './app.service';
 
 @Controller()

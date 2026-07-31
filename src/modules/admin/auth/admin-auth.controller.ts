@@ -1,6 +1,6 @@
 import { Body, Controller, HttpCode, Post } from '@nestjs/common';
-import { AdminGuard } from '../../../infra/auth/admin-guard.decorator';
-import { Public } from '../../../infra/auth/public.decorator';
+import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
+import { Public } from '../../../shared/guards/public.decorator';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';

@@ -36,9 +36,9 @@ export class SemanticSearchService {
       ? Math.min(Math.max(configuredFloor, 0), 1)
       : 0.6;
 
-    // this.logger.debug(
-    //   `[SemanticSearch] input="${input}" dimension=${embedding.values.length}`,
-    // );
+    this.logger.debug(
+      `[SemanticSearch] input="${input}" dimension=${embedding.values.length}`,
+    );
 
     const rows = await this.prisma.$queryRaw<SemanticSearchRow[]>(Prisma.sql`
       SELECT

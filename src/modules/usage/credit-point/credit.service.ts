@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { CreditWalletType } from '../../generated/prisma/client';
-import { PrismaService } from '../../prisma/prisma.service';
+import { CreditWalletType } from '../../../generated/prisma/client';
+import { PrismaService } from '../../../prisma/prisma.service';
 
 @Injectable()
 export class CreditService {

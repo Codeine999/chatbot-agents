@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { AdminRequest } from './admin-jwt-auth.guard';
+import { AdminRequest } from '../../modules/admin/admin-jwt-auth.guard';
 import { AdminRole } from './admin-auth.types';
 
 export const ADMIN_ROLES_KEY = 'adminRoles';

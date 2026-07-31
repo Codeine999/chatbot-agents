@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '../../../generated/prisma/client';
-import { allowedProvidersForAdminRole } from '../../ai/admin-ai-provider.policy';
+import { allowedProvidersForAdminRole } from '../../ai/ai-setting/admin-ai-provider.policy';
 import { AdminJwtService } from './admin-jwt.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AdminLoginDto } from './dto/admin-login.dto';

@@ -5,7 +5,7 @@ import type {
   AiProviderImage,
   AiProviderMessage,
 } from '../../ai-provider/types/ai-provider.types';
-import { AiBudgetService } from '../../infra/rate-limit/ai-budget.service';
+import { AiBudgetService } from '../usage/rate-limit/ai-budget.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AnswerPatternService } from './knowledge/answer-pattern.service';
 import { SemanticSearchService } from './knowledge/semantic-search.service';
@@ -38,16 +38,7 @@ export class AiChatService {
     private readonly usersAiProviderService: UsersAiProviderService,
   ) {}
 
-  /**
-   * Knowledge-grounded answer. Use ONLY for ANSWER_KNOWLEDGE.
-   *
-   * Flow (in priority order):
-   * 1. Direct DB search on answer_patterns (no embedding).
-   * 2. One clearly strong pattern -> return its stored answer verbatim (no LLM).
-   * 3. Several related patterns -> the selected provider composes strictly from them.
-   * 4. No useful pattern -> embedding-based retrieval as fallback.
-   * 5. Nothing anywhere (or unrecoverable error) -> fallbackMessage.
-   */
+
   async answerKnowledge(
     message: string,
     context: KnowledgeAnswerContext = {},
@@ -55,27 +46,23 @@ export class AiChatService {
     const setting = await this.getActiveAiSetting();
     const retrievalQuery = context.retrievalQuery?.trim() || message;
 
-    // 1) Direct DB search — errors here must not kill the flow.
     let matches: KnowledgeItem[] = [];
     try {
       matches = await this.answerPatternService.findMatches(retrievalQuery);
     } catch (error) {
       this.logger.error(
-        'answer_patterns direct search failed, falling back to embedding',
+        '[Ai_chat_service] answer patterns no matches, falling back to embedding',
         error as Error,
       );
     }
 
     if (matches.length > 0) {
-      // 2) One clearly strong match -> stored answer, no AI call.
       const direct = this.tryGetDirectAnswer(matches);
       if (direct) return { text: direct, isFallback: false };
 
-      // 3) Multiple related matches -> provider, grounded on those items only.
       return this.generateFromKnowledge(matches, message, setting, context);
     }
 
-    // 4) Nothing useful from answer_patterns -> embedding retrieval.
     return this.answerFromEmbedding(retrievalQuery, message, setting, context);
   }
 

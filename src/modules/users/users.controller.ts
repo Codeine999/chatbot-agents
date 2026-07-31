@@ -1,5 +1,5 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { AdminGuard } from '../../infra/auth/admin-guard.decorator';
+import { AdminGuard } from '../../shared/guards/admin-guard.decorator';
 import { GetAllUsersDto } from './dto/get-all-users.dto';
 import { UsersService } from './users.service';
 

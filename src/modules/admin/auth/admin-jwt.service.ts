@@ -7,7 +7,7 @@ import {
   AdminRole,
   AuthenticatedAdmin,
   isAdminRole,
-} from '../../../infra/auth/admin-auth.types';
+} from '../../../shared/guards/admin-auth.types';
 
 const DEFAULT_EXPIRES_IN_SECONDS = 8 * 60 * 60;
 const JWT_ALGORITHM = 'HS256';

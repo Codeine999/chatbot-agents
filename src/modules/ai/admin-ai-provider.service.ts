@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { AdminAiProviderSettingsService } from './admin-ai-provider-settings.service';
-import { AiModelCatalogService } from './ai-model-catalog.service';
+import { AdminAiProviderSettingsService } from './ai-setting/admin-ai-provider-settings.service';
+import { AiModelCatalogService } from './ai-setting/ai-model-catalog.service';
 import { AiProviderService } from './ai-provider.service';
 import {
   AdminAiGenerateRequest,
@@ -34,6 +34,7 @@ export class AdminAiProviderService {
       model: requestedModel,
       ...input
     } = request;
+    
     const provider = requestedProvider ?? setting.provider;
 
     if (!setting.allowedProviders.includes(provider)) {

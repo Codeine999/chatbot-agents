@@ -7,7 +7,7 @@ import {
   AI_PROVIDER_SETTING_CACHE_PREFIX,
   DEFAULT_AI_PROVIDER_CACHE_TTL_SEC,
 } from '../../ai-provider/utils/ai-provider.constants';
-import { AiModelCatalogService } from './ai-model-catalog.service';
+import { AiModelCatalogService } from './ai-setting/ai-model-catalog.service';
 import {
   AiProviderName,
   AiProviderRuntimeSetting,

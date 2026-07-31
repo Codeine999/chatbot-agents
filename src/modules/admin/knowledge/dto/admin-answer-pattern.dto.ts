@@ -1,29 +1,40 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
+const languageSchema = z.preprocess(
+  (value) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.string().trim().min(1).max(10).default('th'),
+);
+
 const answerPatternFields = {
   title: z.string().trim().min(1).max(255),
   description: z.string().trim().max(20_000).nullable().optional(),
   category: z.string().trim().max(100).nullable().optional(),
   intentKey: z.string().trim().max(100).nullable().optional(),
-  keywords: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
-  questionExamples: z
-    .array(z.string().trim().min(1).max(2_000))
-    .max(100)
-    .default([]),
+  keywords: z.array(z.string().trim().min(1).max(100)).max(100),
+  questionExamples: z.array(z.string().trim().min(1).max(2_000)).max(100),
   answer: z.string().trim().min(1).max(50_000),
-  priority: z.number().int().min(0).max(100).default(0),
-  active: z.boolean().default(true),
+  language: languageSchema,
+  priority: z.number().int().min(0).max(100),
+  active: z.boolean(),
 } as const;
 
-const createAnswerPatternSchema = z.object(answerPatternFields);
+const createAnswerPatternSchema = z.object({
+  ...answerPatternFields,
+  keywords: answerPatternFields.keywords.default([]),
+  questionExamples: answerPatternFields.questionExamples.default([]),
+  priority: answerPatternFields.priority.default(0),
+  active: answerPatternFields.active.default(true),
+});
 
 export class CreateAdminAnswerPatternDto extends createZodDto(
   createAnswerPatternSchema,
 ) {}
 
 export class UpdateAdminAnswerPatternDto extends createZodDto(
-  createAnswerPatternSchema
+  z
+    .object(answerPatternFields)
     .partial()
     .refine((value) => Object.keys(value).length > 0, {
       message: 'At least one field is required',

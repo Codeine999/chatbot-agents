@@ -5,8 +5,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { AuthenticatedAdmin } from './admin-auth.types';
-import { AdminJwtService } from '../../modules/admin/auth/admin-jwt.service';
+import { AuthenticatedAdmin } from '../../shared/guards/admin-auth.types';
+import { AdminJwtService } from './auth/admin-jwt.service';
 
 export type AdminRequest = FastifyRequest & {
   admin?: AuthenticatedAdmin;

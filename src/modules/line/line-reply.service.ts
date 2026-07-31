@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AiProviderImage } from '../../ai-provider/types/ai-provider.types';
-import { RateLimitService } from '../../infra/rate-limit/rate-limit.service';
+import { RateLimitService } from '../usage/rate-limit/rate-limit.service';
 
 export type LineProfile = {
   userId: string;

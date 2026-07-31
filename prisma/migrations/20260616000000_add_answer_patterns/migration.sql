@@ -1,19 +1,21 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- CreateTable
-CREATE TABLE "answer_patterns" (
+CREATE TABLE "AnswerPattern" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "tenantId" UUID,
     "title" VARCHAR(255) NOT NULL,
     "description" TEXT,
     "category" VARCHAR(100),
     "intentKey" VARCHAR(100),
-    "keywords" TEXT[] DEFAULT '{}',
-    "questionExamples" TEXT[] DEFAULT '{}',
+    "keywords" TEXT[] NOT NULL DEFAULT '{}',
+    "questionExamples" TEXT[] NOT NULL DEFAULT '{}',
     "answer" TEXT NOT NULL,
-    "priority" INTEGER DEFAULT 0,
-    "active" BOOLEAN DEFAULT true,
-    "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "language" VARCHAR(10) NOT NULL DEFAULT 'th',
+    "priority" INTEGER NOT NULL DEFAULT 0,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "answer_patterns_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "AnswerPattern_pkey" PRIMARY KEY ("id")
 );

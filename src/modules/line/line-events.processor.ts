@@ -2,9 +2,9 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
-import { BanService } from '../../infra/abuse/ban.service';
-import { SpamDetectorService } from '../../infra/abuse/spam-detector.service';
-import { RateLimitService } from '../../infra/rate-limit/rate-limit.service';
+import { BanService } from '../abuse/ban.service';
+import { SpamDetectorService } from '../abuse/spam-detector.service';
+import { RateLimitService } from '../usage/rate-limit/rate-limit.service';
 import {
   LINE_EVENT_MAX_AGE_MS,
   LINE_EVENTS_QUEUE,

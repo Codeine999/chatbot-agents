@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { AuthModule } from '../../infra/auth/auth.module';
+import { AuthModule } from '../admin/auth/auth.module';
 import { RedisModule } from '../../infra/redis/redis.module';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { AdminAiProviderService } from './admin-ai-provider.service';
-import { AdminAiProviderSettingsService } from './admin-ai-provider-settings.service';
-import { AiModelCatalogService } from './ai-model-catalog.service';
-import { AiProviderSettingsController } from './ai-provider-settings.controller';
+import { AdminAiProviderSettingsService } from './ai-setting/admin-ai-provider-settings.service';
+import { AiModelCatalogService } from './ai-setting/ai-model-catalog.service';
+import { AiProviderSettingsController } from './ai-setting/ai-provider-settings.controller';
 import { AiProviderSettingsService } from './ai-provider-settings.service';
 import { AiProviderService } from './ai-provider.service';
 import { UsersAiProviderService } from './users-ai-provider.service';

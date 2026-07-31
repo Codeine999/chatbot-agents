@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { UsersAiProviderService } from '../ai/users-ai-provider.service';
-import { AiBudgetService } from '../../infra/rate-limit/ai-budget.service';
+import { AiBudgetService } from '../usage/rate-limit/ai-budget.service';
 import {
   AiIntentAnalysis,
   AiRequestContext,

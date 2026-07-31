@@ -26,13 +26,20 @@ export class GeminiEmbeddingAdapter implements EmbeddingAdapter {
     const model =
       this.configService.get<string>('GEMINI_EMBEDDING_MODEL') ||
       'gemini-embedding-001';
+    const usesPromptTaskInstruction = this.usesPromptTaskInstruction(model);
 
     try {
       const response = await new GoogleGenAI({ apiKey }).models.embedContent({
         model,
-        contents: request.text,
+        contents: usesPromptTaskInstruction
+          ? this.toEmbedding2Content(request)
+          : request.text,
         config: {
-          taskType: request.task,
+          ...(usesPromptTaskInstruction
+            ? {}
+            : {
+                taskType: request.task,
+              }),
           outputDimensionality: EMBEDDING_DIMENSIONS,
           httpOptions: {
             timeout: Number(
@@ -57,12 +64,27 @@ export class GeminiEmbeddingAdapter implements EmbeddingAdapter {
       }
 
       return { values, model };
-      
     } catch (error) {
       if (error instanceof ServiceUnavailableException) throw error;
       throw new BadGatewayException(
         `Gemini embedding failed: ${String(error)}`,
       );
     }
+  }
+
+  /**
+   * Gemini Embedding 2 does not support taskType. Retrieval intent must be
+   * included in the text instead. Embedding 1 keeps using taskType.
+   */
+  private usesPromptTaskInstruction(model: string): boolean {
+    return /(^|\/)(?:gemini-)?embedding-2(?:$|-)/i.test(model.trim());
+  }
+
+  private toEmbedding2Content(request: EmbeddingRequest): string {
+    if (request.task === 'RETRIEVAL_QUERY') {
+      return `task: search result | query: ${request.text}`;
+    }
+
+    return `title: none | text: ${request.text}`;
   }
 }

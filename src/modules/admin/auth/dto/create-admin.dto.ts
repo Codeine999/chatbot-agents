@@ -1,6 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
-import { ADMIN_ROLES } from '../../../../infra/auth/admin-auth.types';
+import { ADMIN_ROLES } from '../../../../shared/guards/admin-auth.types';
 
 export class CreateAdminDto extends createZodDto(
   z.object({

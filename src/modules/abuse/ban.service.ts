@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import { REDIS_CLIENT } from '../redis/redis.module';
+import { REDIS_CLIENT } from '../../infra/redis/redis.module';
 
 export type BanInfo = {
   banned: boolean;

@@ -4,14 +4,14 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AI_PROVIDER_LABELS } from '../../ai-provider/utils/ai-provider.constants';
+import { AI_PROVIDER_LABELS } from '../../../ai-provider/utils/ai-provider.constants';
 import {
   AI_PROVIDER_NAMES,
   AiProviderCatalogItem,
   AiProviderName,
   AiProviderScope,
   isAiProviderName,
-} from '../../ai-provider/types/ai-provider.types';
+} from '../../../ai-provider/types/ai-provider.types';
 
 @Injectable()
 export class AiModelCatalogService {

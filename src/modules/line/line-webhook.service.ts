@@ -13,7 +13,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ChatbotService } from '../chatbot/chatbot.service';
 import { LoadContextService } from '../chatbot/context/load-context.service';
 import type { ChatResponse } from '../chatbot/types/chat.types';
-import { CreditService } from '../creditService/credit.service';
+import { CreditService } from '../usage/credit-point/credit.service';
 import type {
   LineMessageEvent,
   LinePostbackEvent,

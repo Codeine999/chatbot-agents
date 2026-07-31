@@ -4,14 +4,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AuthenticatedAdmin } from '../../infra/auth/admin-auth.types';
-import { PrismaService } from '../../prisma/prisma.service';
+import { AuthenticatedAdmin } from '../../../shared/guards/admin-auth.types';
+import { PrismaService } from '../../../prisma/prisma.service';
 import { allowedProvidersForAdminRole } from './admin-ai-provider.policy';
 import { AiModelCatalogService } from './ai-model-catalog.service';
 import {
   AdminAiProviderRuntimeSetting,
   AiProviderName,
-} from '../../ai-provider/types/ai-provider.types';
+} from '../../../ai-provider/types/ai-provider.types';
 
 type UpdateAccessInput = Readonly<{
   enabled?: boolean;

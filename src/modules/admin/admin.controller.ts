@@ -1,5 +1,5 @@
 import { Controller } from '@nestjs/common';
-import { AdminGuard } from '../../infra/auth/admin-guard.decorator';
+import { AdminGuard } from '../../shared/guards/admin-guard.decorator';
 
 @AdminGuard()
 @Controller('admin')

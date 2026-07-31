@@ -8,14 +8,14 @@ import { PipelineModule } from './modules/pipeline/pipeline.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './modules/users/users.module';
 import { PaymentsModule } from './modules/payments/payments.module';
-import { CreditServiceModule } from './modules/creditService/credit.module';
+import { CreditServiceModule } from './modules/usage/credit-point/credit.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { RedisModule } from './infra/redis/redis.module';
-import { RateLimitModule } from './infra/rate-limit/rate-limit.module';
-import { AbuseModule } from './infra/abuse/abuse.module';
-import { AuthModule } from './infra/auth/auth.module';
+import { RateLimitModule } from './modules/usage/rate-limit/rate-limit.module';
+import { AbuseModule } from './modules/abuse/abuse.module';
+import { AuthModule } from './modules/admin/auth/auth.module';
 import { AiProviderModule } from './modules/ai/ai-provider.module';
 
 @Module({

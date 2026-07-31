@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
-import type { AdminRequest } from '../../infra/auth/admin-jwt-auth.guard';
-import { AdminGuard } from '../../infra/auth/admin-guard.decorator';
-import { AdminAiProviderService } from './admin-ai-provider.service';
+import type { AdminRequest } from '../../admin/admin-jwt-auth.guard';
+import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
+import { AdminAiProviderService } from '../admin-ai-provider.service';
 import { AdminAiProviderSettingsService } from './admin-ai-provider-settings.service';
 import { AiModelCatalogService } from './ai-model-catalog.service';
-import { AiProviderSettingsService } from './ai-provider-settings.service';
+import { AiProviderSettingsService } from '../ai-provider-settings.service';
 import {
   AdminMemberIdParamDto,
   AdminAiGenerateDto,
@@ -12,8 +12,8 @@ import {
   UpdateAdminAiAccessDto,
   UpdateMyAdminAiProviderSettingDto,
   UpdateAiProviderSettingDto,
-} from './dto/ai-provider-setting.dto';
-import { AiProviderResponseCode } from '../../utils/responseCode/ai-provider.constant';
+} from '../dto/ai-provider-setting.dto';
+import { AiProviderResponseCode } from '../../../utils/responseCode/ai-provider.constant';
 
 @Controller('api/admin/ai-providers')
 export class AiProviderSettingsController {

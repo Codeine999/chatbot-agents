@@ -1,8 +1,8 @@
 import { Global, Module } from '@nestjs/common';
-import { PrismaModule } from '../../prisma/prisma.module';
-import { AdminJwtAuthGuard } from './admin-jwt-auth.guard';
-import { AdminJwtService } from '../../modules/admin/auth/admin-jwt.service';
-import { AdminRolesGuard } from './admin-roles.guard';
+import { PrismaModule } from '../../../prisma/prisma.module';
+import { AdminJwtAuthGuard } from '../admin-jwt-auth.guard';
+import { AdminJwtService } from './admin-jwt.service';
+import { AdminRolesGuard } from '../../../shared/guards/admin-roles.guard';
 
 @Global()
 @Module({

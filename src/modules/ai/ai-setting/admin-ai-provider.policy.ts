@@ -1,5 +1,5 @@
-import { AdminRole } from '../../infra/auth/admin-auth.types';
-import { AiProviderName } from '../../ai-provider/types/ai-provider.types';
+import { AdminRole } from '../../../shared/guards/admin-auth.types';
+import { AiProviderName } from '../../../ai-provider/types/ai-provider.types';
 
 const ALL_PROVIDERS: readonly AiProviderName[] = [
   'GEMINI',
