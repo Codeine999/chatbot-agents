@@ -51,9 +51,7 @@ export class LineController {
   @UseGuards(LineSignatureGuard)
   async handleWebhook(@Body() body: LineWebhookBody) {
     const events = (body.events ?? []).filter(
-      (event) =>
-        Boolean(event.webhookEventId) &&
-        event.deliveryContext?.isRedelivery !== true,
+      (event) => Boolean(event.webhookEventId),
     );
 
     if (events.length > 0) {
@@ -73,7 +71,8 @@ export class LineController {
       }
     }
 
-    // webhookEventId as jobId makes BullMQ drop duplicate deliveries.
+    // Keep redeliveries in the queue. BullMQ deduplicates while the job is
+    // retained, and the DB claim handles deliveries after the job is removed.
     await Promise.all(
       events.map((event) =>
         this.lineEventsQueue.add(

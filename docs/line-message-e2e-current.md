@@ -1,6 +1,6 @@
 # LINE Message End-to-End Flow (Current Implementation)
 
-> อ้างอิงโค้ดปัจจุบัน ณ 2026-07-15 หลังถอด `ChatProcessingLockService` ออก
+> อ้างอิงโค้ดปัจจุบัน ณ 2026-08-02 หลังถอด `ChatProcessingLockService` ออก
 >
 > แผนภาพสำหรับเปิดใน diagrams.net: [`line-message-e2e.drawio`](./line-message-e2e.drawio)
 
@@ -61,7 +61,7 @@ Event ที่ type รองรับใน DTO:
 | Event | ข้อมูลสำคัญ | ผลในระบบ |
 |---|---|---|
 | text message | `userId`, `message.text`, `replyToken` | บันทึก inbound → chatbot → reply |
-| image message | `message.id`, `replyToken` | บันทึก `[image]` แต่ไม่เรียก chatbot และไม่ reply |
+| image message | `message.id`, `replyToken` | บันทึก `[image]` → ดาวน์โหลดภาพ → multimodal AI → reply |
 | sticker message | package/sticker IDs | บันทึก `[sticker]` แต่ไม่เรียก chatbot และไม่ reply |
 | postback | `postback.data` | บันทึก postback แต่ไม่เรียก chatbot และไม่ reply |
 | follow/unfollow | source/timestamp | ผ่าน queue แต่ `toChatMessage()` คืน `null`; ไม่บันทึก chat และไม่ reply |
@@ -97,14 +97,14 @@ Output:
 เริ่มจาก filter event:
 
 ```ts
-Boolean(event.webhookEventId) &&
-event.deliveryContext?.isRedelivery !== true
+Boolean(event.webhookEventId)
 ```
 
 ดังนั้น event ต่อไปนี้ถูกตัดทันที:
 
 - ไม่มี `webhookEventId`
-- LINE ระบุว่าเป็น redelivery
+
+Redelivery ยังถูก enqueue ได้เหมือน event แรก โดยใช้ `webhookEventId` เป็น BullMQ `jobId`; DB claim และ `lineMessageId` unique เป็นตัวกันซ้ำขั้นสุดท้าย
 
 จากนั้นตรวจ global ingress rate limit ผ่าน Redis:
 
@@ -223,6 +223,8 @@ find LineMember by lineUserId
 LINE Profile API ใช้ timeout `LINE_HTTP_TIMEOUT_MS` default 8 วินาที
 
 ### 5.2 PostgreSQL transaction
+
+ถ้ามี `lineMessageId` ที่เคยบันทึกแล้ว ระบบคืน `{conversationId,lineMemberId}` เดิมทันทีโดยไม่เพิ่ม unread/history ซ้ำ
 
 ภายใน transaction เดียว:
 
@@ -433,8 +435,10 @@ flowchart TD
     V -- yes --> A[คืน admin answer verbatim ไม่เรียก Gemini]
     V -- no --> G[Gemini grounded ด้วย matches + history]
     H -- no --> E[EmbeddingService.embed retrievalQuery]
-    E --> STUB[SemanticSearchService ปัจจุบันคืน []]
-    STUB --> F[fallbackMessage]
+    E --> VEC[SemanticSearchService: pgvector cosine top-5]
+    VEC --> VH{มี score ถึง floor?}
+    VH -- yes --> G[Gemini grounded ด้วย semantic matches]
+    VH -- no --> F[fallbackMessage]
     G --> R{Gemini สำเร็จและมี text?}
     R -- yes --> OK[answer isFallback=false]
     R -- no --> F
@@ -461,14 +465,14 @@ flowchart TD
 
 ### 13.4 Vector fallback ปัจจุบัน
 
-`EmbeddingService` เรียก Gemini embedding ด้วย `RETRIEVAL_QUERY` และ timeout 8 วินาที แต่ `SemanticSearchService.search()` ยังเป็น stub:
+`EmbeddingService` เรียก Gemini embedding ด้วย `RETRIEVAL_QUERY` และ timeout 8 วินาที จากนั้น `SemanticSearchService.search()` query `AnswerPatternVector` ด้วย cosine similarity:
 
 ```ts
-const vector = await embeddingService.embed(input);
-return [];
+const embedding = await embeddingService.embedQuery(input);
+return pgvectorTop5(embedding, similarityFloor);
 ```
 
-ดังนั้น knowledge miss ตอนนี้เสีย embedding call แล้วจบที่ fallback; `AnswerPatternVector` ยังไม่ถูก query ในเส้นทางนี้
+ค่าเริ่มต้นของ similarity floor คือ `AI_VECTOR_MIN_SIMILARITY=0.6` และ filter ตาม `embeddingModel`; ถ้าไม่พบผลลัพธ์เหนือ floor จึง fallback โดยไม่เรียก generation เพิ่ม
 
 ## 14. AI budget
 
@@ -567,7 +571,7 @@ context append/clear error จะ log และคืน false ไม่ทำ�
 | LINE reply สำเร็จ แต่ save outbound fail | log เท่านั้น | ไม่ | ลูกค้าได้รับ reply แล้ว |
 | context append/clear fail | log เท่านั้น | ไม่ | ลูกค้าได้รับ reply + outbound อาจบันทึกแล้ว |
 
-ข้อควรระวัง: ถ้า error เกิดหลัง inbound transaction แต่ก่อน LINE reply, processor release claim แล้ว retry; schema ยังไม่มี unique constraint บน `LineChatHistory.lineMessageId` จึงมีโอกาสสร้าง inbound history ซ้ำและ increment unread ซ้ำ
+ถ้า error เกิดหลัง inbound transaction แต่ก่อน LINE reply, processor release claim แล้ว retry; retry จะ reuse inbound row เดิมจาก unique `lineMessageId` แล้วเดินต่อเพื่อพยายามส่ง reply ใหม่
 
 ## 18. Data stores และ keys ที่เกี่ยวข้อง
 
@@ -581,7 +585,7 @@ context append/clear error จะ log และคืน false ไม่ทำ�
 | `LineChatHistory` | inbound USER และ outbound SYSTEM |
 | `AiSetting` | prompt/tone/fallback |
 | `AnswerPattern` | route cache refresh และ knowledge matching |
-| `AnswerPatternVector` | มี schema แต่ current semantic path ยังไม่ query |
+| `AnswerPatternVector` | vector ที่เขียนตอน create/update/reindex และ query ตอน semantic fallback |
 | `Member` | registration uniqueness/create account |
 
 ### Redis
@@ -708,7 +712,7 @@ User เคยถาม “แพ็กเกจ Pro ราคาเท่าไ
 14. AnswerPatternService ค้นด้วย standaloneQuery
 15a. ถ้า match ชัด → คืน stored answer โดยตรง
 15b. ถ้าหลาย match → Gemini grounded answer
-15c. ถ้าไม่ match → embedding แล้ว fallback เพราะ semantic search ยัง stub
+15c. ถ้าไม่ match → embedding + pgvector semantic search; ถ้าไม่มีผลเหนือ similarity floor จึง fallback
 16. ChatbotService คืน {text, source=KNOWLEDGE, contextPolicy}
 17. stale รอบสองผ่าน
 18. global reply limiter ผ่าน

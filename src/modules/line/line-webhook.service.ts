@@ -206,65 +206,106 @@ export class LineWebhookService {
       return null;
     }
 
+    // A webhook retry can happen after the inbound transaction committed but
+    // before LINE was replied to. Reuse the existing row so the conversation
+    // unread count and USER history are not written twice.
+    if (chatMessage.lineMessageId) {
+      const existing = await this.prisma.lineChatHistory.findUnique({
+        where: {
+          lineMessageId: chatMessage.lineMessageId,
+        },
+        select: {
+          conversationId: true,
+          lineMemberId: true,
+        },
+      });
+
+      if (existing) return existing;
+    }
+
     const member = await this.findOrCreateLineMember(lineUserId);
     const messageAt = new Date(event.timestamp || Date.now());
 
-    return this.prisma.$transaction(async (tx) => {
-      const conversation = await tx.lineConversation.upsert({
-        where: {
-          lineMemberId: member.id,
-        },
-        create: {
-          lineMemberId: member.id,
-          lastMessage: chatMessage.lastMessage,
-          lastMessageType: chatMessage.messageType,
-          lastMessageAt: messageAt,
-          unreadCount: 1,
-        },
-        update: {
-          lastMessage: chatMessage.lastMessage,
-          lastMessageType: chatMessage.messageType,
-          lastMessageAt: messageAt,
-          unreadCount: {
-            increment: 1,
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const conversation = await tx.lineConversation.upsert({
+          where: {
+            lineMemberId: member.id,
           },
-        },
-      });
+          create: {
+            lineMemberId: member.id,
+            lastMessage: chatMessage.lastMessage,
+            lastMessageType: chatMessage.messageType,
+            lastMessageAt: messageAt,
+            unreadCount: 1,
+          },
+          update: {
+            lastMessage: chatMessage.lastMessage,
+            lastMessageType: chatMessage.messageType,
+            lastMessageAt: messageAt,
+            unreadCount: {
+              increment: 1,
+            },
+          },
+        });
 
-      await tx.lineChatHistory.create({
-        data: {
+        await tx.lineChatHistory.create({
+          data: {
+            conversationId: conversation.id,
+            lineMemberId: member.id,
+            sender: LineChatSender.USER,
+            messageType: chatMessage.messageType,
+            text: chatMessage.text,
+            lineMessageId: chatMessage.lineMessageId,
+            replyToken: chatMessage.replyToken,
+            stickerPackageId: chatMessage.stickerPackageId,
+            stickerId: chatMessage.stickerId,
+            stickerResourceType: chatMessage.stickerResourceType,
+            mediaUrl: chatMessage.mediaUrl,
+            postbackData: chatMessage.postbackData,
+            rawEvent: event as unknown as Prisma.InputJsonValue,
+            sentStatus: 'received',
+            createdAt: messageAt,
+          },
+        });
+
+        await tx.lineMember.update({
+          where: {
+            id: member.id,
+          },
+          data: {
+            lastActiveAt: messageAt,
+          },
+        });
+
+        return {
           conversationId: conversation.id,
           lineMemberId: member.id,
-          sender: LineChatSender.USER,
-          messageType: chatMessage.messageType,
-          text: chatMessage.text,
-          lineMessageId: chatMessage.lineMessageId,
-          replyToken: chatMessage.replyToken,
-          stickerPackageId: chatMessage.stickerPackageId,
-          stickerId: chatMessage.stickerId,
-          stickerResourceType: chatMessage.stickerResourceType,
-          mediaUrl: chatMessage.mediaUrl,
-          postbackData: chatMessage.postbackData,
-          rawEvent: event as unknown as Prisma.InputJsonValue,
-          sentStatus: 'received',
-          createdAt: messageAt,
-        },
+        };
       });
+    } catch (error) {
+      // Two workers can pass the read above concurrently. The unique index
+      // is the final arbiter; return the committed row instead of retrying a
+      // transaction that already rolled back its unread increment.
+      if (
+        chatMessage.lineMessageId &&
+        this.isUniqueConstraint(error, 'lineMessageId')
+      ) {
+        const existing = await this.prisma.lineChatHistory.findUnique({
+          where: {
+            lineMessageId: chatMessage.lineMessageId,
+          },
+          select: {
+            conversationId: true,
+            lineMemberId: true,
+          },
+        });
 
-      await tx.lineMember.update({
-        where: {
-          id: member.id,
-        },
-        data: {
-          lastActiveAt: messageAt,
-        },
-      });
+        if (existing) return existing;
+      }
 
-      return {
-        conversationId: conversation.id,
-        lineMemberId: member.id,
-      };
-    });
+      throw error;
+    }
   }
 
   listConversations() {
@@ -553,5 +594,16 @@ export class LineWebhookService {
     }
 
     return date;
+  }
+
+  private isUniqueConstraint(error: unknown, field: string): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+      return false;
+    }
+
+    if (error.code !== 'P2002') return false;
+
+    const target = error.meta?.target;
+    return Array.isArray(target) ? target.includes(field) : target === field;
   }
 }

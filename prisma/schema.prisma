@@ -228,7 +228,7 @@ model LineChatHistory {
   sender              LineChatSender
   messageType         LineChatMessageType
   text                String?
-  lineMessageId       String?
+  lineMessageId       String?             @unique
   replyToken          String?
   stickerPackageId    String?
   stickerId           String?
@@ -243,7 +243,6 @@ model LineChatHistory {
 
   @@index([conversationId, createdAt])
   @@index([lineMemberId])
-  @@index([lineMessageId])
 }
 
 model AnswerPatternVector {

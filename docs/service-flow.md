@@ -20,7 +20,7 @@ sequenceDiagram
     participant LC as LineController
     participant LW as LineWebhookService
     participant CB as ChatbotService
-    participant US as UserSessionService<br/>(in-memory Map)
+    participant US as UserSessionService<br/>(Redis, 30m TTL)
     participant IR as IntentRouterService
     participant EX as Action executor<br/>(RegistrationFlow / AiChat / Templates)
     participant DB as PostgreSQL
@@ -28,7 +28,7 @@ sequenceDiagram
 
     U->>LP: text message
     LP->>LC: POST /api/line/webhooks
-    Note over LC: x-line-signature received<br/>but NOT verified ⚠️
+    Note over LC: x-line-signature verified by LineSignatureGuard
     loop each event (sequential)
         LC->>LW: saveIncomingEvent(event)
         LW->>LA: getProfile (first contact only)
@@ -53,7 +53,7 @@ sequenceDiagram
     LP-->>U: bot reply
 ```
 
-No dedupe by `lineMessageId`: a LINE redelivery re-runs the whole pipeline, including Gemini calls.
+Redelivery is enqueued with the same `webhookEventId` job ID. `ProcessedLineWebhookEvent` and unique nullable `LineChatHistory.lineMessageId` prevent duplicate processing/history after a job retry.
 
 ---
 
@@ -137,8 +137,9 @@ flowchart TD
     STRONG -- yes --> DIRECT["return stored answer VERBATIM<br/>(no Gemini call)"]
     STRONG -- no --> GROUND["Gemini generateContent<br/>grounded prompt: answer ONLY from<br/>these items, else output fallback"]
     HAS -- no --> VEC["SemanticSearchService.search<br/>(vector fallback)"]
-    VEC --> EMPTY["STUB: embeds via Gemini ($)<br/>then always returns [] ⚠️"]
-    EMPTY --> FB["AiSetting.fallbackMessage"]
+    VEC --> HIT{"cosine score reaches floor?"}
+    HIT -- yes --> GROUND2["grounded Gemini from semantic matches"]
+    HIT -- no --> FB["AiSetting.fallbackMessage"]
     GROUND --> OK{"Gemini ok?"}
     OK -- yes --> ANS["grounded answer"]
     OK -- no/empty --> FB
@@ -152,21 +153,14 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    subgraph CUR["CURRENT (stub)"]
-        A1["knowledge miss"] --> A2["EmbeddingService.embed<br/>Gemini embedding call — paid"]
-        A2 --> A3["SemanticSearchService returns []"]
-        A3 --> A4["fallbackMessage<br/>(embedding cost wasted ⚠️)"]
-    end
-    subgraph TGT["INTENDED (Phase 4)"]
-        B1["knowledge miss / weak keyword score"] --> B2["embed query once"]
-        B2 --> B3["pgvector cosine top-5:<br/>AnswerPatternVector ⋈ AnswerPattern<br/>WHERE active, similarity ≥ ~0.6"]
-        B3 --> B4{"hits above floor?"}
-        B4 -- yes --> B5["grounded Gemini generation<br/>from matched patterns' answers"]
-        B4 -- no --> B6["fallbackMessage — never generate"]
-    end
+    A1["knowledge miss"] --> A2["EmbeddingService.embedQuery<br/>Gemini embedding call — paid"]
+    A2 --> A3["SemanticSearchService<br/>pgvector cosine top-5"]
+    A3 --> A4{"hits above floor?"}
+    A4 -- yes --> A5["grounded Gemini generation<br/>from matched patterns' answers"]
+    A4 -- no --> A6["fallbackMessage — never generate"]
 ```
 
-Blockers for the intended flow: no migration exists for `AnswerPatternVector` (no `CREATE EXTENSION vector`, no table DDL, no index), and nothing ever writes embeddings (needs embed-on-write in AnswerPattern CRUD + a backfill). `KnowledgeRetrievalService` already sketches the keyword-first/vector-fallback merge but is dead code.
+The vector migration and semantic query path are implemented. Operational requirement: apply `20260725000000_add_answer_pattern_vectors`, then run `POST /api/admin/answer-patterns/reindex` for patterns created before embed-on-write. `KnowledgeRetrievalService` remains registered but is not the active retrieval entry; `AiChatService` currently calls lexical and semantic services directly.
 
 ---
 
@@ -185,7 +179,7 @@ sequenceDiagram
     participant LA as LINE API
 
     U->>CB: "ติดต่อแอดมิน" (rule or AI intent)
-    CB->>US: set CONTACT_ADMIN session<br/>(never read by router, never cleared ⚠️)
+    CB->>US: set CONTACT_ADMIN session<br/>(TTL applies; no mute/status transition)
     CB->>NS: notifyContactAdmin(session)
     NS->>NG: emitContactAdmin
     NG-->>AD: broadcast "CONTACT_ADMIN" event
@@ -216,13 +210,13 @@ flowchart LR
         IR["IntentRouterService"]
         RI["RuleIntentService"]
         RT["ReplyTemplateService"]
-        US["UserSessionService<br/>(in-memory Map ⚠️)"]
+        US["UserSessionService<br/>(Redis, 30m TTL)"]
     end
     subgraph AIM["AiModule"]
         ACS["AiChatService"]
         AIC["AiIntentClassifierService"]
         APS["AnswerPatternService"]
-        SSS["SemanticSearchService<br/>(stub ⚠️)"]
+        SSS["SemanticSearchService<br/>(pgvector cosine search)"]
         EMB["EmbeddingService"]
         KRS["KnowledgeRetrievalService<br/>(dead code ⚠️)"]
     end

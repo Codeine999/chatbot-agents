@@ -24,20 +24,20 @@ NestJS 11 (Fastify adapter) · TypeScript · Prisma 7 + PostgreSQL (`@prisma/ada
 | `CreditServiceModule` | `CreditService` | Global `CreditWallet` reserve/refund per LINE reply |
 | `AdminModule`, `PaymentsModule`, `PipelineModule` | — | Empty stubs |
 | `UsersModule` | `UsersService` | Member listing for the dashboard |
-| `PrismaModule` / `RedisModule` | `PrismaService`, `REDIS_CLIENT` | DB access; Redis client exists but no service injects it |
+| `PrismaModule` / `RedisModule` | `PrismaService`, `REDIS_CLIENT` | PostgreSQL access plus Redis sessions, context, queues, and rate limits |
 
 ### 1.3 Role of each key piece
 
-- **`LineController` (webhook)** — receives `POST /api/line/webhooks`, loops over events, persists the incoming message, calls the chatbot, replies via `LineService`, persists the SYSTEM reply. It currently *orchestrates* (persistence + chatbot + credit + reply) instead of staying thin. The `x-line-signature` header is accepted but **discarded** (`void signature`).
+- **`LineController` (webhook)** — receives `POST /api/line/webhooks`, verifies the signature through `LineSignatureGuard`, applies ingress limiting, enqueues events in BullMQ, and returns HTTP 200. Worker-side orchestration persists the incoming message, calls the chatbot, replies via `LineService`, and persists the SYSTEM reply.
 - **`LineWebhookService`** — upserts `LineMember` (fetching the LINE profile on first contact), upserts the 1:1 `LineConversation`, appends `LineChatHistory` rows (USER / ADMIN / SYSTEM), serves the admin conversation/message endpoints.
 - **`ChatbotService`** — the action executor. Loads session, asks `IntentRouterService` for a `RouteDecision`, then `switch (decision.action)` into registration, AI chat, knowledge answer, admin handoff, or templates. Also gates registration behind `CAN_REGISTER`.
 - **`IntentRouterService`** — decision policy: CANCEL always wins → active `REGISTER` session continues (unless a ≥0.9 non-register rule interrupts) → rule ≥0.9 wins → otherwise Gemini classifier, with `< 0.6` confidence collapsing to `GENERAL_QUESTION`.
 - **`RuleIntentService`** — deterministic keyword/menu matching (Thai + English): cancel words, menu `1`/`2`, register keywords, how-to-register, contact-admin. Pure function, no I/O.
 - **`AiIntentClassifierService`** — one Gemini call returning `{intent, confidence}` JSON; invalid intents coerced to `UNKNOWN`; any failure returns confidence 0 (safe fallback). No timeout, no schema validation beyond intent whitelist.
 - **`RegistrationFlowService` + `RegistrationService`** — session state machine (`WAITING_REGISTER_FORM → SEND_REGISTER_FORM → CURRENT_REGISTER`) driven by `RegisterParser` (labeled + inferred fields, Thai bank aliases) and `RegisterValidator`; `RegistrationService.register()` enforces phone/bank uniqueness and creates the `Member` with a generated username and random password.
-- **`UserSessionService`** — a plain in-process `Map<string, ConversationSession>`. No TTL, no persistence, no locking, no eviction.
+- **`UserSessionService`** — Redis-backed `chat:session:<userId>` state with a configurable sliding TTL (default 30 minutes). There is no distributed per-user lock yet.
 - **`AnswerPatternService`** — weighted lexical scoring over active `AnswerPattern` rows (keyword/example/intentKey/title/category, substring containment for unspaced Thai), min score 2, top 5.
-- **Semantic / vector search** — `EmbeddingService` calls Gemini embeddings; **`SemanticSearchService.search()` is a stub**: it computes the embedding, logs the dimension, and returns `[]`. `AnswerPatternVector` is never read or written. `KnowledgeRetrievalService` (keyword-first, vector-fallback merger) is **dead code** — registered but injected nowhere; `AiChatService` re-implements its logic with different thresholds.
+- **Semantic / vector search** — `EmbeddingService` calls Gemini embeddings; `SemanticSearchService.search()` queries active `AnswerPatternVector` rows with pgvector cosine similarity and a configurable floor. Admin create/update/reindex writes vectors. `KnowledgeRetrievalService` is registered but not the active retrieval entry; `AiChatService` currently calls lexical and semantic services directly.
 - **`AiChatService` (Gemini/LLM)** — two paths. `answerKnowLedge`: pattern search → single strong match returns the stored answer **verbatim** (no LLM) → multiple matches ground a Gemini prompt ("answer only from this context, else output the fallback message") → no matches falls to the (stub) vector search → fallback message. `answerGeneral`: small-talk prompt that forbids claiming business status. Prompts/tone/fallback come from the active `AiSetting` row with hard-coded defaults.
 - **Prisma/PostgreSQL** — persistence for members, payments, chat history, knowledge, AI settings, credits. See [erd-database.md](./erd-database.md).
 
@@ -122,7 +122,7 @@ flowchart TD
 | Piece | Responsibility | Must NOT do |
 |---|---|---|
 | `LineController` | Verify signature, hand body to handler, return 200 | Orchestrate credit/persistence/chatbot |
-| Webhook handler service | Dedupe by `lineMessageId`, persist in/out messages, credit reserve/refund, send reply | Intent logic |
+| Webhook handler service | Dedupe by `webhookEventId` + `lineMessageId`, persist in/out messages, credit reserve/refund, send reply | Intent logic |
 | `ChatbotService` | Session load → route → dispatch action → reply string | Talk to Gemini, Prisma, or LINE directly |
 | `IntentRouterService` | Pure decision policy over rule/session/AI signals | Execute anything |
 | `RuleIntentService` | Deterministic matching, incl. every menu option the default message offers | LLM calls |
@@ -168,7 +168,7 @@ Keep it to **one level** — no digression stack (over-engineering for a LINE bo
 
 ### 5.5 AnswerPattern + AnswerPatternVector working together
 
-- `AnswerPattern` = the admin-authored source of truth (question examples, keywords, canonical answer). `AnswerPatternVector` = a derived index, 1:1, cascade-deleted — the schema is already right; it's just never populated or queried.
+- `AnswerPattern` = the admin-authored source of truth (question examples, keywords, canonical answer). `AnswerPatternVector` = a derived 1:1 index, cascade-deleted, written on admin create/update/reindex and queried for semantic fallback.
 - **Write path:** on `AnswerPattern` create/update (admin CRUD), embed `title + description + questionExamples` and upsert the vector row with `embeddingModel` recorded. Re-embed all rows when the model changes (the column exists for exactly this).
 - **Read path:** keyword scoring first (cheap, deterministic, Thai-substring aware — the existing `AnswerPatternService` is good). Only when the top keyword score is weak, embed the query once and run pgvector cosine top-5 with a similarity floor (~0.6; tune on real Thai traffic). Both paths return `KnowledgeItem[]` and both resolve to the same `AnswerPattern.answer` text — the vector is a recall mechanism, never a content source.
 - Route **all** of this through `KnowledgeRetrievalService` and delete the duplicated logic inside `AiChatService`.
@@ -200,15 +200,13 @@ Already good: grounded prompt with "answer only from this context, else emit the
 Ordered by severity.
 
 **Security**
-1. **LINE signature never verified** ([line.controller.ts:36](../src/modules/line/line.controller.ts#L36) — `void signature;`). Anyone who finds the URL can forge webhook events, drive registrations, and burn Gemini credit. `fastify-raw-body` is already installed for exactly this.
-2. **Credentials in chat history.** The register-success reply contains the plaintext password and is persisted verbatim into `LineChatHistory` by `saveSystemReplyMessage`, readable via the **unauthenticated** conversation endpoints.
-3. **No auth on admin surfaces** — conversation list/read/send endpoints (duplicated on `/api/line/conversations` and `/api/conversations`), plus `POST /registration/register` accepting `body: any` with no validation, plus the socket.io gateway with `origin: '*'`.
-4. Internal error messages are relayed to end users (`getRegistrationErrorMessage` returns raw `error.message`).
+1. **Credentials in chat history.** The register-success reply contains the plaintext password and is persisted verbatim into `LineChatHistory` by `saveSystemReplyMessage`.
+2. **Some admin/content surfaces remain public or weakly guarded** — `POST /registration/register` accepts `body: any`, and the AnswerPattern list/create endpoints are currently public; conversation endpoints themselves use `AdminGuard`.
+3. Internal error messages are relayed to end users (`getRegistrationErrorMessage` returns raw `error.message`).
 
 **Sessions**
-5. **In-memory `Map`**: lost on restart (users stranded mid-registration), broken under >1 instance, and **unbounded** — `COMPLETED` register sessions and `CONTACT_ADMIN` sessions are never deleted (memory leak + orphan sessions). No TTL, no expiry messaging, no `EXPIRED` status ever set.
-6. **No session lock** — two rapid messages from one user race on read-modify-write.
-7. `CONTACT_ADMIN` during registration silently destroys the user's form data (§5.4).
+5. **No per-user distributed lock** — two rapid messages across workers/instances can still race on read-modify-write.
+6. `CONTACT_ADMIN` does not update durable `LineConversation.status` or mute the bot, and during registration overwrites the register session.
 
 **Intent routing**
 8. Menu option **3** is offered in `defaultMessage()` but has no rule → falls through to the AI classifier instead of deterministic `CONTACT_ADMIN`.
@@ -216,20 +214,19 @@ Ordered by severity.
 10. Dead actions/state: `START_AI_CHAT`, `CONTINUE_AI_CHAT`, `CHECK_STATUS` (documented, absent), the `GENERAL_QUESTION` session flow, `PENDING_REGISTER` step, `KnowledgeRetrievalService`. Dead code around routing *is* routing risk — nobody can tell intended from actual behavior.
 
 **Knowledge / vector**
-11. **Vector fallback is a stub** that still **pays for an embedding call** on every knowledge miss, then returns `[]` → fallback message. Wasted cost, zero recall.
-12. **`AnswerPatternVector` has no migration** — no `CREATE EXTENSION vector`, no table DDL in `prisma/migrations/`. Schema and database have drifted; deploys from migrations alone will not have the table.
-13. Retrieval logic duplicated between `AiChatService` and the unused `KnowledgeRetrievalService` with different thresholds.
+11. **Vector deployment/index coverage** — the migration must be applied and historical AnswerPatterns must be reindexed; otherwise semantic fallback returns no rows.
+12. Retrieval logic is duplicated between `AiChatService` and the unused `KnowledgeRetrievalService` with different thresholds.
 
 **Webhook / delivery**
-14. **No idempotency**: LINE redelivers on non-200/slow responses; `lineMessageId` is indexed but never checked → duplicate processing, duplicate Gemini spend.
-15. Everything runs inline in the webhook request — profile fetch + up to 2 Gemini calls + DB writes. Reply tokens are single-use and short-lived; slow Gemini ⇒ dead token ⇒ throw ⇒ LINE retries the whole batch. One bad event poisons the loop for subsequent events.
-16. **Credit accounting is inverted**: `reserveLineReplyCredit()` is commented out but `refundLineReplyCredit()` still runs on reply failure — every failure *increases* the balance and drives `usedTotal` negative.
+13. **Redelivery/retry delivery trade-off**: redeliveries are now enqueued; BullMQ job ID, `ProcessedLineWebhookEvent`, and unique nullable `lineMessageId` prevent duplicate inbound history. Reply API ambiguity after a network timeout can still require operational inspection.
+14. Worker processing is asynchronous, but reply tokens are single-use and short-lived; slow AI work can make the second stale check drop the reply after already spending AI budget.
+15. **Credit accounting is inverted**: `reserveLineReplyCredit()` is commented out but `refundLineReplyCredit()` still runs on reply failure — every failure *increases* the balance and drives `usedTotal` negative.
 
 **Coupling / hygiene**
 17. `LineController` orchestrates four services; `ChatbotModule` re-provides registration internals (`RegistrationFlowService`, parser, validator) instead of importing them from `RegistrationModule`'s exports — module boundary blur.
-18. Three separate `new GoogleGenAI(...)` instances reading `process.env` directly (bypassing `ConfigService`); no timeouts anywhere on Gemini or LINE `fetch` calls.
-19. Boot-time dead weight: Mongoose connection is **required** at bootstrap (`MONGO_URI`, `asPromise()`) yet no model uses it; Redis and BullMQ provisioned but unused; `main.ts` hardcodes `app.listen(8080)` while logging the configured `PORT`.
-20. **Zero tests** (jest configured, no spec files) — the parser, scorer, and router are pure functions begging for unit tests.
+18. AI/LINE clients are constructed per call rather than through one shared client; request timeouts now exist, but correlation IDs are still missing across webhook → worker → AI logs.
+19. Boot-time dead weight: Mongoose connection is **required** at bootstrap (`MONGO_URI`, `asPromise()`) although no model uses it; `main.ts` hardcodes `app.listen(8080)` while logging the configured `PORT`.
+20. Unit coverage exists for embedding, routing, scoring, and semantic search, but the full webhook/retry path still needs integration tests.
 
 ---
 
@@ -256,30 +253,28 @@ Target behavior per scenario (differences from today in **bold**):
 Each phase is shippable on its own; order = risk-reduction per unit of effort.
 
 ### Phase 1 — Minimal fixes (security + correctness, no re-architecture)
-- Verify `x-line-signature` (HMAC-SHA256 over raw body; `fastify-raw-body` is installed).
+- Add integration coverage for `x-line-signature` (HMAC-SHA256 over raw body; implementation is already active).
 - Guard the admin/conversation endpoints and `POST /registration/register` (a static bearer token is enough to start); remove the duplicate conversation controller; validate the webhook + registration bodies with the already-present `nestjs-zod`.
 - Re-enable credit `reserve` or remove the orphan `refund`.
 - Add rule for menu `3` → `CONTACT_ADMIN`; wire menu `2` → `START_AI_CHAT` (or delete the dead actions and prompt properly).
 - Delete sessions on registration completion and after contact-admin; stop echoing raw `error.message` to users.
 - Stop persisting the plaintext password into chat history (mask before `saveSystemReplyMessage`).
-- Dedupe webhook events by `lineMessageId` (unique index + skip-if-seen).
+- Dedupe webhook events by `webhookEventId` and `lineMessageId` (both unique/skip-if-seen paths are now active).
 - `main.ts`: listen on configured `PORT`; drop the Mongoose bootstrap (unused) — deleting it removes a whole failure mode.
-- Skip the wasted embedding call while the vector path is a stub.
+- Verify vector migration/reindex coverage and tune the similarity floor using real Thai queries.
 
-### Phase 2 — Redis session + TTL
-- `UserSessionService` → Redis (`ioredis` client already provided): async `get/set/clear`, 30-min sliding TTL, JSON values.
+### Phase 2 — Session concurrency hardening
 - Per-user `SET NX PX` lock in `ChatbotService.handleTextMessage`.
-- Remove the now-impossible orphan/restart/multi-instance issues from the ops checklist.
+- Add integration tests for duplicate/redelivered events and multi-worker ordering.
 
 ### Phase 3 — Digression handling
 - Preserve register session across `CONTACT_ADMIN` (move handoff state to `LineConversation.status`; bot mutes while `'admin'`).
 - Resume hints after answered digressions; expiry courtesy message (§7).
 - Persist each `RouteDecision` (or structured-log it) — this is also the Phase 6 observability seed.
 
-### Phase 4 — AnswerPatternVector integration
-- Hand-written migration: `CREATE EXTENSION IF NOT EXISTS vector`, table DDL, HNSW (or ivfflat) index on `embedding`.
-- Implement `SemanticSearchService.search()`: embed query → `$queryRaw` cosine top-5 join `AnswerPattern` → similarity floor → `KnowledgeItem[]`.
-- Embed-on-write from AnswerPattern CRUD; backfill script for existing rows; record `embeddingModel`.
+### Phase 4 — AnswerPatternVector operations
+- Apply `20260725000000_add_answer_pattern_vectors` and verify the HNSW index.
+- Run the guarded AnswerPattern reindex endpoint for historical rows; monitor failed rows and `embeddingModel` coverage.
 - Consolidate retrieval into `KnowledgeRetrievalService`; delete the duplicate path in `AiChatService`.
 
 ### Phase 5 — Admin dashboard / content management
