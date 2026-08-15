@@ -1,7 +1,6 @@
 export const AI_PROVIDER_NAMES = ['GEMINI', 'OPENAI', 'ANTHROPIC'] as const;
 
-// Admin provider selection is stored per AdminMember, not in a shared scope.
-export const AI_PROVIDER_SCOPES = ['USER'] as const;
+export const AI_PROVIDER_SCOPES = ['USER', 'ADMIN'] as const;
 
 export type AiProviderName = (typeof AI_PROVIDER_NAMES)[number];
 export type AiProviderScope = (typeof AI_PROVIDER_SCOPES)[number];

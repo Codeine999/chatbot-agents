@@ -21,7 +21,7 @@ export class AdminJwtService {
     configService: ConfigService,
     private readonly prisma: PrismaService,
   ) {
-    this.secret = configService.get<string>('ADMIN_JWT_SECRET');
+    this.secret = configService.get<string>('JWT_SECRET');
 
     const configuredExpiry = Number(
       configService.get<string>('ADMIN_JWT_EXPIRES_IN_SECONDS') ??
@@ -130,7 +130,7 @@ export class AdminJwtService {
   private getSigningSecret(): string {
     if (!this.secret) {
       throw new InternalServerErrorException(
-        'ADMIN_JWT_SECRET is not configured',
+        'JWT_SECRET is not configured',
       );
     }
 

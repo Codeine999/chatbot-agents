@@ -114,7 +114,7 @@ export class AiModelCatalogService {
   }
 
   private getScopedModels(provider: AiProviderName): Array<string | undefined> {
-    return (['USER'] as const).map((scope) => {
+    return (['USER', 'ADMIN'] as const).map((scope) => {
       const scopeProvider = this.configService
         .get<string>(`AI_${scope}_PROVIDER`)
         ?.trim()

@@ -9,8 +9,12 @@ import { getConnectionToken } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { ZodValidationPipe, cleanupOpenApiDoc } from 'nestjs-zod';
 import fastifyRawBody from 'fastify-raw-body';
+import fastifyMultipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
+import { join } from 'node:path';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
+import { ADMIN_PROFILE_IMAGE_MAX_BYTES } from './modules/admin/constants/admin-upload.constants';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -27,6 +31,18 @@ async function bootstrap() {
     global: false,
     runFirst: true,
     routes: ['/api/line/webhooks'],
+  });
+
+  await app.register(fastifyMultipart, {
+    limits: {
+      fileSize: ADMIN_PROFILE_IMAGE_MAX_BYTES,
+      files: 1,
+    },
+  });
+
+  await app.register(fastifyStatic, {
+    root: join(process.cwd(), 'uploads'),
+    prefix: '/uploads/',
   });
 
   const configService = app.get(ConfigService);

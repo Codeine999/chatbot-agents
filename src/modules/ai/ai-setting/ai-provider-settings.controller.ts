@@ -45,17 +45,12 @@ export class AiProviderSettingsController {
     return this.adminSettingsService.get(this.adminId(request));
   }
 
-  @AdminGuard()
+  // All admins share one provider/model (scope=ADMIN), so only dev/owner may
+  // change it here even though the route reads like a personal setting.
+  @AdminGuard('dev', 'owner')
   @Patch('settings/me')
-  updateMySetting(
-    @Req() request: AdminRequest,
-    @Body() body: UpdateMyAdminAiProviderSettingDto,
-  ) {
-    return this.adminSettingsService.updateDefault(
-      this.adminId(request),
-      body.provider,
-      body.model,
-    );
+  updateMySetting(@Body() body: UpdateMyAdminAiProviderSettingDto) {
+    return this.settingsService.update('ADMIN', body.provider, body.model);
   }
 
   @AdminGuard()
@@ -71,10 +66,10 @@ export class AiProviderSettingsController {
     @Param() params: AdminMemberIdParamDto,
     @Body() body: UpdateAdminAiAccessDto,
   ) {
-    return this.adminSettingsService.updateAccess(
+    return this.adminSettingsService.updateEnabled(
       request.admin!,
       params.adminMemberId,
-      body,
+      body.enabled,
     );
   }
 

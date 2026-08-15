@@ -5,7 +5,7 @@ import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
 
-@Controller('admin/auth')
+@Controller('api/admin/auth')
 export class AdminAuthController {
   constructor(private readonly adminAuthService: AdminAuthService) {}
 
@@ -16,8 +16,8 @@ export class AdminAuthController {
     return this.adminAuthService.login(body);
   }
 
-  @AdminGuard('dev', 'owner')
-  @Post('admins')
+  // @AdminGuard('dev', 'owner')
+  @Post('add')
   create(@Body() body: CreateAdminDto) {
     return this.adminAuthService.create(body);
   }

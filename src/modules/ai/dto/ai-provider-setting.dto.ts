@@ -32,16 +32,9 @@ export class AdminMemberIdParamDto extends createZodDto(
 ) {}
 
 export class UpdateAdminAiAccessDto extends createZodDto(
-  z
-    .object({
-      enabled: z.boolean().optional(),
-      allowedProviders: z.array(z.enum(AI_PROVIDER_NAMES)).min(1).optional(),
-    })
-    .refine(
-      (value) =>
-        value.enabled !== undefined || value.allowedProviders !== undefined,
-      { message: 'enabled or allowedProviders is required' },
-    ),
+  z.object({
+    enabled: z.boolean(),
+  }),
 ) {}
 
 export class AdminAiGenerateDto extends createZodDto(

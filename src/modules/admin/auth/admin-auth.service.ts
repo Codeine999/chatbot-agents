@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '../../../generated/prisma/client';
-import { allowedProvidersForAdminRole } from '../../ai/ai-setting/admin-ai-provider.policy';
 import { AdminJwtService } from './admin-jwt.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
@@ -70,11 +69,6 @@ export class AdminAuthService {
           image: input.image ?? null,
           password,
           role: input.role,
-          aiProviderSetting: {
-            create: {
-              allowedProviders: [...allowedProvidersForAdminRole(input.role)],
-            },
-          },
         },
         select: ADMIN_PUBLIC_SELECT,
       }).then(({ firstname, lastname, ...admin }) => ({

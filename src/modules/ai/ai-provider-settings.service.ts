@@ -46,7 +46,7 @@ export class AiProviderSettingsService {
   }
 
   async getAll(): Promise<readonly AiProviderRuntimeSetting[]> {
-    return Promise.all([this.get('USER')]);
+    return Promise.all([this.get('USER'), this.get('ADMIN')]);
   }
 
   async update(
@@ -145,12 +145,12 @@ export class AiProviderSettingsService {
     model: string;
     updatedAt: Date;
   }): AiProviderRuntimeSetting {
-    if (setting.scope !== 'USER') {
+    if (!isAiProviderScope(setting.scope)) {
       throw new Error(`Unsupported global AI provider scope=${setting.scope}`);
     }
 
     return {
-      scope: 'USER',
+      scope: setting.scope,
       provider: setting.provider,
       model: setting.model,
       updatedAt: setting.updatedAt.toISOString(),
