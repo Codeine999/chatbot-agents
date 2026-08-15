@@ -1,8 +1,8 @@
 # AI Chatbot — Architecture Review & System Design
 
-> Companion docs: [service-flow.md](./service-flow.md) (end-to-end flow + dependency diagrams) · [erd-database.md](./erd-database.md) (database ERD)
+> Companion docs: [architecture.html](./architecture.html) (endpoint + ERD + data shapes, open in a browser) · [line-message-e2e-current.md](./line-message-e2e-current.md) (field-level current flow) · [service-flow.md](./service-flow.md) (flow + dependency diagrams) · [erd-database.md](./erd-database.md)
 >
-> Reviewed: 2026-07-06 · Scope: `src/`, `prisma/`, `package.json` · No code was modified.
+> Original review: 2026-07-06 · **§1 and §6 refreshed against the code on 2026-08-15.** §5, §7, §8 remain the *target* design and roadmap, annotated with what has since shipped.
 
 ---
 
@@ -10,57 +10,70 @@
 
 ### 1.1 Stack
 
-NestJS 11 (Fastify adapter) · TypeScript · Prisma 7 + PostgreSQL (`@prisma/adapter-pg`) · Gemini via `@google/genai` · LINE Messaging API (raw `fetch`) · socket.io admin gateway · Redis (ioredis, provisioned but **unused**) · Mongoose (connected at boot but **unused**) · BullMQ (installed, **unused**).
+NestJS 11 (Fastify adapter) · TypeScript · Prisma 7 + PostgreSQL with pgvector · **multi-provider AI** (Gemini `@google/genai`, OpenAI, Anthropic) behind one adapter interface · LINE Messaging API (raw `fetch`) · socket.io admin gateway (**JWT-guarded**) · Redis/ioredis (**in use**: sessions, chat context, rate limits, bans, spam counters, provider-setting cache) · **BullMQ** (`line-events` queue + in-process worker) · Mongoose (still connected at boot, still **unused by any model**).
 
 ### 1.2 Module / Service Map
 
 | Module | Services | Responsibility |
 |---|---|---|
-| `LineModule` | `LineController`, `LineWebhookService`, `LineService` | Webhook entry, chat persistence, LINE REST client (reply/push/profile) |
-| `ChatbotModule` | `ChatbotService`, `IntentRouterService`, `RuleIntentService`, `ReplyTemplateService`, `UserSessionService` (+ registers `RegistrationFlowService`, `RegisterParser`, `RegisterValidator`) | Orchestration: session → route → action → reply |
-| `AiModule` | `AiChatService`, `AiIntentClassifierService`, `AnswerPatternService`, `EmbeddingService`, `SemanticSearchService`, `KnowledgeRetrievalService` | Gemini classification + grounded answering + knowledge retrieval |
+| `LineModule` | `LineController`, `LineConversationController`, `LineWebhookService`, `LineService`, `LineEventsProcessor`, `LineSignatureGuard` | Webhook ingress → queue → worker: persist, orchestrate, reply; admin conversation API |
+| `ChatbotModule` | `ChatbotService`, `IntentRouterService`, `RuleIntentService`, `StickerIntentService`, `ReplyTemplateService`, `UserSessionService`, `LoadContextService` (+ registers `RegistrationFlowService`, `RegisterParser`, `RegisterValidator`) | Orchestration: guard → session → route → action → reply, plus Redis session/context |
+| `AiModule` (`chatbot/ai.module.ts`) | `AiChatService`, `AiIntentClassifierService`, `KnowledgeRetrievalService`, `AnswerPatternService`, `AnswerPatternCacheService`, `SemanticSearchService`, `RetrievalQueryPlannerService` | Hybrid retrieval (cache → DB → pgvector), bounded agentic second pass, grounded answering |
+| `AiProviderModule` | `AiProviderService`, `UsersAiProviderService`, `AdminAiProviderService`, `AiProviderSettingsService`, `AdminAiProviderSettingsService`, `AiModelCatalogService`, `EmbeddingService`, 3 adapters | Provider/model selection per scope and per admin, with a Redis-cached setting |
+| `AdminModule` | `AdminAnswerPatternController` + service | Knowledge CRUD with embed-on-write and a reindex endpoint |
+| `AuthModule` / `AdminAuthModule` | `AdminAuthService`, `AdminJwtService`, `AdminAuthController` | Hand-rolled HS256 admin JWT + `AdminGuard(...roles)` |
+| `AbuseModule` / `RateLimitModule` | `BanService`, `SpamDetectorService`, `RateLimitService`, `AiBudgetService` | Strikes/bans, spam heuristics, fixed-window limits, AI budget gate |
 | `RegistrationModule` | `RegistrationService`, `RegistrationController` | Member creation (bcrypt, generated username/password), plus an **unvalidated public REST endpoint** |
-| `NotificationModule` | `NotificationService`, `NotificationGateway` | socket.io `/admin` namespace, emits `CONTACT_ADMIN` |
-| `CreditServiceModule` | `CreditService` | Global `CreditWallet` reserve/refund per LINE reply |
-| `AdminModule`, `PaymentsModule`, `PipelineModule` | — | Empty stubs |
+| `NotificationModule` | `NotificationService`, `NotificationGateway` | socket.io `/admin` namespace, emits `CONTACT_ADMIN`, rejects sockets without an admin JWT |
+| `CreditServiceModule` | `CreditService` | Global `CreditWallet` — reserve call is currently commented out |
 | `UsersModule` | `UsersService` | Member listing for the dashboard |
-| `PrismaModule` / `RedisModule` | `PrismaService`, `REDIS_CLIENT` | PostgreSQL access plus Redis sessions, context, queues, and rate limits |
+| `PaymentsModule`, `PipelineModule` | — | Empty stubs (controllers with no routes) |
+| `PrismaModule` / `RedisModule` / `EmbeddingModule` | `PrismaService`, `REDIS_CLIENT`, `EMBEDDING_ADAPTER` | Infrastructure providers |
 
 ### 1.3 Role of each key piece
 
-- **`LineController` (webhook)** — receives `POST /api/line/webhooks`, verifies the signature through `LineSignatureGuard`, applies ingress limiting, enqueues events in BullMQ, and returns HTTP 200. Worker-side orchestration persists the incoming message, calls the chatbot, replies via `LineService`, and persists the SYSTEM reply.
-- **`LineWebhookService`** — upserts `LineMember` (fetching the LINE profile on first contact), upserts the 1:1 `LineConversation`, appends `LineChatHistory` rows (USER / ADMIN / SYSTEM), serves the admin conversation/message endpoints.
-- **`ChatbotService`** — the action executor. Loads session, asks `IntentRouterService` for a `RouteDecision`, then `switch (decision.action)` into registration, AI chat, knowledge answer, admin handoff, or templates. Also gates registration behind `CAN_REGISTER`.
-- **`IntentRouterService`** — decision policy: CANCEL always wins → active `REGISTER` session continues (unless a ≥0.9 non-register rule interrupts) → rule ≥0.9 wins → otherwise Gemini classifier, with `< 0.6` confidence collapsing to `GENERAL_QUESTION`.
+- **`LineController` (webhook)** — receives `POST /api/line/webhooks`, verifies the signature through `LineSignatureGuard`, applies ingress limiting, enqueues events in BullMQ keyed by `webhookEventId`, and returns HTTP 200 immediately.
+- **`LineEventsProcessor`** — the BullMQ worker: serializes work per user via an in-memory promise tail, drops stale events (>50s), runs ban/burst/hourly/spam checks, claims the event in `ProcessedLineWebhookEvent`, and releases the claim if processing throws so BullMQ can retry.
+- **`LineWebhookService`** — upserts `LineMember` (fetching the LINE profile on first contact), upserts the 1:1 `LineConversation`, appends `LineChatHistory` rows (USER / ADMIN / SYSTEM), drives the chatbot, replies, applies the response's `contextPolicy`, and serves the admin conversation/message endpoints.
+- **`ChatbotService`** — the action executor. Rejects empty/over-long text before any AI call, loads the session, asks `IntentRouterService` for a `RouteDecision`, then `switch (decision.action)`. Also re-routes through `resolveLowConfidence()` when a grounded answer reports `INSUFFICIENT_CONTEXT`, and gates registration behind `CAN_REGISTER`.
+- **`IntentRouterService`** — decision policy: CANCEL always wins → active `REGISTER` session continues (unless a ≥0.9 non-register rule interrupts) → rule ≥0.9 wins unless it maps to `ANSWER_KNOWLEDGE` → **knowledge retrieval decides** → `LOW_CONFIDENCE` falls to the BUSINESS/GENERAL classifier. The old "classify intent first with an LLM" path is no longer used.
 - **`RuleIntentService`** — deterministic keyword/menu matching (Thai + English): cancel words, menu `1`/`2`, register keywords, how-to-register, contact-admin. Pure function, no I/O.
-- **`AiIntentClassifierService`** — one Gemini call returning `{intent, confidence}` JSON; invalid intents coerced to `UNKNOWN`; any failure returns confidence 0 (safe fallback). No timeout, no schema validation beyond intent whitelist.
-- **`RegistrationFlowService` + `RegistrationService`** — session state machine (`WAITING_REGISTER_FORM → SEND_REGISTER_FORM → CURRENT_REGISTER`) driven by `RegisterParser` (labeled + inferred fields, Thai bank aliases) and `RegisterValidator`; `RegistrationService.register()` enforces phone/bank uniqueness and creates the `Member` with a generated username and random password.
-- **`UserSessionService`** — Redis-backed `chat:session:<userId>` state with a configurable sliding TTL (default 30 minutes). There is no distributed per-user lock yet.
-- **`AnswerPatternService`** — weighted lexical scoring over active `AnswerPattern` rows (keyword/example/intentKey/title/category, substring containment for unspaced Thai), min score 2, top 5.
-- **Semantic / vector search** — `EmbeddingService` calls Gemini embeddings; `SemanticSearchService.search()` queries active `AnswerPatternVector` rows with pgvector cosine similarity and a configurable floor. Admin create/update/reindex writes vectors. `KnowledgeRetrievalService` is registered but not the active retrieval entry; `AiChatService` currently calls lexical and semantic services directly.
-- **`AiChatService` (Gemini/LLM)** — two paths. `answerKnowLedge`: pattern search → single strong match returns the stored answer **verbatim** (no LLM) → multiple matches ground a Gemini prompt ("answer only from this context, else output the fallback message") → no matches falls to the (stub) vector search → fallback message. `answerGeneral`: small-talk prompt that forbids claiming business status. Prompts/tone/fallback come from the active `AiSetting` row with hard-coded defaults.
-- **Prisma/PostgreSQL** — persistence for members, payments, chat history, knowledge, AI settings, credits. See [erd-database.md](./erd-database.md).
+- **`AiIntentClassifierService`** — `classifyLowConfidence()` is the live method: one call returning `{classification, confidence, response?}`; a `GENERAL` verdict may carry the answer itself (saving one call), and any parse failure or exhausted budget defaults to `BUSINESS` confidence 0 (hand to a human rather than guess). `analyze()` and its prompt remain as dead code.
+- **`RegistrationFlowService` + `RegistrationService`** — session state machine (`WAITING_REGISTER_FORM → SEND_REGISTER_FORM → CURRENT_REGISTER`) driven by `RegisterParser` (labeled + inferred fields, Thai bank aliases) and `RegisterValidator`; `RegistrationService.register()` enforces phone/bank uniqueness and creates the `Member` with a generated username and random password. The session is cleared on success so PII does not linger in Redis.
+- **`UserSessionService`** — Redis-backed `chat:session:<userId>` state with a configurable sliding TTL (default 30 minutes), self-healing on corrupt/mismatched values. There is no distributed per-user lock yet.
+- **`LoadContextService`** — Redis list `chat:context:<conversationId>`; stores at most three delivered turns, redacts passwords/bank numbers/phones before writing, and never throws (the reply has already been sent).
+- **`AnswerPatternService` + `AnswerPatternCacheService`** — one weighted lexical scorer used by both the RAM snapshot (refreshed every 240s, never queried on the request path) and the authoritative DB lookup, so cache and DB can never score differently.
+- **`KnowledgeRetrievalService`** — now the **single retrieval entry point**: cache → DB → embedding per pass, hybrid merge/rank, `decide()` into `DIRECT | RAG | LOW_CONFIDENCE`, plus one bounded agentic second pass through `RetrievalQueryPlannerService` (follow-up rewrites are done without an LLM; rewritten queries can never answer verbatim).
+- **`AiChatService`** — `answerKnowledge` (verbatim on `DIRECT`, grounded generation on `RAG`, `INSUFFICIENT_CONTEXT` sentinel on weak evidence), `answerGeneral` (small talk, never claims business status), `answerImage` (JSON safety classification with a blocked-answer regex layer), `answerFallback` (returns the configured fallback without calling any provider). Prompts/tone/fallback come from the active `AiSetting` row with hard-coded defaults.
+- **AI provider layer** — `UsersAiProviderService` → `AiProviderService.generate('USER')` reads the Redis-cached `AiProviderSetting` and dispatches to the Gemini/OpenAI/Anthropic adapter; admins get their own per-member provider/model with role-based allow lists. Every external call first passes `AiBudgetService.tryConsume()`.
+- **Prisma/PostgreSQL** — persistence for members, payments, chat history, knowledge + vectors, AI settings, admin accounts, credits, webhook claims. See [erd-database.md](./erd-database.md).
 
 ### 1.4 Message flow (summary)
 
 ```
-LINE user → POST /api/line/webhooks
+LINE user → POST /api/line/webhooks        (signature verified, ingress-limited)
+  → BullMQ line-events (jobId = webhookEventId) → HTTP 200 {ok:true}
+  → LineEventsProcessor   (per-user ordering, stale/ban/burst/hourly/spam, DB claim)
   → LineWebhookService.saveIncomingEvent   (LineMember/Conversation/History)
+  → LoadContextService.load                (≤ 6 recent messages)
   → ChatbotService.handleTextMessage
-      → UserSessionService.get
-      → IntentRouterService.resolve  (rules → session → Gemini classifier)
+      → UserSessionService.get             (sliding TTL)
+      → IntentRouterService.resolve        (rule → session → retrieval → low-confidence classifier)
       → action executor (register flow | knowledge | general chat | templates | handoff)
-  → LineService.replyText (reply token)
-  → LineWebhookService.saveSystemReplyMessage
+  → LineService.replyText (reply token, global reply limit)
+  → LineWebhookService.saveSystemReplyMessage + contextPolicy (append | clear | skip)
 ```
 
-Full sequence + per-scenario diagrams: [service-flow.md](./service-flow.md).
+Full sequence + per-scenario diagrams: [service-flow.md](./service-flow.md) · field-level detail: [line-message-e2e-current.md](./line-message-e2e-current.md).
 
 ### 1.5 Drift between CLAUDE.md and code
 
-- `CHECK_STATUS` action and the `needsBusinessData` / `needsKnowledgeSearch` classifier flags are documented but **not implemented** (`AiIntentAnalysis` is only `{intent, confidence}`).
-- `START_AI_CHAT` / `CONTINUE_AI_CHAT` actions exist in `ChatbotService` but **no router path ever returns them** — dead branches. Menu `2` maps to `GENERAL_QUESTION`, so the literal text `"2"` is sent to Gemini instead of prompting "what would you like to ask?".
-- Docs say `RegistrationService.start()`; actual entry is `RegistrationFlowService`.
+`CLAUDE.md` was refreshed on 2026-08-15 to match the router above. What the older text got wrong, for the record:
+
+- `CHECK_STATUS` action and the `needsBusinessData` / `needsKnowledgeSearch` classifier flags never existed in code; the live classifier returns `{classification: 'BUSINESS' | 'GENERAL', confidence, response?}`.
+- `ANSWER_GENERAL` / `DEFAULT` as documented actions — the real enum is in `types/chat.types.ts`, and `START_AI_CHAT`, `CONTINUE_AI_CHAT`, `FALLBACK` are unreachable branches no router path returns.
+- The AI classifier is no longer the second stage of routing; **knowledge retrieval is**, and the LLM only sees the message after retrieval reports `LOW_CONFIDENCE`.
+- Docs said `RegistrationService.start()`; the actual entry is `RegistrationFlowService`.
 
 ---
 
@@ -195,38 +208,52 @@ Already good: grounded prompt with "answer only from this context, else emit the
 
 ---
 
-## 6. Current Gaps / Risks
+## 6. Current Gaps / Risks — refreshed 2026-08-15
 
-Ordered by severity.
+Ordered by severity. Items resolved since the July review are listed at the end.
+
+**Build**
+0. **The working tree does not compile.** `ConversationSession.requireAdmin: boolean` was added as a required field but no call site supplies it — `tsc --noEmit` fails in `chatbot.service.ts` (×3), `registration-flow.service.ts`, and two spec files. Either pass `requireAdmin: false` everywhere or make the field optional until the handoff feature lands.
 
 **Security**
-1. **Credentials in chat history.** The register-success reply contains the plaintext password and is persisted verbatim into `LineChatHistory` by `saveSystemReplyMessage`.
-2. **Some admin/content surfaces remain public or weakly guarded** — `POST /registration/register` accepts `body: any`, and the AnswerPattern list/create endpoints are currently public; conversation endpoints themselves use `AdminGuard`.
-3. Internal error messages are relayed to end users (`getRegistrationErrorMessage` returns raw `error.message`).
+1. **No global guard.** Nothing registers `APP_GUARD`, so `@Public()` is inert metadata and any route that forgets `@AdminGuard()` is silently open to the internet.
+2. **Open surfaces today:** `POST /registration/register` (`body: any`, creates a real `Member` and returns a plaintext password), `GET /api/admin/answer-patterns` and `POST /api/admin/answer-patterns` (class guard commented out, create marked `@Public()`), `POST /api/abuse/bans` (anyone can ban any LINE user).
+3. **Credentials in chat history.** The register-success reply contains the plaintext password and is persisted verbatim into `LineChatHistory.text` by `saveSystemReplyMessage`.
+4. Internal error messages are relayed to end users (`getRegistrationErrorMessage` returns raw `error.message`).
+5. The socket.io gateway now requires an admin JWT, but still runs with `cors.origin: '*'` and broadcasts the raw session object to every connected admin.
 
-**Sessions**
-5. **No per-user distributed lock** — two rapid messages across workers/instances can still race on read-modify-write.
-6. `CONTACT_ADMIN` does not update durable `LineConversation.status` or mute the bot, and during registration overwrites the register session.
+**Sessions / handoff**
+6. **No per-user distributed lock.** Ordering is an in-memory `Map` in `LineEventsProcessor`, correct for exactly one process; a second instance breaks it.
+7. `CONTACT_ADMIN` still does not mute the bot: nothing reads the `CONTACT_ADMIN` session, `LineConversation.status` is never written, and during registration the handoff session overwrites the register session and loses form data.
 
 **Intent routing**
-8. Menu option **3** is offered in `defaultMessage()` but has no rule → falls through to the AI classifier instead of deterministic `CONTACT_ADMIN`.
-9. Menu option **2** routes the literal `"2"` into `answerGeneral` (Gemini answers the message "2") because `START_AI_CHAT` is unreachable.
-10. Dead actions/state: `START_AI_CHAT`, `CONTINUE_AI_CHAT`, `CHECK_STATUS` (documented, absent), the `GENERAL_QUESTION` session flow, `PENDING_REGISTER` step, `KnowledgeRetrievalService`. Dead code around routing *is* routing risk — nobody can tell intended from actual behavior.
+8. Menu option **2** answers with the fallback message: `RULE_MAP` maps it to action `GENERAL_QUESTION`, but `answerGeneralDecision()` needs `decision.generatedResponse`, which only the AI path ever sets.
+9. Menu option **3** is offered in `defaultMessage()` but has no rule → costs a retrieval pass plus up to two LLM calls to reach `CONTACT_ADMIN`.
+10. Dead code around routing: `AiIntentClassifierService.analyze()`, `fromAi()`, `AI_MAP`, `classifierPrompt`, actions `START_AI_CHAT` / `CONTINUE_AI_CHAT` / `FALLBACK`, session flows `GENERAL_QUESTION` and `CHECK_STATUS`, `RegisterStep.PENDING_REGISTER`, and ~9 unused reply templates.
 
 **Knowledge / vector**
-11. **Vector deployment/index coverage** — the migration must be applied and historical AnswerPatterns must be reindexed; otherwise semantic fallback returns no rows.
-12. Retrieval logic is duplicated between `AiChatService` and the unused `KnowledgeRetrievalService` with different thresholds.
+11. **Vector index coverage is operational, not automatic** — the migration must be applied and historical patterns reindexed via `POST /api/admin/answer-patterns/reindex`, otherwise semantic recall returns nothing.
+12. `reindex()` embeds row by row with no batching or budget guard; on a large knowledge base it will burn the AI budget and take a long request.
+13. Still no golden evaluation set, so retrieval-quality regressions are invisible.
 
 **Webhook / delivery**
-13. **Redelivery/retry delivery trade-off**: redeliveries are now enqueued; BullMQ job ID, `ProcessedLineWebhookEvent`, and unique nullable `lineMessageId` prevent duplicate inbound history. Reply API ambiguity after a network timeout can still require operational inspection.
-14. Worker processing is asynchronous, but reply tokens are single-use and short-lived; slow AI work can make the second stale check drop the reply after already spending AI budget.
-15. **Credit accounting is inverted**: `reserveLineReplyCredit()` is commented out but `refundLineReplyCredit()` still runs on reply failure — every failure *increases* the balance and drives `usedTotal` negative.
+14. Reply tokens are single-use and expire in about a minute; slow AI work can trip the second stale check and drop the reply **after** the AI budget was already spent.
+15. **Credit accounting is disabled**: `reserveLineReplyCredit()` is commented out in `line-webhook.service.ts`, so `CreditWallet` never moves.
+16. `ProcessedLineWebhookEvent` has no retention job; `LineConversation.unreadCount` has no reset path.
 
 **Coupling / hygiene**
-17. `LineController` orchestrates four services; `ChatbotModule` re-provides registration internals (`RegistrationFlowService`, parser, validator) instead of importing them from `RegistrationModule`'s exports — module boundary blur.
-18. AI/LINE clients are constructed per call rather than through one shared client; request timeouts now exist, but correlation IDs are still missing across webhook → worker → AI logs.
-19. Boot-time dead weight: Mongoose connection is **required** at bootstrap (`MONGO_URI`, `asPromise()`) although no model uses it; `main.ts` hardcodes `app.listen(8080)` while logging the configured `PORT`.
-20. Unit coverage exists for embedding, routing, scoring, and semantic search, but the full webhook/retry path still needs integration tests.
+17. `LineConversationController` duplicates three `LineController` endpoints one-for-one; `ChatbotModule` re-provides registration internals instead of importing `RegistrationModule`'s exports.
+18. No correlation ID across webhook → worker → AI logs; debugging one message means grepping several loggers.
+19. Boot-time dead weight: the Mongoose connection is **required** at bootstrap (`MONGO_URI`, `asPromise()`) although no model uses it; `main.ts` hardcodes `app.listen(8080)` while logging the configured `PORT`.
+20. `AnswerPattern.tenantId` exists but is never read or written — a multi-tenant promise nothing enforces.
+
+**Closed since the July review**
+- ✅ LINE signature verification, ingress limiting, BullMQ queue + retry, and three-layer idempotency are live.
+- ✅ Sessions and chat context moved to Redis with sliding TTL and PII redaction.
+- ✅ Retrieval consolidated into `KnowledgeRetrievalService` (the duplicate path inside `AiChatService` is gone) with cache → DB → pgvector hybrid ranking and a bounded agentic second pass.
+- ✅ Admin JWT auth, role-scoped `AdminGuard`, guarded conversation endpoints, and knowledge CRUD with embed-on-write.
+- ✅ One shared provider layer replaced the three ad-hoc `GoogleGenAI` instances, with request timeouts and per-user/global AI budgets.
+- ✅ Abuse controls: bans with strike escalation, burst/hourly limits, spam heuristics.
 
 ---
 

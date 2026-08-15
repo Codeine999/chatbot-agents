@@ -1,6 +1,7 @@
 # Database ERD
 
-> Source: `prisma/schema.prisma` (PostgreSQL, Prisma 7). Companion docs: [ai-chatbot-architecture.md](./ai-chatbot-architecture.md) · [service-flow.md](./service-flow.md)
+> Source: `prisma/schema.prisma` (PostgreSQL, Prisma 7) — verified against the schema on 2026-08-15.
+> Companion docs: [architecture.html](./architecture.html) (browsable ERD + endpoint reference) · [ai-chatbot-architecture.md](./ai-chatbot-architecture.md) · [service-flow.md](./service-flow.md) · [line-message-e2e-current.md](./line-message-e2e-current.md)
 
 ## Entity-Relationship Diagram
 
@@ -72,8 +73,49 @@ erDiagram
         datetime createdAt
     }
 
+    AdminMember {
+        uuid id PK
+        string username UK "VarChar(100)"
+        string password "bcrypt hash, cost 12"
+        string firstname "VarChar(100)"
+        string lastname "VarChar(100)"
+        string email UK "VarChar(255), stored lowercase"
+        string phone UK "VarChar(30)"
+        string image "nullable"
+        AdminRole role "dev | owner | admin"
+        datetime createdAt
+        datetime updatedAt "has @updatedAt"
+    }
+
+    AdminAiProviderSetting {
+        uuid id PK
+        uuid adminMemberId FK "unique — 1:1, cascade delete"
+        boolean enabled "default true"
+        enum_array allowedProviders "default [GEMINI, OPENAI, ANTHROPIC]"
+        AiProviderName provider "default GEMINI"
+        string model "VarChar(150), default gemini-3.1-flash-lite"
+        datetime createdAt
+        datetime updatedAt "has @updatedAt"
+    }
+
+    AiProviderSetting {
+        uuid id PK
+        AiProviderScope scope UK "USER | ADMIN — code only supports USER"
+        AiProviderName provider
+        string model "VarChar(150)"
+        datetime createdAt
+        datetime updatedAt "has @updatedAt"
+    }
+
+    ProcessedLineWebhookEvent {
+        uuid id PK
+        string webhookEventId UK "idempotency claim — insert to claim, delete to release"
+        datetime processedAt "indexed — no cleanup job yet"
+    }
+
     AnswerPattern {
         uuid id PK
+        uuid tenantId "nullable — never read or written by code"
         string title
         string description "nullable"
         string category "nullable"
@@ -81,6 +123,7 @@ erDiagram
         string_array keywords "default []"
         string_array questionExamples "default []"
         string answer "admin-authored canonical answer"
+        string language "VarChar(10), default 'th'"
         int priority "default 0, tiebreak in scoring"
         boolean active "default true"
         datetime createdAt
@@ -123,7 +166,10 @@ erDiagram
     LineMember ||--o{ LineChatHistory : "chatHistories"
     LineConversation ||--o{ LineChatHistory : "chatHistories"
     AnswerPattern ||--o| AnswerPatternVector : "vector 1:1"
+    AdminMember ||--o| AdminAiProviderSetting : "aiProviderSetting 1:1"
 ```
+
+`AiProviderSetting`, `CreditWallet`, `AiSetting`, and `ProcessedLineWebhookEvent` are standalone singleton-ish tables with no foreign keys.
 
 ## Enums
 
@@ -132,8 +178,11 @@ erDiagram
 | `PaymentType` | `QRcode`, `Slip` | `Payment.paymentType` |
 | `PaymentStatus` | `pending`, `success`, `fail`, `reject` | `Payment.status` |
 | `CreditWalletType` | `LINE_MESSAGE`, `AI_USAGE`, `ADMIN_AI_QUERY` | `CreditWallet.type` |
-| `LineChatSender` | `USER`, `ADMIN`, `AI`, `SYSTEM` (db-mapped lowercase) | `LineChatHistory.sender` |
+| `AdminRole` | `dev`, `owner`, `admin` | `AdminMember.role`, `AdminGuard(...roles)`, `allowedProvidersForAdminRole()` |
+| `LineChatSender` | `USER`, `ADMIN`, `AI`, `SYSTEM` (db-mapped lowercase) | `LineChatHistory.sender` — auto-replies are written as `SYSTEM`; `AI` is never used |
 | `LineChatMessageType` | `TEXT`, `IMAGE`, `STICKER`, `POSTBACK` (db-mapped lowercase) | `LineChatHistory.messageType`, `LineConversation.lastMessageType` |
+| `AiProviderScope` | `USER`, `ADMIN` | `AiProviderSetting.scope` — TypeScript narrows this to `['USER']`, admins keep per-member settings instead |
+| `AiProviderName` | `GEMINI`, `OPENAI`, `ANTHROPIC` | `AiProviderSetting`, `AdminAiProviderSetting` (`provider` + `allowedProviders[]`) |
 
 ## Relations Summary
 
@@ -145,11 +194,12 @@ erDiagram
 | `LineMember` → `LineChatHistory` | 1 : N | default | denormalized alongside `conversationId` — convenient, consistency not DB-enforced |
 | `LineConversation` → `LineChatHistory` | 1 : N | default | composite index `(conversationId, createdAt)` fits pagination |
 | `AnswerPattern` → `AnswerPatternVector` | 1 : 1 | `Cascade` | vector is a derived index of the pattern |
+| `AdminMember` → `AdminAiProviderSetting` | 1 : 1 | `Cascade` | created automatically by `AdminAuthService.create()` with the role's allowed providers |
 
 ## Missing / Suspicious — findings
 
 1. **`AnswerPatternVector` requires its migration to be applied.** Migration `20260725000000_add_answer_pattern_vectors` creates the `vector` extension, table, and HNSW index. Existing patterns created before vector indexing still need `POST /api/admin/answer-patterns/reindex`.
-2. **`Payment.approveBy` is a dangling UUID** — there is no Admin/Staff table to reference. Either add one (also needed for dashboard auth) or document what it points to.
+2. **`Payment.approveBy` is a dangling UUID** — `AdminMember` now exists, so this column can finally become a real FK. Today nothing enforces it and no code writes it.
 3. **`Payment` → `Member` joins on `username`**, a business-visible field, instead of the immutable `uuid` PK. Works because `username` is unique, but renaming a user breaks history semantics. `Payment` also lacks an **amount/currency** and any slip reference — unusual for a payment record.
 4. **Free-text status columns**: `Member.statusaccount` (`'pending'`), `LineConversation.status` (`'open'`), `LineChatHistory.sentStatus` (`'received'`) are strings, while `Payment.status` is a proper enum. Inconsistent; typos become silent states. `LineConversation.status` is the natural home for the admin-takeover flag (`open`/`admin`/`closed`) — worth making an enum when that lands.
 5. **`LineChatHistory.lineMessageId` is unique nullable** — it makes message redelivery idempotent while allowing postbacks/system rows that have no LINE message ID. The migration fails explicitly if historical duplicate IDs must be cleaned first.
@@ -158,3 +208,7 @@ erDiagram
 8. **`updatedAt` without `@updatedAt`** on `AiSetting`, `AnswerPattern`, `AnswerPatternVector` — the column never updates unless set manually, which breaks the "newest active setting wins" ordering above.
 9. **Credentials at rest**: `Member.password` is bcrypt-hashed (good), but the register-success chat reply containing the *plaintext* password is persisted into `LineChatHistory.text` (see architecture doc §6, finding 2). A data-model-adjacent leak worth fixing at the application layer.
 10. **`CreditWallet` is global** (unique per type, no tenant/member FK) — correct for a single-OA deployment; becomes a remodel if multi-tenant is ever planned.
+11. **`AnswerPattern.tenantId` exists but is dead** — nullable, never read, never written, no index, no FK. It is a placeholder for the SaaS fork; until then it silently suggests a multi-tenant guarantee that no query enforces.
+12. **`ProcessedLineWebhookEvent` grows forever** — one row per LINE event, indexed on `processedAt` but with no retention job. A daily delete of rows older than the reply-token window (50s, so anything past an hour is safe) keeps it bounded.
+13. **`LineConversation.unreadCount` only ever increments** — `saveIncomingEvent()` does `increment: 1` and no code path resets it. The dashboard badge cannot go back to zero without a mark-as-read endpoint.
+14. **`AiProviderScope` has an `ADMIN` value the code refuses** — `AI_PROVIDER_SCOPES` in TypeScript is `['USER']` and `toRuntimeSetting()` throws on any other scope. An `ADMIN`-scoped row inserted by hand would break provider resolution at runtime.

@@ -1,12 +1,8 @@
 # Service Flows & Dependency Diagram
 
-> **เอกสารนี้เป็น architecture review รุ่นเก่าและหลายส่วนไม่ตรงกับโค้ดปัจจุบันแล้ว**
-> สำหรับ LINE flow ปัจจุบันที่มี signature guard, BullMQ, Redis session/context,
-> idempotency และ rate limits ให้ใช้ [line-message-e2e-current.md](./line-message-e2e-current.md)
-
-> Companion docs: [ai-chatbot-architecture.md](./ai-chatbot-architecture.md) · [erd-database.md](./erd-database.md)
+> อ้างอิงโค้ดจริง ณ 2026-08-15 (เขียนใหม่ทั้งไฟล์ — เวอร์ชันก่อนหน้าเป็น snapshot ของ architecture review เดือน ก.ค. ที่ไม่ตรงกับโค้ดแล้ว)
 >
-> The diagrams below are retained as a **historical architecture-review snapshot**. Target behavior from that review is in the architecture doc §7.
+> Companion docs: [architecture.html](./architecture.html) (endpoint + ERD + data shapes) · [line-message-e2e-current.md](./line-message-e2e-current.md) (รายละเอียดระดับ field) · [erd-database.md](./erd-database.md) · [ai-chatbot-architecture.md](./ai-chatbot-architecture.md)
 
 ---
 
@@ -18,82 +14,86 @@ sequenceDiagram
     participant U as LINE User
     participant LP as LINE Platform
     participant LC as LineController
+    participant Q as BullMQ<br/>line-events
+    participant WK as LineEventsProcessor
     participant LW as LineWebhookService
     participant CB as ChatbotService
-    participant US as UserSessionService<br/>(Redis, 30m TTL)
     participant IR as IntentRouterService
-    participant EX as Action executor<br/>(RegistrationFlow / AiChat / Templates)
+    participant KR as KnowledgeRetrievalService
+    participant AI as AiChatService
+    participant RD as Redis<br/>session + context
     participant DB as PostgreSQL
     participant LA as LINE Messaging API
 
-    U->>LP: text message
+    U->>LP: text / image / sticker
     LP->>LC: POST /api/line/webhooks
-    Note over LC: x-line-signature verified by LineSignatureGuard
-    loop each event (sequential)
-        LC->>LW: saveIncomingEvent(event)
-        LW->>LA: getProfile (first contact only)
-        LW->>DB: upsert LineMember + LineConversation,<br/>insert LineChatHistory (USER)
-        LC->>CB: handleTextMessage(userId, text)
-        CB->>US: get(userId)
-        CB->>IR: resolve({userId, input, session})
-        IR-->>CB: RouteDecision {action, intent, confidence, source}
-        CB->>EX: execute decision.action
-        EX-->>CB: reply text
-        CB-->>LC: reply text
-        Note over LC: reserveLineReplyCredit()<br/>is commented out ⚠️
-        LC->>LA: replyText(replyToken, text)
-        alt LINE reply fails
-            LC->>DB: refundLineReplyCredit()<br/>(refund without reserve ⚠️)
-            LC-->>LP: 500 → LINE retries batch
-        end
-        LC->>LW: saveSystemReplyMessage(...)
-        LW->>DB: insert LineChatHistory (SYSTEM),<br/>update LineConversation
-    end
-    LC-->>LP: 200 {ok:true}
-    LP-->>U: bot reply
+    Note over LC: LineSignatureGuard = HMAC-SHA256(rawBody)
+    LC->>LC: filter events ที่ไม่มี webhookEventId
+    LC->>RD: rl:line:global:ingress (amount = จำนวน event)
+    LC->>Q: add(jobId = webhookEventId)
+    LC-->>LP: 200 {ok:true} (ไม่รอ AI/DB)
+
+    Q->>WK: job
+    WK->>WK: stale > 50s? ban? burst? hourly? spam?
+    WK->>DB: INSERT ProcessedLineWebhookEvent (claim)
+    WK->>LW: processEvent(event)
+    LW->>LA: getProfile (ครั้งแรกของ user เท่านั้น)
+    LW->>DB: upsert LineConversation + insert LineChatHistory(USER)<br/>+ update lastActiveAt (transaction)
+    LW->>RD: LRANGE chat:context (conversationId) -3 -1
+    LW->>CB: handleTextMessage / handleImageMessage / handleStickerMessage
+    CB->>RD: GETEX chat:session (userId) — sliding TTL
+    CB->>IR: resolve({userId, input, session, recentMessages})
+    IR->>KR: retrieve(input) (เมื่อ rule ไม่ชี้ขาด)
+    KR-->>IR: KnowledgeRetrievalResult
+    IR-->>CB: RouteDecision
+    CB->>AI: answerKnowledge / answerGeneral / answerImage
+    AI-->>CB: AiAnswerResult
+    CB-->>LW: ChatResponse {text, source, contextPolicy}
+    LW->>LW: stale รอบสอง (> 50s → ไม่ตอบ)
+    LW->>LA: replyText(replyToken) (ผ่าน rl:line:global:reply)
+    LA-->>U: ข้อความตอบ
+    LW->>DB: insert LineChatHistory(SYSTEM) + update conversation
+    LW->>RD: appendTurn (INCLUDE) / clear (CLEAR) / ไม่ทำอะไร (EXCLUDE)
 ```
 
-Redelivery is enqueued with the same `webhookEventId` job ID. `ProcessedLineWebhookEvent` and unique nullable `LineChatHistory.lineMessageId` prevent duplicate processing/history after a job retry.
+**Idempotency 3 ชั้น** — BullMQ `jobId = webhookEventId` · `ProcessedLineWebhookEvent.webhookEventId` unique · `LineChatHistory.lineMessageId` unique nullable
+ถ้า `processEvent()` throw ก่อนตอบสำเร็จ processor จะ `releaseWebhookEvent()` แล้วโยนต่อให้ BullMQ retry (สูงสุด 3 ครั้ง)
 
 ---
 
 ## 2. Intent Routing Flow
 
-`IntentRouterService.resolve()` — the decision policy:
+`IntentRouterService.resolve()` — เส้นทางจริงในโค้ดปัจจุบัน (rule → session → retrieval → classifier)
 
 ```mermaid
 flowchart TD
-    IN["input text"] --> RULE["RuleIntentService.detect<br/>(deterministic, no I/O)"]
-    RULE --> C1{"intent == CANCEL?"}
-    C1 -- yes --> A_CANCEL["CANCEL_SESSION<br/>source=RULE, conf=1"]
-    C1 -- no --> C2{"session ACTIVE<br/>and flow == REGISTER?"}
-    C2 -- yes --> C3{"rule conf ≥ 0.9 and<br/>intent not UNKNOWN/REGISTER?"}
-    C3 -- yes --> A_INT["Interrupt: map rule intent to action<br/>source=SESSION<br/>(register session stays ACTIVE)"]
-    C3 -- no --> A_CONT["CONTINUE_REGISTER<br/>source=SESSION"]
-    C2 -- no --> C4{"rule conf ≥ 0.9?"}
-    C4 -- yes --> A_RULE["RULE_MAP intent → action<br/>source=RULE"]
-    C4 -- no --> AI["AiIntentClassifierService.analyze<br/>(Gemini, JSON {intent, confidence})"]
-    AI --> C5{"ai.confidence < 0.6<br/>or call failed?"}
-    C5 -- yes --> A_GEN["GENERAL_QUESTION<br/>source=AI (safe fallback)"]
-    C5 -- no --> A_AI["AI_MAP intent → action<br/>source=AI"]
-
-    A_CANCEL --> SW
-    A_INT --> SW
-    A_CONT --> SW
-    A_RULE --> SW
-    A_GEN --> SW
-    A_AI --> SW
-    SW["ChatbotService switch(action)"]
-    SW --> X1["CANCEL_SESSION → clear + template"]
-    SW --> X2["START_REGISTER / CONTINUE_REGISTER<br/>→ RegistrationFlowService<br/>(gated by CAN_REGISTER)"]
-    SW --> X3["ANSWER_KNOWLEDGE → answerKnowLedge"]
-    SW --> X4["GENERAL_QUESTION → answerGeneral"]
-    SW --> X5["CONTACT_ADMIN → session + socket notify + template"]
-    SW --> X6["START_AI_CHAT / CONTINUE_AI_CHAT<br/>(UNREACHABLE — no router path returns these) ⚠️"]
-    SW --> X7["default → menu template"]
+    IN["input text (trim แล้ว)"] --> GUARD{"ว่าง / ยาวเกิน<br/>AI_MAX_MESSAGE_LENGTH?"}
+    GUARD -- ใช่ --> TPL["template ทันที<br/>(ไม่แตะ session, ไม่แตะ AI)"]
+    GUARD -- ไม่ --> RULE["RuleIntentService.detect<br/>(deterministic, ไม่มี I/O)"]
+    RULE --> C1{"intent = CANCEL?"}
+    C1 -- ใช่ --> A_CANCEL["CANCEL_SESSION · source RULE · conf 1"]
+    C1 -- ไม่ --> C2{"session ACTIVE<br/>และ flow = REGISTER?"}
+    C2 -- ใช่ --> C3{"rule conf >= 0.9<br/>และไม่ใช่ UNKNOWN/REGISTER?"}
+    C3 -- ใช่ --> A_INT["interrupt: ใช้ action ของ rule<br/>source SESSION (register session ยัง ACTIVE)"]
+    C3 -- ไม่ --> A_CONT["CONTINUE_REGISTER · source SESSION"]
+    C2 -- ไม่ --> C4{"rule conf >= 0.9?"}
+    C4 -- ใช่ --> C5{"RULE_MAP action<br/>= ANSWER_KNOWLEDGE?"}
+    C5 -- ไม่ --> A_RULE["คืน action ทันที · source RULE"]
+    C5 -- ใช่ --> KR
+    C4 -- ไม่ --> KR["KnowledgeRetrievalService.retrieve"]
+    KR --> C6{"route"}
+    C6 -- "DIRECT / RAG" --> A_KNOW["ANSWER_KNOWLEDGE<br/>source CACHE | DATABASE | EMBEDDING"]
+    C6 -- LOW_CONFIDENCE --> LOWC["resolveLowConfidence()<br/>AiIntentClassifierService"]
+    LOWC --> C7{"classification"}
+    C7 -- GENERAL --> A_GEN["GENERAL_QUESTION + generatedResponse · source AI"]
+    C7 -- BUSINESS --> A_ADM["CONTACT_ADMIN + businessFallback · source AI"]
 ```
 
-Known routing gaps: menu `3` (offered by the default menu) has no rule → goes to the AI classifier; menu `2` sends the literal `"2"` to `answerGeneral`.
+**เส้นทางที่ไม่มีวันเกิด** — ไม่มี branch ไหนคืน `START_AI_CHAT`, `CONTINUE_AI_CHAT`, `FALLBACK`
+และ `fromAi()` / `AI_MAP` / `AiIntentClassifierService.analyze()` / `classifierPrompt` ไม่ถูกเรียกจาก flow นี้แล้ว (เหลือไว้เป็น dead code)
+
+**บั๊กที่ยังเปิด** — เมนู `2` → `RULE_MAP.GENERAL_QUESTION` → action `GENERAL_QUESTION` แต่ `answerGeneralDecision()` ต้องการ `decision.generatedResponse` ซึ่ง rule path ไม่เคยใส่ → ลูกค้าได้ fallback
+เมนู `3` ไม่มี rule เลย ต้องวิ่งผ่าน retrieval + classifier
 
 ---
 
@@ -101,66 +101,88 @@ Known routing gaps: menu `3` (offered by the default menu) has no rule → goes 
 
 ```mermaid
 stateDiagram-v2
-    [*] --> WAITING_REGISTER_FORM : START_REGISTER<br/>session created (ACTIVE)
-    WAITING_REGISTER_FORM --> SEND_REGISTER_FORM : immediately —<br/>sends form template
-    SEND_REGISTER_FORM --> SEND_REGISTER_FORM : parse + merge fields<br/>missing fields → ask again<br/>invalid phone/bank → error msg
-    SEND_REGISTER_FORM --> CURRENT_REGISTER : all fields complete + valid
-    CURRENT_REGISTER --> COMPLETED : RegistrationService.register OK<br/>reply username + password<br/>(session NEVER deleted ⚠️)
-    CURRENT_REGISTER --> SEND_REGISTER_FORM : register error<br/>(raw error.message shown ⚠️)
-    SEND_REGISTER_FORM --> [*] : CANCEL keyword<br/>(session cleared)
+    [*] --> WAITING_REGISTER_FORM : START_REGISTER (CAN_REGISTER != 'false')
+    WAITING_REGISTER_FORM --> SEND_REGISTER_FORM : ส่ง form template ทันที
+    SEND_REGISTER_FORM --> SEND_REGISTER_FORM : parse + merge<br/>ขาด field / เบอร์ผิด / บัญชีผิด → ถามซ้ำ
+    SEND_REGISTER_FORM --> CURRENT_REGISTER : ครบและ valid
+    CURRENT_REGISTER --> [*] : register สำเร็จ → clear() session (กัน PII)<br/>ตอบ username + password
+    CURRENT_REGISTER --> SEND_REGISTER_FORM : register error<br/>(ส่ง error.message ดิบให้ลูกค้า ⚠️)
+    SEND_REGISTER_FORM --> [*] : CANCEL keyword
     note right of SEND_REGISTER_FORM
-        Digression: high-confidence rule intent
-        is answered but session stays ACTIVE.
-        CONTACT_ADMIN overwrites the session
-        and loses form data ⚠️
+        digression: rule conf >= 0.9 ที่ไม่ใช่ REGISTER
+        จะถูกตอบโดย session ยัง ACTIVE
+        แต่ CONTACT_ADMIN เขียนทับ session
+        ทำให้ข้อมูลฟอร์มหาย
     end note
-    note right of COMPLETED
-        PENDING_REGISTER step exists in code
-        but is never entered (dead state)
+    note right of CURRENT_REGISTER
+        PENDING_REGISTER มีใน enum
+        แต่ไม่มีเส้นทางไหนเข้า (dead state)
     end note
 ```
 
-Registration internals: `RegisterParser` reads labeled lines (`ชื่อ: สมชาย`, aliases in Thai/English) and infers unlabeled lines (10-digit phone, 10–12-digit account, bank-name aliases, text-only lines as first/last name). `RegistrationService.register()` checks phone/bank uniqueness, generates `mb{last4}{rand}` username + random hex password (bcrypt-stored), retries on username collision.
+`RegisterParser` อ่านบรรทัดที่มี label (`ชื่อ: สมชาย`, alias ไทย/อังกฤษ) และเดาบรรทัดที่ไม่มี label (เบอร์ 10 หลัก, บัญชี 10–12 หลัก, alias ชื่อธนาคาร)
+`RegisterValidator`: `phoneNumber` ต้องตรง `/^0\d{9}$/`, `bankAccount` ต้องตรง `/^\d{10,12}$/`
+`RegistrationService.register()` เช็คซ้ำ phone/banknumber → สร้าง `mb{4 หลักท้าย}{rand}` + password hex 8 ตัว (เก็บ bcrypt) → retry ได้ 5 ครั้งเมื่อ username ชน
 
 ---
 
-## 4. Knowledge Answer Flow
-
-`AiChatService.answerKnowLedge()`:
+## 4. Knowledge Retrieval & Answer Flow
 
 ```mermaid
 flowchart TD
-    Q["user message<br/>(action = ANSWER_KNOWLEDGE)"] --> SET["load active AiSetting<br/>(prompt / tone / fallback,<br/>defaults on miss)"]
-    SET --> APS["AnswerPatternService.findMatches<br/>lexical scoring over active patterns:<br/>keywords, examples, intentKey, title,<br/>category, priority tiebreak<br/>min score 2, top 5"]
-    APS --> HAS{"matches found?"}
-    HAS -- yes --> STRONG{"top score ≥ 5 and<br/>gap to 2nd ≥ 2?"}
-    STRONG -- yes --> DIRECT["return stored answer VERBATIM<br/>(no Gemini call)"]
-    STRONG -- no --> GROUND["Gemini generateContent<br/>grounded prompt: answer ONLY from<br/>these items, else output fallback"]
-    HAS -- no --> VEC["SemanticSearchService.search<br/>(vector fallback)"]
-    VEC --> HIT{"cosine score reaches floor?"}
-    HIT -- yes --> GROUND2["grounded Gemini from semantic matches"]
-    HIT -- no --> FB["AiSetting.fallbackMessage"]
-    GROUND --> OK{"Gemini ok?"}
-    OK -- yes --> ANS["grounded answer"]
-    OK -- no/empty --> FB
+    Q["query"] --> P1["pass 1: retrieveCandidatePass"]
+    P1 --> C["AnswerPatternCache (RAM, refresh 240s)"]
+    C --> C1{"decide = DIRECT?"}
+    C1 -- ใช่ --> FAST["directFastPath = true"]
+    C1 -- ไม่ --> D["AnswerPattern จาก DB (≤ 500 rows)"]
+    D --> D1{"decide = DIRECT?"}
+    D1 -- ใช่ --> FAST
+    D1 -- ไม่ --> E["embedding + pgvector cosine (LIMIT 20)"]
+    E --> M["mergeAndRank → candidate pool (≤ 20)"]
+    FAST --> DEC
+    M --> DEC{"decide()"}
+    DEC -- "exact หรือ score>=0.95 & gap>=0.1" --> DIRECT["DIRECT → ตอบ answer verbatim (0 LLM call)"]
+    DEC -- "มี score >= 0.6" --> RAG["RAG → generateFromKnowledge (≤ 3 contexts, temp 0)"]
+    DEC -- "นอกนั้น" --> LOW["LOW_CONFIDENCE"]
+
+    DEC --> PLAN{"shouldPlanSecondPass?"}
+    PLAN -- ใช่ --> PL["RetrievalQueryPlannerService.plan()"]
+    PL --> P2["pass 2 (ยิงขนาน ≤ 2 query)"]
+    P2 --> DEC2["decide({allowDirect:false})<br/>คำตอบจาก query ที่ AI เขียนต้องผ่าน grounding เสมอ"]
+
+    RAG --> INS{"โมเดลตอบ INSUFFICIENT_CONTEXT?"}
+    INS -- ใช่ --> LOWC["ChatbotService → resolveLowConfidence()<br/>ตัดสินใหม่ GENERAL / BUSINESS"]
+    INS -- ไม่ --> OUT["คำตอบ grounded"]
+    LOW --> LOWC
 ```
 
-`answerGeneral()` (small talk) never touches the knowledge base: system prompt + general rules (no business-status claims, don't reveal being an AI) → Gemini → text or fallback.
+**ลำดับความสำคัญของ `shouldPlanSecondPass()`** — small talk ที่ไม่มี candidate → ไม่ทำ · follow-up/complex → ทำ (มาก่อนเช็ค DIRECT โดยตั้งใจ) · DIRECT → ไม่ทำ · LOW_CONFIDENCE / gap < 0.1 / candidate ขัดแย้ง → ทำ
+**Planner ไม่ใช้ LLM เมื่อ** เป็น follow-up ที่หาคำถามก่อนหน้าเจอ (rewrite เอง) หรือ `RETRIEVAL_ERROR` (ยิงใหม่ก็ล้มเหมือนเดิม)
 
 ---
 
-## 5. Vector Fallback Flow — current vs intended
+## 5. Image & Sticker Flow
 
 ```mermaid
 flowchart TD
-    A1["knowledge miss"] --> A2["EmbeddingService.embedQuery<br/>Gemini embedding call — paid"]
-    A2 --> A3["SemanticSearchService<br/>pgvector cosine top-5"]
-    A3 --> A4{"hits above floor?"}
-    A4 -- yes --> A5["grounded Gemini generation<br/>from matched patterns' answers"]
-    A4 -- no --> A6["fallbackMessage — never generate"]
-```
+    IMG["message.type = image"] --> EXT{"contentProvider.type = external?"}
+    EXT -- ใช่ --> REJ["ตอบว่าไม่รองรับ (ไม่ดาวน์โหลดไฟล์นอก)"]
+    EXT -- ไม่ --> DL["LineService.getImageContent<br/>ตรวจขนาด ≤ 8MB + sniff magic bytes"]
+    DL --> POL["AiChatService.answerImage<br/>(ไม่ส่ง conversation history)"]
+    POL --> CLS{"classification"}
+    CLS -- SAFE_GENERAL --> BLK{"ผ่าน BLOCKED_ANSWER_PATTERNS?"}
+    BLK -- ใช่ --> ANS["ตอบคำอธิบายภาพ"]
+    BLK -- ไม่ --> FB["fallbackMessage"]
+    CLS -- "TRANSACTION / BUSINESS_UNVERIFIED / UNREADABLE / JSON เสีย" --> FB
 
-The vector migration and semantic query path are implemented. Operational requirement: apply `20260725000000_add_answer_pattern_vectors`, then run `POST /api/admin/answer-patterns/reindex` for patterns created before embed-on-write. `KnowledgeRetrievalService` remains registered but is not the active retrieval entry; `AiChatService` currently calls lexical and semantic services directly.
+    ST["message.type = sticker"] --> S1{"THANKS?"}
+    S1 -- ใช่ --> STH["stickerThanks() · EXCLUDE"]
+    S1 -- ไม่ --> S2{"GREETING?"}
+    S2 -- ใช่ --> STG["stickerGreeting() · EXCLUDE"]
+    S2 -- ไม่ --> S3{"มี text?"}
+    S3 -- ใช่ --> TXT["handleTextMessage(text) → flow ปกติ"]
+    S3 -- ไม่ --> STU["stickerUnknown() · EXCLUDE"]
+```
 
 ---
 
@@ -173,25 +195,26 @@ sequenceDiagram
     participant CB as ChatbotService
     participant US as UserSessionService
     participant NS as NotificationService
-    participant NG as NotificationGateway<br/>(socket.io /admin, origin *)
+    participant NG as NotificationGateway<br/>(socket.io /admin, JWT required)
     participant AD as Admin Dashboard
     participant LW as LineWebhookService
     participant LA as LINE API
 
-    U->>CB: "ติดต่อแอดมิน" (rule or AI intent)
-    CB->>US: set CONTACT_ADMIN session<br/>(TTL applies; no mute/status transition)
+    U->>CB: "ติดต่อแอดมิน" (rule 0.95) หรือ classifier ตอบ BUSINESS
+    CB->>US: set session {flow: CONTACT_ADMIN, step: WAITING_ADMIN}
     CB->>NS: notifyContactAdmin(session)
     NS->>NG: emitContactAdmin
-    NG-->>AD: broadcast "CONTACT_ADMIN" event
-    CB-->>U: "รับทราบครับ เดี๋ยวแอดมินจะเข้ามาดูแล"
-    Note over U,CB: Bot is NOT muted — next user message<br/>is routed normally ⚠️
-    AD->>LW: POST /api/line/conversations/:id/messages<br/>(no auth ⚠️)
+    NG-->>AD: broadcast "CONTACT_ADMIN" + payload session
+    CB-->>U: contactAdmin() template หรือ fallback (เมื่อ businessFallback = true)
+    Note over U,CB: บอทไม่ถูก mute — ข้อความถัดไปยังถูก route ปกติ ⚠️
+    AD->>LW: POST /api/line/conversations/:id/messages (AdminGuard)
     LW->>LA: pushText(lineUserId, text)
-    LW->>LW: persist ADMIN message + update conversation
-    LA-->>U: admin reply
+    LW->>LW: insert LineChatHistory(ADMIN) + update conversation
+    LA-->>U: ข้อความจากแอดมิน
 ```
 
-Target (architecture doc §5.4/§7): handoff sets `LineConversation.status = 'admin'` in PostgreSQL, the bot mutes while that status holds, and an active register session survives the handoff.
+**ช่องว่าง** — `LineConversation.status` ยังเป็น `"open"` เสมอ (ไม่มีโค้ดไหนเขียน) และไม่มีใครอ่าน session `CONTACT_ADMIN`
+`ConversationSession.requireAdmin` ถูกประกาศไว้แล้วแต่ยังไม่ถูกใช้ (และทำให้ build พัง — ดู [line-message-e2e-current.md §13](./line-message-e2e-current.md))
 
 ---
 
@@ -202,81 +225,135 @@ flowchart LR
     subgraph LINE["LineModule"]
         LC["LineController"]
         LCC["LineConversationController<br/>(duplicate endpoints)"]
+        LEP["LineEventsProcessor<br/>(BullMQ worker)"]
         LWS["LineWebhookService"]
-        LS["LineService<br/>(LINE REST client)"]
+        LS["LineService (REST client)"]
+        LSG["LineSignatureGuard"]
     end
     subgraph CHAT["ChatbotModule"]
         CB["ChatbotService"]
         IR["IntentRouterService"]
         RI["RuleIntentService"]
+        SI["StickerIntentService"]
         RT["ReplyTemplateService"]
-        US["UserSessionService<br/>(Redis, 30m TTL)"]
+        US["UserSessionService"]
+        LX["LoadContextService"]
+        RF["RegistrationFlowService<br/>(provided ที่นี่ ⚠️)"]
     end
-    subgraph AIM["AiModule"]
+    subgraph AIM["AiModule (chatbot/ai.module.ts)"]
         ACS["AiChatService"]
         AIC["AiIntentClassifierService"]
+        KRS["KnowledgeRetrievalService"]
         APS["AnswerPatternService"]
-        SSS["SemanticSearchService<br/>(pgvector cosine search)"]
+        APC["AnswerPatternCacheService"]
+        SSS["SemanticSearchService"]
+        RQP["RetrievalQueryPlannerService"]
+    end
+    subgraph PROV["AiProviderModule"]
+        UAP["UsersAiProviderService"]
+        AAP["AdminAiProviderService"]
+        APS2["AiProviderService"]
+        SET["AiProviderSettingsService"]
+        ASET["AdminAiProviderSettingsService"]
+        CAT["AiModelCatalogService"]
         EMB["EmbeddingService"]
-        KRS["KnowledgeRetrievalService<br/>(dead code ⚠️)"]
+        ADP["Gemini / OpenAI / Anthropic adapters"]
     end
-    subgraph REG["Registration"]
-        RF["RegistrationFlowService<br/>(provided by ChatbotModule ⚠️)"]
-        RS["RegistrationService"]
-        RC["RegistrationController<br/>(public, body:any ⚠️)"]
+    subgraph USAGE["Usage & Abuse"]
+        RL["RateLimitService"]
+        BUD["AiBudgetService"]
+        BAN["BanService"]
+        SPM["SpamDetectorService"]
+        CS["CreditService"]
     end
-    subgraph ADM["Admin / Notification"]
+    subgraph ADM["Admin"]
+        AAC["AdminAuthController"]
+        AJS["AdminJwtService"]
+        AAPC["AdminAnswerPatternController"]
+        AAPS["AdminAnswerPatternService"]
         NS["NotificationService"]
-        NG["NotificationGateway<br/>(socket.io)"]
+        NG["NotificationGateway"]
     end
-    CS["CreditService"]
-    PR[("PrismaService<br/>PostgreSQL")]
-    RD[("Redis<br/>provisioned, unused ⚠️")]
-    GEM[["Gemini API"]]
+    PR[("PrismaService<br/>PostgreSQL + pgvector")]
+    RD[("Redis<br/>session · context · limits · queue")]
     LAPI[["LINE Messaging API"]]
+    PAPI[["AI providers"]]
 
-    LC --> LWS
-    LC --> CB
-    LC --> LS
-    LC --> CS
+    LC --> LSG
+    LC --> RL
+    LC --> RD
+    RD --> LEP
+    LEP --> RL
+    LEP --> BAN
+    LEP --> SPM
+    LEP --> LWS
     LCC --> LWS
     LWS --> PR
     LWS --> LS
+    LWS --> LX
+    LWS --> CB
+    LWS --> CS
     LS --> LAPI
+    LS --> RL
     CB --> IR
     CB --> US
     CB --> RT
     CB --> RF
     CB --> ACS
+    CB --> SI
     CB --> NS
     IR --> RI
+    IR --> KRS
     IR --> AIC
-    AIC --> GEM
-    ACS --> PR
-    ACS --> APS
-    ACS --> SSS
-    ACS --> GEM
+    KRS --> APS
+    KRS --> APC
+    KRS --> SSS
+    KRS --> RQP
     APS --> PR
+    APC --> PR
     SSS --> EMB
-    EMB --> GEM
-    KRS -.-> APS
-    KRS -.-> SSS
-    RF --> US
-    RF --> RT
-    RF --> RS
-    RS --> PR
-    RC --> RS
+    SSS --> PR
+    RQP --> UAP
+    ACS --> PR
+    ACS --> KRS
+    ACS --> UAP
+    AIC --> UAP
+    UAP --> APS2
+    AAP --> APS2
+    APS2 --> SET
+    APS2 --> ADP
+    SET --> PR
+    SET --> RD
+    ASET --> PR
+    ASET --> CAT
+    EMB --> BUD
+    ADP --> PAPI
+    UAP --> BUD
+    BUD --> RL
+    RL --> RD
+    BAN --> RD
+    SPM --> RD
+    US --> RD
+    LX --> RD
+    AAC --> AJS
+    AJS --> PR
+    AAPC --> AAPS
+    AAPS --> PR
+    AAPS --> EMB
+    AAPS --> APC
     NS --> NG
+    NG --> AJS
     CS --> PR
 ```
 
-**Prisma access:** `LineWebhookService`, `AiChatService`, `AnswerPatternService`, `RegistrationService`, `CreditService`, `UsersService`.
-**External APIs:** `LineService` → LINE; `AiIntentClassifierService`, `AiChatService`, `EmbeddingService` → Gemini (three separate `GoogleGenAI` instances — should be one shared provider).
-**Unused infra:** Redis client, BullMQ, Mongoose (required at boot, used by nothing).
+**Prisma โดยตรง:** `LineWebhookService`, `AiChatService` (อ่าน `AiSetting`), `AnswerPatternService`, `AnswerPatternCacheService`, `SemanticSearchService`, `AdminAnswerPatternService`, `AdminJwtService`, `AdminAuthService`, `AiProviderSettingsService`, `AdminAiProviderSettingsService`, `RegistrationService`, `UsersService`, `CreditService`
+**Redis โดยตรง:** `UserSessionService`, `LoadContextService`, `RateLimitService`, `BanService`, `SpamDetectorService`, `AiProviderSettingsService` + BullMQ
+**External:** `LineService` → LINE · adapters ทั้ง 3 + `GeminiEmbeddingAdapter` → AI providers
 
-**Couplings that should not exist:**
-- `LineController` → `CreditService` + `ChatbotService` + `LineWebhookService` + `LineService`: the controller orchestrates; move this into a webhook-handler service and keep the controller thin.
-- `ChatbotModule` providing `RegistrationFlowService`/`RegisterParser`/`RegisterValidator` (registration internals): they belong in `RegistrationModule`'s exports.
-- `AiChatService` → `AnswerPatternService` + `SemanticSearchService` directly, duplicating `KnowledgeRetrievalService`: retrieval should have exactly one entry point.
-- `AiChatService` → Prisma for `AiSetting`: acceptable pragmatically, but a small settings accessor would keep the LLM service free of DB reads.
-- `ChatbotService` → `NotificationService` (admin domain): fine as a direct call at this scale, but the handoff state itself belongs in `LineConversation.status`, not the chat session.
+### สิ่งที่ยังควรจัดใหม่
+
+- `LineConversationController` เป็น duplicate เต็ม ๆ ของ 3 endpoint ใน `LineController` — ควรเหลือชุดเดียว
+- `ChatbotModule` ยัง provide `RegistrationFlowService` / `RegisterParser` / `RegisterValidator` เอง แทนที่จะ import จาก `RegistrationModule` (module boundary เบลอ)
+- `AiChatService` ยังอ่าน `AiSetting` จาก Prisma เอง — แยกเป็น settings accessor เล็ก ๆ จะทำให้ service นี้ไม่ต้องรู้จัก DB
+- ไม่มี global guard: route ที่ลืม `@AdminGuard()` เปิดสาธารณะเงียบ ๆ (`@Public()` เป็น metadata ที่ยังไม่มีใครอ่าน)
+- ordering ต่อ user ใน `LineEventsProcessor` เป็น in-memory `Map` — ขยายเป็นหลาย instance เมื่อไหร่ต้องเปลี่ยนเป็น distributed lock
