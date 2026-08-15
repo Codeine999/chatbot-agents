@@ -11,6 +11,7 @@ import { UserSessionService } from './user-session.service';
 import { AiModule } from './ai.module';
 import { NotificationModule } from '../admin/notification/notification.module';
 import { LoadContextService } from './context/load-context.service';
+import { StickerIntentService } from './sticker-intent.service';
 
 @Module({
   imports: [RegistrationModule, AiModule, NotificationModule],
@@ -21,6 +22,7 @@ import { LoadContextService } from './context/load-context.service';
     ReplyTemplateService,
     UserSessionService,
     LoadContextService,
+    StickerIntentService,
     RegistrationFlowService,
     RegisterParser,
     RegisterValidator,

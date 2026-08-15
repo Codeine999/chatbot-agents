@@ -2,16 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConversationSession } from './user-session.service';
 import { RuleIntentService } from './rule-intent.service';
 import { AiIntentClassifierService } from './ai-intent-classifier.service';
-import { KnowledgeCandidateService } from './knowledge/knowledge-candidate.service';
-import { ChatContextMessage, RouteDecision } from './types/chat.types';
-import { fromAi, fromRule } from './intent/intent.utils';
+import { KnowledgeRetrievalService } from './knowledge/knowledge-retrieval.service';
+import {
+  ChatContextMessage,
+  IntentSource,
+  KnowledgeRetrievalResult,
+  RouteDecision,
+} from './types/chat.types';
+import { fromRule } from './intent/intent.utils';
 
 @Injectable()
 export class IntentRouterService {
   private readonly logger = new Logger(IntentRouterService.name);
   constructor(
     private readonly ruleIntentService: RuleIntentService,
-    private readonly knowledgeCandidateService: KnowledgeCandidateService,
+    private readonly knowledgeRetrievalService: KnowledgeRetrievalService,
     private readonly aiIntentClassifierService: AiIntentClassifierService,
   ) {}
 
@@ -22,6 +27,7 @@ export class IntentRouterService {
     recentMessages?: readonly ChatContextMessage[];
   }): Promise<RouteDecision> {
     const { userId, input, session, recentMessages = [] } = params;
+
     this.logger.debug(
       `session flow=
       ${session?.flow ?? 'none'} 
@@ -34,13 +40,13 @@ export class IntentRouterService {
     this.logger.debug(`rule = ${JSON.stringify(rule, null, 2)}`);
 
     if (rule.intent === 'CANCEL') {
-      return {
+      return this.logDecision({
         action: 'CANCEL_SESSION',
         intent: 'CANCEL',
         confidence: 1,
         source: 'RULE',
         reason: 'cancel keyword clears session (top priority)',
-      };
+      });
     }
 
     if (session?.status === 'ACTIVE' && session.flow === 'REGISTER') {
@@ -49,21 +55,23 @@ export class IntentRouterService {
         rule.intent !== 'UNKNOWN' &&
         rule.intent !== 'REGISTER'
       ) {
-        return {
+        return this.logDecision({
           ...fromRule(rule),
           source: 'SESSION',
           reason: `active REGISTER session interrupted by ${rule.intent}`,
-        };
+        });
       }
 
-      return {
+      return this.logDecision({
         action: 'CONTINUE_REGISTER',
         intent: 'REGISTER',
         confidence: 1,
         source: 'SESSION',
         reason: 'active REGISTER session continues current flow',
-      };
+      });
     }
+
+    let ruleKnowledgeDecision: RouteDecision | undefined;
 
     if (rule.confidence >= 0.9) {
       const decision = fromRule(rule);
@@ -73,60 +81,131 @@ export class IntentRouterService {
         `[fromRule] decision = ${JSON.stringify(decision, null, 2)}`,
       );
 
-      return decision;
+      if (decision.action !== 'ANSWER_KNOWLEDGE') {
+        return this.logDecision(decision);
+      }
+
+      ruleKnowledgeDecision = decision;
     }
 
-    // Knowledge candidate check (in-memory AnswerPattern cache) runs before
-    // the AI classifier so FAQ questions never get misrouted to GENERAL_QUESTION.
-    // A raw-text match is only trusted when there is no recent conversation to
-    // refer back to, or when the whole message equals a pattern exactly. Other
-    // follow-ups (e.g. "ราคาเท่าไรละ" after asking about a product) must go to
-    // the classifier, which resolves references into standaloneQuery first.
-    const candidate = this.knowledgeCandidateService.detect(input);
-    const hasRecentContext = recentMessages.length > 0;
-
-    if (candidate.matched && (!hasRecentContext || candidate.exact)) {
-      const decision: RouteDecision = {
-        action: 'ANSWER_KNOWLEDGE',
-        intent: 'ANSWER_KNOWLEDGE',
-        confidence: candidate.confidence,
-        source: 'CACHE',
-        reason: candidate.reason,
-      };
-      this.logger.debug(
-        `[KnowledgeCandidate] decision = ${JSON.stringify(decision, null, 2)}`,
-      );
-      return decision;
-    }
-
-    const ai = await this.aiIntentClassifierService.analyze(input, {
+    // Rule/session routing ends here; retrieval owns cache -> DB -> embedding.
+    const retrieval = await this.knowledgeRetrievalService.retrieve(input, {
       userId,
       recentMessages,
     });
-    this.logger.debug(
-      `[AI] intent=${ai.intent} confidence=${ai.confidence} ` +
-        `rewritten=${Boolean(ai.standaloneQuery)}`,
-    );
 
-    const decision = fromAi(ai);
-
-    // Classifier over budget, failed, or unsure: a weak raw-text FAQ match
-    // still beats returning the canned fallback message.
-    if (decision.action === 'FALLBACK' && candidate.matched) {
-      const degraded: RouteDecision = {
+    if (retrieval.route !== 'LOW_CONFIDENCE') {
+      const decision: RouteDecision = {
         action: 'ANSWER_KNOWLEDGE',
-        intent: 'ANSWER_KNOWLEDGE',
-        confidence: candidate.confidence,
-        source: 'CACHE',
-        reason: `classifier fallback, degraded to: ${candidate.reason}`,
+        intent: ruleKnowledgeDecision?.intent ?? 'ANSWER_KNOWLEDGE',
+        confidence: retrieval.topScores[0] ?? 0,
+        source:
+          ruleKnowledgeDecision?.source ?? this.retrievalSource(retrieval),
+        reason: `knowledge retrieval selected ${retrieval.route}`,
+        resolvedQuery: input,
+        retrieval,
       };
-      this.logger.debug(
-        `[KnowledgeCandidate] degraded decision = ${JSON.stringify(degraded, null, 2)}`,
-      );
-      return degraded;
+      return this.logDecision(decision, retrieval);
     }
 
-    this.logger.debug(`[AI] decision = ${JSON.stringify(decision, null, 2)}`);
+    return this.resolveLowConfidence({
+      userId,
+      input,
+      recentMessages,
+      retrieval,
+      fallbackReason: retrieval.fallbackReason,
+    });
+  }
+
+  async resolveLowConfidence(params: {
+    userId: string;
+    input: string;
+    recentMessages?: readonly ChatContextMessage[];
+    retrieval?: KnowledgeRetrievalResult;
+    fallbackReason?: string;
+  }): Promise<RouteDecision> {
+    const {
+      userId,
+      input,
+      recentMessages = [],
+      retrieval,
+      fallbackReason,
+    } = params;
+    const analysis = await this.aiIntentClassifierService.classifyLowConfidence(
+      input,
+      {
+        userId,
+        recentMessages,
+      },
+    );
+
+    if (analysis.classification === 'GENERAL') {
+      return this.logDecision(
+        {
+          action: 'GENERAL_QUESTION',
+          intent: 'GENERAL_QUESTION',
+          confidence: analysis.confidence,
+          source: 'AI',
+          reason: 'low-confidence retrieval classified as GENERAL',
+          generatedResponse: analysis.response,
+          fallbackReason,
+        },
+        retrieval,
+        'LOW_CONFIDENCE',
+      );
+    }
+
+    return this.logDecision(
+      {
+        action: 'CONTACT_ADMIN',
+        intent: 'CONTACT_ADMIN',
+        confidence: analysis.confidence,
+        source: 'AI',
+        reason: 'low-confidence retrieval classified as BUSINESS',
+        businessFallback: true,
+        fallbackReason,
+      },
+      retrieval,
+      'LOW_CONFIDENCE',
+    );
+  }
+
+  private retrievalSource(retrieval: KnowledgeRetrievalResult): IntentSource {
+    if (
+      retrieval.matchType === 'EMBEDDING' ||
+      retrieval.matchType === 'HYBRID'
+    ) {
+      return 'EMBEDDING';
+    }
+
+    return retrieval.selectedItems[0]?.metadata?.retrievalLayer === 'DATABASE'
+      ? 'DATABASE'
+      : 'CACHE';
+  }
+
+  private logDecision(
+    decision: RouteDecision,
+    retrieval?: KnowledgeRetrievalResult,
+    routeOverride?: string,
+  ): RouteDecision {
+    this.logger.debug(
+      `[Routing] ${JSON.stringify({
+        route: routeOverride ?? retrieval?.route ?? decision.action,
+        matchType: retrieval?.matchType ?? 'NONE',
+        topScores: retrieval?.topScores ?? [],
+        scoreGap: retrieval?.scoreGap ?? null,
+        attemptCount: retrieval?.attemptCount ?? 0,
+        diagnosis: retrieval?.diagnosis ?? 'NONE',
+        rewriteStrategy: retrieval?.rewriteStrategy ?? 'NONE',
+        plannerUsedLlm: retrieval?.plannerUsedLlm ?? false,
+        selectedKnowledgeIds:
+          retrieval?.selectedItems.map((item) => item.id) ?? [],
+        intent: decision.intent,
+        confidence: decision.confidence,
+        fallbackReason:
+          decision.fallbackReason ?? retrieval?.fallbackReason ?? null,
+      })}`,
+    );
     return decision;
   }
 }

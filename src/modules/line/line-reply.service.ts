@@ -9,12 +9,34 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { AiProviderImage } from '../../ai-provider/types/ai-provider.types';
 import { RateLimitService } from '../usage/rate-limit/rate-limit.service';
+import { CompanyService } from '../company/company.service';
 
 export type LineProfile = {
   userId: string;
   displayName: string;
   pictureUrl?: string;
   statusMessage?: string;
+};
+
+export type LineBotInfo = {
+  userId: string;
+  basicId: string;
+  premiumId?: string;
+  displayName: string;
+  pictureUrl?: string;
+  chatMode: 'chat' | 'bot';
+  markAsReadMode: 'auto' | 'manual';
+};
+
+export type LineFollowerInsight = {
+  status: 'ready' | 'unready' | 'out_of_service';
+  followers?: number;
+  targetedReaches?: number;
+  blocks?: number;
+};
+
+export type LineMessageQuotaConsumption = {
+  totalUsage: number;
 };
 
 @Injectable()
@@ -27,6 +49,7 @@ export class LineService {
   constructor(
     private readonly configService: ConfigService,
     private readonly rateLimitService: RateLimitService,
+    private readonly companyService: CompanyService,
   ) {
     this.globalReplyLimitPerSec = Number(
       configService.get('LINE_GLOBAL_REPLY_LIMIT_PER_SEC') ?? 30,
@@ -44,26 +67,47 @@ export class LineService {
   }
 
   async getProfile(lineUserId: string): Promise<LineProfile> {
-    const accessToken = this.getAccessToken();
-
-    const response = await fetch(
-      `https://api.line.me/v2/bot/profile/${encodeURIComponent(lineUserId)}`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        signal: AbortSignal.timeout(this.httpTimeoutMs),
-      },
+    return this.getJson<LineProfile>(
+      `/v2/bot/profile/${encodeURIComponent(lineUserId)}`,
+      'LINE profile',
     );
+  }
+
+  async getBotInfo(): Promise<LineBotInfo> {
+    return this.getJson<LineBotInfo>('/v2/bot/info', 'LINE bot info');
+  }
+
+  /** `date` must be `YYYYMMDD`. LINE insight data can lag by a few days. */
+  async getFollowerInsight(date: string): Promise<LineFollowerInsight> {
+    return this.getJson<LineFollowerInsight>(
+      `/v2/bot/insight/followers?date=${encodeURIComponent(date)}`,
+      'LINE follower insight',
+    );
+  }
+
+  async getMessageQuotaConsumption(): Promise<LineMessageQuotaConsumption> {
+    return this.getJson<LineMessageQuotaConsumption>(
+      '/v2/bot/message/quota/consumption',
+      'LINE message quota consumption',
+    );
+  }
+
+  private async getJson<T>(path: string, resource: string): Promise<T> {
+    const response = await fetch(`https://api.line.me${path}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${this.getAccessToken()}`,
+      },
+      signal: AbortSignal.timeout(this.httpTimeoutMs),
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('LINE profile error:', errorText);
-      throw new InternalServerErrorException('Failed to get LINE profile');
+      console.error(`${resource} error:`, errorText);
+      throw new InternalServerErrorException(`Failed to get ${resource}`);
     }
 
-    return response.json() as Promise<LineProfile>;
+    return response.json() as Promise<T>;
   }
 
   async getImageContent(messageId: string): Promise<AiProviderImage> {
@@ -159,6 +203,7 @@ export class LineService {
       throw new InternalServerErrorException('Failed to reply LINE message');
     }
 
+    await this.companyService.recordOutboundMessage();
     return true;
   }
 
@@ -188,6 +233,8 @@ export class LineService {
       console.error('LINE push error:', errorText);
       throw new InternalServerErrorException('Failed to push LINE message');
     }
+
+    await this.companyService.recordOutboundMessage();
   }
 
   private resolveImageMediaType(

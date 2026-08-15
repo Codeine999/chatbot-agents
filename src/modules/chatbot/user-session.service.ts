@@ -2,26 +2,14 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../infra/redis/redis.module';
+import {
+  ConversationSession,
+  ConversationFlow,
+  ConversationStatus,
+} from './types/session.types';
+import { NotificationService } from '../admin/notification/notification.service';
 
-export type ConversationFlow =
-  | 'REGISTER'
-  | 'GENERAL_QUESTION'
-  | 'CHECK_STATUS'
-  | 'CONTACT_ADMIN';
-
-export type ConversationStatus =
-  | 'ACTIVE'
-  | 'COMPLETED'
-  | 'CANCELLED'
-  | 'EXPIRED';
-
-export interface ConversationSession<TData = Record<string, unknown>> {
-  userId: string;
-  flow: ConversationFlow;
-  step: string;
-  status: ConversationStatus;
-  data: TData;
-}
+export type { ConversationSession } from './types/session.types';
 
 const SESSION_KEY_PREFIX = 'chat:session:';
 const DEFAULT_SESSION_TTL_SEC = 30 * 60;
@@ -34,6 +22,7 @@ export class UserSessionService {
   constructor(
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     configService: ConfigService,
+    private readonly notificationService: NotificationService,
   ) {
     this.sessionTtlSec = this.positiveInteger(
       configService.get('CHAT_SESSION_TTL_SEC'),
@@ -83,6 +72,18 @@ export class UserSessionService {
       'EX',
       this.sessionTtlSec,
     );
+
+    if (session.requiAdmin) {
+      // Best-effort: the session write already succeeded, so a notification
+      // failure must not surface as a chat-flow error.
+      try {
+        await this.notificationService.notifyAdminRequired(session);
+      } catch (error) {
+        this.logger.warn(
+          `failed to notify admins for user=${userId}: ${String(error)}`,
+        );
+      }
+    }
   }
 
   async clear(userId: string): Promise<void> {
@@ -120,6 +121,8 @@ export class UserSessionService {
       flows.includes(session.flow as ConversationFlow) &&
       typeof session.step === 'string' &&
       statuses.includes(session.status as ConversationStatus) &&
+      (session.requiAdmin === undefined ||
+        typeof session.requiAdmin === 'boolean') &&
       session.data !== null &&
       typeof session.data === 'object' &&
       !Array.isArray(session.data)

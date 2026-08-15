@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmbeddingService } from '../../ai/embedding.service';
+import { MAX_RETRIEVAL_CANDIDATES } from '../constants/knowledge-routing.constants';
 import { KnowledgeItem } from '../types/chat.types';
 
 type SemanticSearchRow = {
@@ -23,18 +23,11 @@ export class SemanticSearchService {
   constructor(
     private readonly embeddingService: EmbeddingService,
     private readonly prisma: PrismaService,
-    private readonly configService: ConfigService,
   ) {}
 
   async search(input: string, userId?: string): Promise<KnowledgeItem[]> {
     const embedding = await this.embeddingService.embedQuery(input, userId);
     const vectorLiteral = `[${embedding.values.join(',')}]`;
-    const configuredFloor = Number(
-      this.configService.get<string>('AI_VECTOR_MIN_SIMILARITY') ?? 0.6,
-    );
-    const similarityFloor = Number.isFinite(configuredFloor)
-      ? Math.min(Math.max(configuredFloor, 0), 1)
-      : 0.6;
 
     this.logger.debug(
       `[SemanticSearch] input="${input}" dimension=${embedding.values.length}`,
@@ -56,9 +49,8 @@ export class SemanticSearchService {
       WHERE pattern."active" = true
         AND vector."active" = true
         AND vector."embeddingModel" = ${embedding.model}
-        AND (1 - (vector."embedding" <=> ${vectorLiteral}::vector)) >= ${similarityFloor}
       ORDER BY vector."embedding" <=> ${vectorLiteral}::vector
-      LIMIT 5
+      LIMIT ${MAX_RETRIEVAL_CANDIDATES}
     `);
 
     return rows.map((row) => ({
@@ -73,6 +65,8 @@ export class SemanticSearchService {
         priority: row.priority,
         intentKey: row.intentKey,
         embeddingModel: embedding.model,
+        exactMatch: false,
+        matchTypes: ['EMBEDDING'],
       },
     }));
   }

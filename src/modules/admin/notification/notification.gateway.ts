@@ -8,7 +8,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { AdminJwtService } from '../auth/admin-jwt.service';
-import { ConversationSession } from '../../chatbot/user-session.service';
+import type { AdminNotification } from '../../../generated/prisma/client';
 
 @WebSocketGateway({
   namespace: 'admin',
@@ -46,8 +46,9 @@ export class NotificationGateway
     this.logger.debug(`admin client disconnected: ${client.id}`);
   }
 
-  emitContactAdmin(session: ConversationSession) {
-    this.server.emit('CONTACT_ADMIN', session);
+  /** Broadcasts to every connected admin socket — there is no per-admin targeting. */
+  emitAdminNotification(notification: AdminNotification) {
+    this.server.emit('ADMIN_NOTIFICATION', notification);
   }
 
   private async authorizeConnection(

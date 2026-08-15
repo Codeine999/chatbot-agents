@@ -3,6 +3,7 @@ import type { AnswerPattern } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { KnowledgeItem } from '../types/chat.types';
 import { normalizeText } from '../../../utils/text.utils';
+import { MAX_RETRIEVAL_CANDIDATES } from '../constants/knowledge-routing.constants';
 
 /**
  * Score weights for direct (non-embedding) answer_patterns matching.
@@ -37,10 +38,11 @@ const WEIGHT = {
 const PRIORITY_CAP = 100;
 /** Matches scoring below this are considered noise and dropped. */
 const MIN_MATCH_SCORE = 2;
-const MAX_MATCHES = 5;
 const MAX_PATTERNS_SCANNED = 500;
 /** Substrings shorter than this are too ambiguous for containment matching. */
 const MIN_CONTAINS_LENGTH = 2;
+
+export type AnswerPatternRetrievalLayer = 'CACHE' | 'DATABASE';
 
 @Injectable()
 export class AnswerPatternService {
@@ -57,34 +59,68 @@ export class AnswerPatternService {
     const normalized = normalizeText(message);
     if (!normalized) return [];
 
-    const tokens = this.tokenize(normalized);
-
     const patterns = await this.prisma.answerPattern.findMany({
       where: { active: true },
       take: MAX_PATTERNS_SCANNED,
       orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
     });
 
+    return this.findMatchesFromPatterns(message, patterns, 'DATABASE');
+  }
+
+  /**
+   * Score an existing pattern snapshot with the exact same matcher as the DB
+   * path. The cache calls this method so scoring weights cannot drift between
+   * cache lookup and the authoritative database fallback.
+   */
+  findMatchesFromPatterns(
+    message: string,
+    patterns: readonly AnswerPattern[],
+    retrievalLayer: AnswerPatternRetrievalLayer = 'CACHE',
+  ): KnowledgeItem[] {
+    const normalized = normalizeText(message);
+    if (!normalized) return [];
+
+    const tokens = this.tokenize(normalized);
+
     const scored = patterns
+      .filter((pattern) => pattern.active)
       .map((pattern) => ({
         pattern,
         score: this.scoreAnswerPattern(pattern, normalized, tokens),
+        exact: this.isExactMatch(pattern, normalized),
       }))
       .filter(({ score }) => score >= MIN_MATCH_SCORE)
-      .sort(
-        (a, b) => b.score - a.score || b.pattern.priority - a.pattern.priority,
-      )
-      .slice(0, MAX_MATCHES);
+      .sort((a, b) => {
+        if (a.exact !== b.exact) return Number(b.exact) - Number(a.exact);
+
+        // Exact records are curated answers for the whole normalized query.
+        // Prefer their priority and keep the original DB/cache order when it
+        // ties. Non-exact candidates continue to use relevance then priority.
+        if (a.exact) return b.pattern.priority - a.pattern.priority;
+
+        return b.score - a.score || b.pattern.priority - a.pattern.priority;
+      })
+      .slice(0, MAX_RETRIEVAL_CANDIDATES);
 
     this.logger.debug(
-      `[AnswerPattern] "${normalized}" -> ${scored.length} match(es)` +
+      `[AnswerPattern:${retrievalLayer}] "${normalized}" -> ${scored.length} match(es)` +
         (scored.length
           ? ` top="${scored[0].pattern.title}" score=${scored[0].score}`
           : ''),
     );
 
-    return scored.map(({ pattern, score }) =>
-      this.toKnowledgeItem(pattern, score),
+    return scored.map(({ pattern, score, exact }) =>
+      this.toKnowledgeItem(pattern, score, exact, retrievalLayer),
+    );
+  }
+
+  private isExactMatch(pattern: AnswerPattern, normalized: string): boolean {
+    return (
+      pattern.keywords.some((value) => normalizeText(value) === normalized) ||
+      pattern.questionExamples.some(
+        (value) => normalizeText(value) === normalized,
+      )
     );
   }
 
@@ -111,6 +147,7 @@ export class AnswerPatternService {
     );
 
     const intentKey = normalizeText(pattern.intentKey ?? '');
+
     if (
       intentKey &&
       (tokens.includes(intentKey) || this.contains(normalized, intentKey))
@@ -137,7 +174,8 @@ export class AnswerPatternService {
       score += WEIGHT.DESCRIPTION;
     }
 
-    // Priority only breaks ties between real matches; it never creates one.
+    // Priority is a capped relevance bonus. A real text signal is required,
+    // although this bonus can still push a weak signal over MIN_MATCH_SCORE.
     if (score > 0) {
       const priority = Math.min(Math.max(pattern.priority, 0), PRIORITY_CAP);
       score += (priority / PRIORITY_CAP) * WEIGHT.PRIORITY_MAX_BONUS;
@@ -233,6 +271,8 @@ export class AnswerPatternService {
   private toKnowledgeItem(
     pattern: AnswerPattern,
     score: number,
+    exactMatch: boolean,
+    retrievalLayer: AnswerPatternRetrievalLayer,
   ): KnowledgeItem {
     return {
       source: 'ANSWER_PATTERN',
@@ -242,7 +282,14 @@ export class AnswerPatternService {
       content: pattern.description ?? pattern.title,
       answer: pattern.answer,
       score,
-      metadata: { priority: pattern.priority, intentKey: pattern.intentKey },
+      metadata: {
+        priority: pattern.priority,
+        intentKey: pattern.intentKey,
+        rawScore: score,
+        exactMatch,
+        matchTypes: [exactMatch ? 'EXACT' : 'KEYWORD'],
+        retrievalLayer,
+      },
     };
   }
 }

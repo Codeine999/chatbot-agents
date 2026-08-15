@@ -48,6 +48,11 @@ export type LineMessage =
       packageId: string;
       stickerId: string;
       stickerResourceType?: string;
+      /** Experimental LINE-provided hints; not present for every sticker. */
+      keywords?: string[];
+      /** User-entered text, present only for supported message stickers. */
+      text?: string;
+      quoteToken?: string;
     };
 
 export type LineEventSource =

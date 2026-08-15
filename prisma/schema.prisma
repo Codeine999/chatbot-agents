@@ -91,6 +91,51 @@ model AdminMember {
   updatedAt DateTime  @updatedAt
 }
 
+// Singleton row — one instance of this app serves one company/LINE OA.
+model Company {
+  id   String @id @default(uuid()) @db.Uuid
+  name String @db.VarChar(255)
+
+  // Outbound LINE message counter for "this month" (see LineService).
+  // messagesSentPeriod is a "YYYY-MM" key; a mismatch on read/increment
+  // means the counter has rolled over into a new month.
+  messagesSentPeriod String @default("") @db.VarChar(7)
+  messagesSentCount  Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("company")
+}
+
+// One row per day, used to compute follower growth over a trailing window
+// (LINE's insight API only returns a single day's count per call).
+model LineFollowerSnapshot {
+  id              String   @id @default(uuid()) @db.Uuid
+  date            DateTime @unique @db.Date
+  followerCount   Int
+  targetedReaches Int?
+  blockCount      Int?
+  createdAt       DateTime @default(now())
+
+  @@map("line_follower_snapshots")
+}
+
+model AdminNotification {
+  id        String   @id @default(uuid()) @db.Uuid
+  type      String   @db.VarChar(50)
+  title     String   @db.VarChar(255)
+  message   String?  @db.Text
+  userId    String?  @db.VarChar(255)
+  metadata  Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("admin_notifications")
+  @@index([isRead])
+  @@index([createdAt])
+}
+
 model Payment {
   uuid        String        @id @default(uuid()) @db.Uuid
   username    String

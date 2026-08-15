@@ -57,44 +57,6 @@ export class LineWebhookService {
   ) {}
 
   /**
-   * Claims a webhook event for processing by inserting its id under a
-   * unique constraint. Returns false when the event was already claimed,
-   * so a duplicate delivery is skipped and never replied to twice.
-   */
-  async claimWebhookEvent(webhookEventId: string): Promise<boolean> {
-    try {
-      await this.prisma.processedLineWebhookEvent.create({
-        data: {
-          webhookEventId,
-        },
-      });
-
-      return true;
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        return false;
-      }
-
-      throw error;
-    }
-  }
-
-  /**
-   * Releases a claim so a retried job can process the event again.
-   * Only safe to call when no reply has been sent for the event yet.
-   */
-  async releaseWebhookEvent(webhookEventId: string): Promise<void> {
-    await this.prisma.processedLineWebhookEvent.deleteMany({
-      where: {
-        webhookEventId,
-      },
-    });
-  }
-
-  /**
    * Full handling of a single webhook event: persist it, run the chatbot,
    * reply to LINE, and save the outgoing chat history. Any error thrown
    * from here means no reply has been sent yet, so the caller may release
@@ -105,11 +67,13 @@ export class LineWebhookService {
 
     if (event.type !== 'message') return;
     
-
-    if (event.message.type !== 'text' && 
-      event.message.type !== 'image') {
-        return
-      };
+    if (
+      event.message.type !== 'text' &&
+      event.message.type !== 'image' &&
+      event.message.type !== 'sticker'
+    ) {
+      return;
+    }
   
     if (!event.source?.userId)  return;
     
@@ -128,7 +92,7 @@ export class LineWebhookService {
         text: event.message.text,
         recentMessages,
       });
-    } else {
+    } else if (event.message.type === 'image') {
       contextUserText = '[image]';
       if (event.message.contentProvider?.type === 'external') {
         response = {
@@ -144,6 +108,16 @@ export class LineWebhookService {
           recentMessages,
         });
       }
+    } else {
+      contextUserText = event.message.text?.trim() || '[sticker]';
+      response = await this.chatbotService.handleStickerMessage({
+        userId: event.source.userId,
+        packageId: event.message.packageId,
+        stickerId: event.message.stickerId,
+        text: event.message.text,
+        keywords: event.message.keywords,
+        recentMessages,
+      });
     }
 
     if (Date.now() - event.timestamp > LINE_EVENT_MAX_AGE_MS) {
@@ -196,16 +170,12 @@ export class LineWebhookService {
   ): Promise<SavedIncomingEvent | null> {
     const lineUserId = event.source?.userId;
 
-    if (!lineUserId) {
-      return null;
-    }
+    if (!lineUserId) return null;
 
     const chatMessage = this.toChatMessage(event);
 
-    if (!chatMessage) {
-      return null;
-    }
-
+    if (!chatMessage) return null;
+    
     // A webhook retry can happen after the inbound transaction committed but
     // before LINE was replied to. Reuse the existing row so the conversation
     // unread count and USER history are not written twice.
@@ -469,6 +439,40 @@ export class LineWebhookService {
     });
   }
 
+    /**
+   * Claims a webhook event for processing by inserting its id under a
+   * unique constraint. Returns false when the event was already claimed,
+   * so a duplicate delivery is skipped and never replied to twice.
+   */
+  async claimWebhookEvent(webhookEventId: string): Promise<boolean> {
+    try {
+      await this.prisma.processedLineWebhookEvent.create({
+        data: {
+          webhookEventId,
+        },
+      });
+
+      return true;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return false;
+      }
+
+      throw error;
+    }
+  }
+
+  async releaseWebhookEvent(webhookEventId: string): Promise<void> {
+    await this.prisma.processedLineWebhookEvent.deleteMany({
+      where: {
+        webhookEventId,
+      },
+    });
+  }
+
   private async findOrCreateLineMember(lineUserId: string) {
     const existingMember = await this.prisma.lineMember.findUnique({
       where: {
@@ -543,9 +547,12 @@ export class LineWebhookService {
     }
 
     if (message.type === 'sticker') {
+      const stickerText = message.text?.trim();
+
       return {
         messageType: LineChatMessageType.STICKER,
-        lastMessage: '[sticker]',
+        lastMessage: stickerText || '[sticker]',
+        text: stickerText || undefined,
         lineMessageId: message.id,
         replyToken: event.replyToken,
         stickerPackageId: message.packageId,

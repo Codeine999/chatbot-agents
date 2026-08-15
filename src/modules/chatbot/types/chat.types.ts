@@ -19,7 +19,13 @@ export type ChatAction =
   | 'CONTACT_ADMIN'
   | 'DEFAULT';
 
-export type IntentSource = 'SESSION' | 'RULE' | 'CACHE' | 'AI';
+export type IntentSource =
+  | 'SESSION'
+  | 'RULE'
+  | 'CACHE'
+  | 'DATABASE'
+  | 'EMBEDDING'
+  | 'AI';
 
 export type IntentResult = {
   intent: ChatIntent;
@@ -34,6 +40,60 @@ export type AiIntentAnalysis = {
   standaloneQuery?: string;
 };
 
+export type LowConfidenceClassification = 'BUSINESS' | 'GENERAL';
+
+export type LowConfidenceAnalysis = Readonly<{
+  classification: LowConfidenceClassification;
+  confidence: number;
+  response?: string;
+}>;
+
+export type KnowledgeMatchType =
+  | 'EXACT'
+  | 'KEYWORD'
+  | 'EMBEDDING'
+  | 'HYBRID'
+  | 'NONE';
+
+export type KnowledgeRoute = 'DIRECT' | 'RAG' | 'LOW_CONFIDENCE';
+
+export type KnowledgeRetrievalDiagnosis =
+  | 'NONE'
+  | 'MISSING_USER_INFORMATION'
+  | 'MISSING_KNOWLEDGE_EVIDENCE'
+  | 'AMBIGUOUS_RESULTS'
+  | 'CONFLICTING_CANDIDATES'
+  | 'COMPLEX_QUERY'
+  | 'RETRIEVAL_ERROR';
+
+export type KnowledgeRewriteStrategy =
+  | 'NONE'
+  | 'REWRITE'
+  | 'EXPAND'
+  | 'DECOMPOSE';
+
+export type KnowledgeRetrievalAttempt = Readonly<{
+  attempt: number;
+  query: string;
+  candidateCount: number;
+  retrievalFailed: boolean;
+}>;
+
+export type KnowledgeRetrievalResult = Readonly<{
+  route: KnowledgeRoute;
+  matchType: KnowledgeMatchType;
+  items: readonly KnowledgeItem[];
+  selectedItems: readonly KnowledgeItem[];
+  topScores: readonly number[];
+  scoreGap: number | null;
+  fallbackReason?: string;
+  attemptCount?: number;
+  attempts?: readonly KnowledgeRetrievalAttempt[];
+  diagnosis?: KnowledgeRetrievalDiagnosis;
+  rewriteStrategy?: KnowledgeRewriteStrategy;
+  plannerUsedLlm?: boolean;
+}>;
+
 export type RouteDecision = {
   action: ChatAction;
   intent: ChatIntent;
@@ -41,6 +101,10 @@ export type RouteDecision = {
   source: IntentSource;
   reason?: string;
   resolvedQuery?: string;
+  retrieval?: KnowledgeRetrievalResult;
+  generatedResponse?: string;
+  businessFallback?: boolean;
+  fallbackReason?: string;
 };
 
 export type ChatContextRole = 'user' | 'assistant';
@@ -79,6 +143,15 @@ export type ImageChatRequest = Readonly<{
   recentMessages?: readonly ChatContextMessage[];
 }>;
 
+export type StickerChatRequest = Readonly<{
+  userId: string;
+  packageId: string;
+  stickerId: string;
+  text?: string;
+  keywords?: readonly string[];
+  recentMessages?: readonly ChatContextMessage[];
+}>;
+
 export type AiRequestContext = Readonly<{
   userId?: string;
   recentMessages?: readonly ChatContextMessage[];
@@ -87,11 +160,13 @@ export type AiRequestContext = Readonly<{
 export type KnowledgeAnswerContext = AiRequestContext &
   Readonly<{
     retrievalQuery?: string;
+    retrieval?: KnowledgeRetrievalResult;
   }>;
 
 export type AiAnswerResult = Readonly<{
   text: string;
   isFallback: boolean;
+  insufficientContext?: boolean;
 }>;
 
 export type KnowledgeItem = {
@@ -104,4 +179,5 @@ export type KnowledgeItem = {
   score: number;
   metadata?: Record<string, unknown>;
 };
+
 import type { AiProviderImage } from '../../../ai-provider/types/ai-provider.types';

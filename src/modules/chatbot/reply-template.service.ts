@@ -80,6 +80,18 @@ export class ReplyTemplateService {
     return 'รับทราบครับ เดี๋ยวแอดมินจะเข้ามาดูแลให้นะครับ';
   }
 
+  stickerGreeting(): string {
+    return 'สวัสดีครับ สอบถามเรื่องไหนครับ';
+  }
+
+  stickerThanks(): string {
+    return 'ด้วยความยินดีครับ';
+  }
+
+  stickerUnknown(): string {
+    return 'รับสติ๊กเกอร์แล้วครับ 😊 หากมีอะไรให้ช่วย พิมพ์ข้อความมาได้ตลอดนะครับ';
+  }
+
   messageTooLong(): string {
     return 'ข้อความยาวเกินไปครับ กรุณาพิมพ์ให้สั้นลงแล้วส่งใหม่อีกครั้งนะครับ';
   }

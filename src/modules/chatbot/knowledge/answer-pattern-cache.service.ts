@@ -4,19 +4,11 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
+import type { AnswerPattern } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 
-/** Lightweight detection fields only — answer/content stays in the DB. */
-export type AnswerPatternCacheEntry = {
-  id: string;
-  title: string;
-  category: string | null;
-  intentKey: string | null;
-  keywords: string[];
-  questionExamples: string[];
-  priority: number;
-  active: boolean;
-};
+/** Full records let a cache hit continue without another answer lookup. */
+export type AnswerPatternCacheEntry = AnswerPattern;
 
 const CACHE_TTL_MS = 240_000;
 const MAX_CACHED_PATTERNS = 500;
@@ -69,16 +61,6 @@ export class AnswerPatternCacheService
     try {
       const rows = await this.prisma.answerPattern.findMany({
         where: { active: true },
-        select: {
-          id: true,
-          title: true,
-          category: true,
-          intentKey: true,
-          keywords: true,
-          questionExamples: true,
-          priority: true,
-          active: true,
-        },
         orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
         take: MAX_CACHED_PATTERNS,
       });
@@ -91,7 +73,7 @@ export class AnswerPatternCacheService
     } catch (error) {
       // Keep serving the previous snapshot; the next tick retries.
       this.logger.error(
-        `[AnswerPatternCache] refresh failed, keeping ${this.entries.length} cached entrie(s)`,
+        `[AnswerPatternCache] refresh failed, keeping ${this.entries.length} cached entries`,
         error instanceof Error ? error.stack : String(error),
       );
     }

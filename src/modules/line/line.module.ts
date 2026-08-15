@@ -1,9 +1,11 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ChatbotModule } from '../chatbot/chatbot.module';
+import { CompanyModule } from '../company/company.module';
 import { CreditServiceModule } from '../usage/credit-point/credit.module';
 import { PipelineModule } from '../pipeline/pipeline.module';
 import { LineController, LineConversationController } from './line.controller';
+import { LineDashboardController } from './line-dashboard.controller';
 import { LineEventsProcessor } from './line-events.processor';
 import { LINE_EVENTS_QUEUE } from './line-events.queue';
 import { LineService } from './line-reply.service';
@@ -13,6 +15,7 @@ import { LineWebhookService } from './line-webhook.service';
 @Module({
   imports: [
     ChatbotModule,
+    CompanyModule,
     PipelineModule,
     CreditServiceModule,
     BullModule.registerQueue({
@@ -33,7 +36,11 @@ import { LineWebhookService } from './line-webhook.service';
       },
     }),
   ],
-  controllers: [LineController, LineConversationController],
+  controllers: [
+    LineController,
+    LineConversationController,
+    LineDashboardController,
+  ],
   providers: [
     LineService,
     LineWebhookService,

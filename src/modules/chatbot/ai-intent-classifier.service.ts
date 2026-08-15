@@ -5,6 +5,7 @@ import {
   AiIntentAnalysis,
   AiRequestContext,
   ChatIntent,
+  LowConfidenceAnalysis,
 } from './types/chat.types';
 import {
   AI_CLASSIFIER_FALLBACK,
@@ -14,6 +15,15 @@ import {
 import { toAiProviderMessages } from './context/ai-provider-context';
 import { classifierPrompt } from './constants/classifier.prompt';
 import { stripJsonCodeFence } from '../../utils/json.utils';
+import {
+  LOW_CONFIDENCE_CLASSIFIER_SYSTEM_INSTRUCTION,
+  lowConfidenceClassifierPrompt,
+} from './constants/low-confidence-classifier.prompt';
+
+const LOW_CONFIDENCE_FALLBACK: LowConfidenceAnalysis = {
+  classification: 'BUSINESS',
+  confidence: 0,
+};
 
 @Injectable()
 export class AiIntentClassifierService {
@@ -69,6 +79,63 @@ export class AiIntentClassifierService {
     } catch (err) {
       this.logger.warn(`AI intent classification failed: ${String(err)}`);
       return { ...AI_CLASSIFIER_FALLBACK, standaloneQuery: input };
+    }
+  }
+
+  async classifyLowConfidence(
+    input: string,
+    context: AiRequestContext = {},
+  ): Promise<LowConfidenceAnalysis> {
+    if (!(await this.aiBudgetService.tryConsume(context.userId))) {
+      return LOW_CONFIDENCE_FALLBACK;
+    }
+
+    try {
+      const response = await this.usersAiProviderService.generate({
+        systemInstruction: LOW_CONFIDENCE_CLASSIFIER_SYSTEM_INSTRUCTION,
+        messages: toAiProviderMessages(
+          context.recentMessages ?? [],
+          lowConfidenceClassifierPrompt(input),
+        ),
+        temperature: 0,
+        maxOutputTokens: 300,
+      });
+      const parsed: unknown = JSON.parse(
+        stripJsonCodeFence(response.text.trim()),
+      );
+
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('low-confidence response is not an object');
+      }
+
+      const candidate = parsed as Record<string, unknown>;
+      const classification = candidate.classification;
+      if (classification !== 'BUSINESS' && classification !== 'GENERAL') {
+        throw new Error('invalid low-confidence classification');
+      }
+
+      const confidence = Math.min(
+        1,
+        Math.max(0, Number(candidate.confidence) || 0),
+      );
+      const generatedResponse =
+        typeof candidate.response === 'string'
+          ? candidate.response.trim().slice(0, 4_000)
+          : '';
+
+      return {
+        classification,
+        confidence,
+        response:
+          classification === 'GENERAL' && generatedResponse
+            ? generatedResponse
+            : undefined,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `low-confidence BUSINESS/GENERAL classification failed: ${String(error)}`,
+      );
+      return LOW_CONFIDENCE_FALLBACK;
     }
   }
 }

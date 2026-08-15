@@ -49,10 +49,7 @@ export class LineEventsProcessor extends WorkerHost {
   async process(job: Job<LineEventJobData>): Promise<void> {
     const userId = job.data.event.source?.userId;
 
-    if (!userId) {
-      await this.processInOrder(job);
-      return;
-    }
+    if (!userId) return;
 
     const previous = this.userProcessingTails.get(userId) ?? Promise.resolve();
     const current = previous
@@ -112,7 +109,7 @@ export class LineEventsProcessor extends WorkerHost {
   ): Promise<boolean> {
     const userId = event.source?.userId;
 
-    if (!userId) return true;
+    if (!userId) return false;
 
     if (await this.banService.isBanned(userId)) {
       this.logger.debug(`Dropping event from banned user ${userId}`);
