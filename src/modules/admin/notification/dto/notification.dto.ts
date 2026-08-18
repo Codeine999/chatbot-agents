@@ -7,6 +7,12 @@ export class NotificationIdParamDto extends createZodDto(
   }),
 ) {}
 
+export class NotificationConversationParamDto extends createZodDto(
+  z.object({
+    conversationId: z.string().uuid(),
+  }),
+) {}
+
 export class ListNotificationsQueryDto extends createZodDto(
   z.object({
     unreadOnly: z

@@ -8,7 +8,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { AdminJwtService } from '../auth/admin-jwt.service';
-import type { AdminNotification } from '../../../generated/prisma/client';
+import type { AdminNotification } from './types/notification.type';
 
 @WebSocketGateway({
   namespace: 'admin',
@@ -22,16 +22,10 @@ export class NotificationGateway
   private readonly logger = new Logger(NotificationGateway.name);
 
   @WebSocketServer()
-  server: Server;
+  server!: Server;
 
   constructor(private readonly adminJwtService: AdminJwtService) {}
 
-  /**
-   * The admin namespace carries customer session data, so every client
-   * must present an admin JWT (socket.io `auth.token` or a Bearer
-   * authorization header). The middleware rejects unauthorized sockets
-   * before the connection completes, so they can never receive events.
-   */
   afterInit(server: Server) {
     server.use((client, next) => {
       void this.authorizeConnection(client, next);

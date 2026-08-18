@@ -3,6 +3,7 @@ import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
 import { NotificationService } from './notification.service';
 import {
   ListNotificationsQueryDto,
+  NotificationConversationParamDto,
   NotificationIdParamDto,
 } from './dto/notification.dto';
 
@@ -29,6 +30,16 @@ export class NotificationController {
   @Patch('read-all')
   async markAllAsRead() {
     await this.notificationService.markAllAsRead();
+    return { success: true };
+  }
+
+  @Patch('conversation/:conversationId/read')
+  async markConversationAsRead(
+    @Param() params: NotificationConversationParamDto,
+  ) {
+    await this.notificationService.markConversationAsRead(
+      params.conversationId,
+    );
     return { success: true };
   }
 }
