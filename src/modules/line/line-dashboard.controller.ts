@@ -1,6 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { AdminGuard } from '../../shared/guards/admin-guard.decorator';
-import { CompanyService } from '../company/company.service';
+import { CompanyService } from '../admin/company/company.service';
 import { LineService } from './line-reply.service';
 
 @AdminGuard()

@@ -1,7 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ChatbotModule } from '../chatbot/chatbot.module';
-import { CompanyModule } from '../company/company.module';
+import { CompanyModule } from '../admin/company/company.module';
 import { CreditServiceModule } from '../usage/credit-point/credit.module';
 import { PipelineModule } from '../pipeline/pipeline.module';
 import { LineController, LineConversationController } from './line.controller';

@@ -1,0 +1,141 @@
+enum UsageKind {
+  LINE_AI_REPLY       // AI ตอบลูกค้าใน LINE OA
+  ADMIN_AI_QUERY      // แอดมินถาม AI หลังบ้าน
+  EMBEDDING           // สร้าง vector ให้ AnswerPattern
+  LINE_PUSH_MESSAGE   // ค่าส่งข้อความ LINE (ไม่ใช่ token)
+}
+
+enum LedgerType {
+  TOPUP
+  DEBIT
+  REFUND
+  ADJUSTMENT
+  EXPIRE
+}
+
+model AiModelPricing {
+  id       String         @id @default(uuid()) @db.Uuid
+  provider AiProviderName
+  model    String         @db.VarChar(150)
+
+  /// micro-USD ต่อ 1,000,000 tokens — integer ล้วน
+  inputMicroUsdPerMTok       BigInt
+  outputMicroUsdPerMTok      BigInt
+  cachedInputMicroUsdPerMTok BigInt?
+  cacheWriteMicroUsdPerMTok  BigInt?
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  usageEvents AiUsageEvent[]
+
+  @@map("ai_model_pricing")
+  @@unique([provider, model, effectiveFrom])
+  @@index([provider, model, effectiveFrom, effectiveTo])
+}
+
+model AiUsageEvent {
+  id        String    @id @default(uuid()) @db.Uuid
+  companyId String    @db.Uuid
+  kind      UsageKind
+
+  provider AiProviderName
+  model    String         @db.VarChar(150)
+
+  inputTokens       Int @default(0)
+  cachedInputTokens Int @default(0)
+  cacheWriteTokens  Int @default(0)
+  outputTokens      Int @default(0)   // รวม reasoning/thoughts แล้ว
+
+  costMicroUsd BigInt @default(0)     // ต้นทุนจริง — ไม่โชว์ลูกค้า
+  chargedMicro BigInt @default(0)     // เครดิตที่หัก (1 credit = 1e6)
+
+  pricingId String?         @db.Uuid
+  pricing   AiModelPricing? @relation(fields: [pricingId], references: [id])
+
+  adminMemberId String?      @db.Uuid
+  adminMember   AdminMember? @relation(fields: [adminMemberId], references: [id], onDelete: SetNull)
+
+  /// ไม่ผูก FK — เป็น log ไม่ควรบล็อกการลบ conversation/member
+  lineMemberId   String? @db.Uuid
+  conversationId String? @db.Uuid
+
+  status            String  @default("success") @db.VarChar(20) // success | failed | timeout
+  errorCode         String? @db.VarChar(100)
+  latencyMs         Int?
+  providerRequestId String? @db.VarChar(255)
+
+  createdAt DateTime @default(now())
+
+  ledgerEntry CreditLedger?
+
+  @@map("ai_usage_events")
+  @@index([companyId, createdAt])
+  @@index([companyId, kind, createdAt])
+  @@index([adminMemberId, createdAt])
+  @@index([provider, model, createdAt])
+}
+
+model CreditWallet {
+  id        String @id @default(uuid()) @db.Uuid
+  companyId String @unique @db.Uuid
+
+  /// 1 credit = 1,000,000 micro — ห้ามใช้ Float กับเงิน
+  balanceMicro       BigInt @default(0)
+  reservedMicro      BigInt @default(0)   // จองระหว่างรอ provider ตอบ
+  lifetimeTopupMicro BigInt @default(0)
+  lifetimeSpentMicro BigInt @default(0)
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ledger  CreditLedger[]
+  budgets CreditBudget[]
+
+  @@map("credit_wallets")
+  @@unique([id, companyId])   // เผื่อทำ composite FK ตอนขึ้น multi-tenant
+}
+
+model CreditBudget {
+  id       String       @id @default(uuid()) @db.Uuid
+  walletId String       @db.Uuid
+  wallet   CreditWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  kind     UsageKind
+  scopeKey String    @default("*") @db.VarChar(64)
+  period   String    @db.VarChar(7)     // "2026-08"
+
+  limitMicro BigInt?  // null = ไม่จำกัด
+  usedMicro  BigInt   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("credit_budgets")
+  @@unique([walletId, kind, scopeKey, period])
+}
+
+model CreditLedger {
+  id       String       @id @default(uuid()) @db.Uuid
+  walletId String       @db.Uuid
+  wallet   CreditWallet @relation(fields: [walletId], references: [id])
+
+  type              LedgerType
+  amountMicro       BigInt      // + เข้า, - ออก
+  balanceAfterMicro BigInt
+
+  kind         UsageKind?
+  usageEventId String?       @unique @db.Uuid
+  usageEvent   AiUsageEvent? @relation(fields: [usageEventId], references: [id])
+
+  /// กันหักซ้ำตอน retry — "usage:<id>" | "topup:<paymentId>"
+  idempotencyKey String  @unique @db.VarChar(255)
+  note           String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@map("credit_ledger")
+  @@index([walletId, createdAt])
+  @@index([walletId, kind, createdAt])
+}

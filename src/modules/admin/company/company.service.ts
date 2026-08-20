@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { Company } from '../../generated/prisma/client';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { Company } from '../../../generated/prisma/client';
 
 export type FollowerChange = {
   changePercent: number | null;

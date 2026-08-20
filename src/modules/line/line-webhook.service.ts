@@ -352,7 +352,16 @@ export class LineWebhookService {
     return messages.reverse();
   }
 
-  async sendAdminMessage(conversationId: string, body: SendLineMessageDto) {
+  /**
+   * Pushes an admin reply to the customer. `sentByAdminId` attributes the
+   * message to the admin who sent it, so the back office can report who
+   * answered how many customers by counting these rows.
+   */
+  async sendAdminMessage(
+    conversationId: string,
+    body: SendLineMessageDto,
+    sentByAdminId?: string,
+  ) {
     const conversation = await this.prisma.lineConversation.findUnique({
       where: {
         id: conversationId,
@@ -382,6 +391,7 @@ export class LineWebhookService {
           messageType: LineChatMessageType.TEXT,
           text: body.text,
           sentStatus: 'sent',
+          sentByAdminId: sentByAdminId ?? null,
           createdAt: now,
         },
       });

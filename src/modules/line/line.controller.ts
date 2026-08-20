@@ -7,11 +7,13 @@ import {
   Param,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
+import type { AdminRequest } from '../admin/admin-jwt-auth.guard';
 import { AdminGuard } from '../../shared/guards/admin-guard.decorator';
 import { Public } from '../../shared/guards/public.decorator';
 import { RateLimitService } from '../usage/rate-limit/rate-limit.service';
@@ -107,10 +109,15 @@ export class LineController {
   @Post('conversations/:conversationId/messages')
   @AdminGuard()
   sendAdminMessage(
+    @Req() request: AdminRequest,
     @Param('conversationId') conversationId: string,
     @Body() body: SendLineMessageDto,
   ) {
-    return this.lineWebhookService.sendAdminMessage(conversationId, body);
+    return this.lineWebhookService.sendAdminMessage(
+      conversationId,
+      body,
+      request.admin?.id,
+    );
   }
 }
 
@@ -137,9 +144,14 @@ export class LineConversationController {
 
   @Post(':conversationId/messages')
   sendAdminMessage(
+    @Req() request: AdminRequest,
     @Param('conversationId') conversationId: string,
     @Body() body: SendLineMessageDto,
   ) {
-    return this.lineWebhookService.sendAdminMessage(conversationId, body);
+    return this.lineWebhookService.sendAdminMessage(
+      conversationId,
+      body,
+      request.admin?.id,
+    );
   }
 }

@@ -62,6 +62,11 @@ enum AiProviderName {
   ANTHROPIC
 }
 
+enum AdminChatRole {
+  USER
+  ASSISTANT
+}
+
 model Member {
   uuid          String       @id @default(uuid()) @db.Uuid
   username      String       @unique
@@ -87,8 +92,51 @@ model AdminMember {
   image     String?
   role      AdminRole
   aiEnabled Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chatRooms  AdminChatRoom[]
+  aiUsage    AiUsageEvent[]
+
+  /// Source of truth for "how many customers this admin replied to" —
+  /// counted from LineChatHistory.sentByAdminId, not a denormalized column.
+  sentLineMessages LineChatHistory[]
+}
+
+/// One back-office AI chat thread ("room"), private to the admin who owns it.
+model AdminChatRoom {
+  id            String      @id @default(uuid()) @db.Uuid
+  adminMemberId String      @db.Uuid
+  adminMember   AdminMember @relation(fields: [adminMemberId], references: [id], onDelete: Cascade)
+
+  title         String   @db.VarChar(255)
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  messages AdminChatMessage[]
+
+  @@map("admin_chat_rooms")
+  @@index([adminMemberId, lastMessageAt])
+}
+
+model AdminChatMessage {
+  id     String        @id @default(uuid()) @db.Uuid
+  roomId String        @db.Uuid
+  room   AdminChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  role    AdminChatRole
+  content String        @db.Text
+
+  /// Which provider/model produced an ASSISTANT message (null for USER turns).
+  provider AiProviderName?
+  model    String?         @db.VarChar(150)
+
+  createdAt DateTime @default(now())
+
+  @@map("admin_chat_messages")
+  @@index([roomId, createdAt])
 }
 
 // Singleton row — one instance of this app serves one company/LINE OA.
@@ -108,8 +156,6 @@ model Company {
   @@map("company")
 }
 
-// One row per day, used to compute follower growth over a trailing window
-// (LINE's insight API only returns a single day's count per call).
 model LineFollowerSnapshot {
   id              String   @id @default(uuid()) @db.Uuid
   date            DateTime @unique @db.Date
@@ -122,13 +168,21 @@ model LineFollowerSnapshot {
 }
 
 model AdminNotification {
-  id        String   @id @default(uuid()) @db.Uuid
-  type      String   @db.VarChar(50)
-  title     String   @db.VarChar(255)
-  message   String?  @db.Text
-  userId    String?  @db.VarChar(255)
-  metadata  Json?
-  isRead    Boolean  @default(false)
+  id String @id @default(uuid()) @db.Uuid
+
+  /// LINE user id of the customer this notification is about (not a Member uuid).
+  userId String? @db.VarChar(255)
+
+  /// Everything the back office needs to act on this notification, including
+  /// `conversationId` — the chat thread an admin opens by clicking it.
+  /// Shape is validated by `notificationMetadataSchema`.
+  metadata Json?
+
+  type     String  @db.VarChar(50)
+  title    String  @db.VarChar(255)
+  message  String? @db.Text
+  isRead   Boolean @default(false)
+
   createdAt DateTime @default(now())
 
   @@map("admin_notifications")
@@ -137,7 +191,7 @@ model AdminNotification {
 }
 
 model Payment {
-  uuid        String        @id @default(uuid()) @db.Uuid
+  id          String        @id @default(uuid()) @db.Uuid
   username    String
   paymentType PaymentType
   status      PaymentStatus @default(pending)
@@ -194,21 +248,6 @@ model AnswerPattern {
   updatedAt        DateTime @default(now()) @db.Timestamp(6)
 
   vector AnswerPatternVector?
-}
-
-model CreditWallet {
-  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-
-  type      CreditWalletType @unique
-  balance   Int              @default(0)
-  usedTotal Int              @default(0)
-
-  active Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
-
-  @@map("credit_wallets")
 }
 
 model LineMember {
@@ -268,12 +307,17 @@ model LineChatHistory {
   postbackData        String?
   rawEvent            Json?
   sentStatus          String              @default("received")
+
+  sentByAdminId String?      @db.Uuid
+  sentByAdmin   AdminMember? @relation(fields: [sentByAdminId], references: [id], onDelete: SetNull)
+
   createdAt           DateTime            @default(now())
   conversation        LineConversation    @relation(fields: [conversationId], references: [id])
   lineMember          LineMember          @relation(fields: [lineMemberId], references: [id])
 
   @@index([conversationId, createdAt])
   @@index([lineMemberId])
+  @@index([sentByAdminId])
 }
 
 model AnswerPatternVector {

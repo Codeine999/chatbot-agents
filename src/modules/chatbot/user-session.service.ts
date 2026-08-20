@@ -66,6 +66,11 @@ export class UserSessionService {
       throw new Error('Cannot store a chat session under a different user');
     }
 
+    // Read before overwrite so a retried set() (e.g. after a failed LINE
+    // reply, which BullMQ retries by re-running the whole event) can tell
+    // "already flagged" from "just became flagged" and only notify once.
+    const previous = session.requiAdmin ? await this.get(userId) : undefined;
+
     await this.redis.set(
       this.sessionKey(userId),
       JSON.stringify(session),
@@ -73,7 +78,7 @@ export class UserSessionService {
       this.sessionTtlSec,
     );
 
-    if (session.requiAdmin) {
+    if (session.requiAdmin && !previous?.requiAdmin) {
       // Best-effort: the session write already succeeded, so a notification
       // failure must not surface as a chat-flow error.
       try {
