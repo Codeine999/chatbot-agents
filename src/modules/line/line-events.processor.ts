@@ -1,19 +1,24 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Job } from 'bullmq';
+import { Job, Queue, UnrecoverableError } from 'bullmq';
+import { isRetryableAiProviderError } from '../../ai-provider/errors/ai-provider-error';
 import { BanService } from '../abuse/ban.service';
 import { SpamDetectorService } from '../abuse/spam-detector.service';
 import { RateLimitService } from '../usage/rate-limit/rate-limit.service';
 import {
   LINE_EVENT_MAX_AGE_MS,
+  LINE_EVENT_JOB,
+  LINE_EVENTS_CONCURRENCY,
   LINE_EVENTS_QUEUE,
+  LINE_EVENTS_RETRY_CONCURRENCY,
+  LINE_EVENTS_RETRY_QUEUE,
   type LineEventJobData,
 } from './line-events.queue';
 import { LineWebhookService } from './line-webhook.service';
 
 @Processor(LINE_EVENTS_QUEUE, {
-  concurrency: 7,
+  concurrency: LINE_EVENTS_CONCURRENCY,
   limiter: {
     max: 12,
     duration: 1000,
@@ -32,6 +37,8 @@ export class LineEventsProcessor extends WorkerHost {
     private readonly rateLimitService: RateLimitService,
     private readonly banService: BanService,
     private readonly spamDetectorService: SpamDetectorService,
+    @InjectQueue(LINE_EVENTS_RETRY_QUEUE)
+    private readonly retryQueue: Queue<LineEventJobData>,
     configService: ConfigService,
   ) {
     super();
@@ -47,6 +54,37 @@ export class LineEventsProcessor extends WorkerHost {
   }
 
   async process(job: Job<LineEventJobData>): Promise<void> {
+    try {
+      await this.processQueuedJob(job, false);
+    } catch (error) {
+      if (!isRetryableAiProviderError(error)) throw error;
+
+      await this.retryQueue.add(LINE_EVENT_JOB, job.data, {
+        jobId: `retry-${job.data.event.webhookEventId}`,
+      });
+      this.logger.warn(
+        `Moved transient AI failure for ${job.data.event.webhookEventId} to retry queue`,
+      );
+    }
+  }
+
+  async processRetry(job: Job<LineEventJobData>): Promise<void> {
+    try {
+      await this.processQueuedJob(job, true);
+    } catch (error) {
+      if (!isRetryableAiProviderError(error)) {
+        throw new UnrecoverableError(
+          error instanceof Error ? error.message : 'LINE retry failed',
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async processQueuedJob(
+    job: Job<LineEventJobData>,
+    isRetry: boolean,
+  ): Promise<void> {
     const userId = job.data.event.source?.userId;
 
     if (!userId) return;
@@ -54,7 +92,7 @@ export class LineEventsProcessor extends WorkerHost {
     const previous = this.userProcessingTails.get(userId) ?? Promise.resolve();
     const current = previous
       .catch(() => undefined)
-      .then(() => this.processInOrder(job));
+      .then(() => this.processInOrder(job, isRetry));
 
     this.userProcessingTails.set(userId, current);
 
@@ -67,7 +105,10 @@ export class LineEventsProcessor extends WorkerHost {
     }
   }
 
-  private async processInOrder(job: Job<LineEventJobData>): Promise<void> {
+  private async processInOrder(
+    job: Job<LineEventJobData>,
+    isRetry: boolean,
+  ): Promise<void> {
     const { event } = job.data;
     const webhookEventId = event.webhookEventId;
 
@@ -81,7 +122,10 @@ export class LineEventsProcessor extends WorkerHost {
       return;
     }
 
-    const allowed = await this.passesAbuseChecks(event, job.attemptsMade > 0);
+    const allowed = await this.passesAbuseChecks(
+      event,
+      isRetry || job.attemptsMade > 0,
+    );
 
     if (!allowed) return;
 
@@ -163,5 +207,18 @@ export class LineEventsProcessor extends WorkerHost {
     }
 
     return true;
+  }
+}
+
+@Processor(LINE_EVENTS_RETRY_QUEUE, {
+  concurrency: LINE_EVENTS_RETRY_CONCURRENCY,
+})
+export class LineEventsRetryProcessor extends WorkerHost {
+  constructor(private readonly eventsProcessor: LineEventsProcessor) {
+    super();
+  }
+
+  process(job: Job<LineEventJobData>): Promise<void> {
+    return this.eventsProcessor.processRetry(job);
   }
 }

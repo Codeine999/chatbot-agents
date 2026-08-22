@@ -46,12 +46,15 @@ export class AiIntentClassifierService {
 
     const prompt = classifierPrompt(input, VALID_INTENTS);
     try {
-      const response = await this.usersAiProviderService.generate({
-        systemInstruction: CLASSIFIER_SYSTEM_INSTRUCTION,
-        messages: toAiProviderMessages(context.recentMessages ?? [], prompt),
-        temperature: 0,
-        maxOutputTokens: 300,
-      });
+      const response = await this.usersAiProviderService.generate(
+        {
+          systemInstruction: CLASSIFIER_SYSTEM_INSTRUCTION,
+          messages: toAiProviderMessages(context.recentMessages ?? [], prompt),
+          temperature: 0,
+          maxOutputTokens: 300,
+        },
+        context,
+      );
 
       const rawResponseText = response.text.trim();
       const jsonText = stripJsonCodeFence(rawResponseText);
@@ -91,15 +94,18 @@ export class AiIntentClassifierService {
     }
 
     try {
-      const response = await this.usersAiProviderService.generate({
-        systemInstruction: LOW_CONFIDENCE_CLASSIFIER_SYSTEM_INSTRUCTION,
-        messages: toAiProviderMessages(
-          context.recentMessages ?? [],
-          lowConfidenceClassifierPrompt(input),
-        ),
-        temperature: 0,
-        maxOutputTokens: 300,
-      });
+      const response = await this.usersAiProviderService.generate(
+        {
+          systemInstruction: LOW_CONFIDENCE_CLASSIFIER_SYSTEM_INSTRUCTION,
+          messages: toAiProviderMessages(
+            context.recentMessages ?? [],
+            lowConfidenceClassifierPrompt(input),
+          ),
+          temperature: 0,
+          maxOutputTokens: 300,
+        },
+        context,
+      );
       const parsed: unknown = JSON.parse(
         stripJsonCodeFence(response.text.trim()),
       );

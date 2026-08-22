@@ -6,6 +6,7 @@ import {
   AdminAiGenerateRequest,
   AiGenerateResponse,
 } from '../../ai-provider/types/ai-provider.types';
+import { AiBillingService } from '../usage/billing/ai-billing.service';
 
 /**
  * Injectable entry point for back-office AI modules.
@@ -17,6 +18,7 @@ export class AdminAiProviderService {
     private readonly aiProviderService: AiProviderService,
     private readonly settingsService: AdminAiProviderSettingsService,
     private readonly catalogService: AiModelCatalogService,
+    private readonly billingService: AiBillingService,
   ) {}
 
   async generate(
@@ -34,7 +36,7 @@ export class AdminAiProviderService {
       model: requestedModel,
       ...input
     } = request;
-    
+
     const provider = requestedProvider ?? setting.provider;
 
     if (!setting.allowedProviders.includes(provider)) {
@@ -50,6 +52,17 @@ export class AdminAiProviderService {
         : this.catalogService.getDefaultModel(provider));
 
     this.catalogService.assertSelectable(provider, model);
-    return this.aiProviderService.generateWith(provider, model, input);
+
+    // Admins draw from the same company wallet as LINE, but each against
+    // their own persistent `CreditBudget` scope.
+    return this.billingService.runBilled({
+      kind: 'ADMIN_AI_QUERY',
+      scopeKey: adminMemberId,
+      adminMemberId,
+      provider,
+      model,
+      request: input,
+      call: () => this.aiProviderService.generateWith(provider, model, input),
+    });
   }
 }

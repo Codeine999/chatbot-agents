@@ -5,6 +5,7 @@ import { stripJsonCodeFence } from '../../../utils/json.utils';
 import { normalizeText } from '../../../utils/text.utils';
 import { MAX_REWRITTEN_QUERIES } from '../constants/knowledge-routing.constants';
 import type { ChatContextMessage, KnowledgeItem } from '../types/chat.types';
+import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
 
 export const RETRIEVAL_DIAGNOSES = [
   'MISSING_USER_INFORMATION',
@@ -27,17 +28,17 @@ export const RETRIEVAL_QUERY_STRATEGIES = [
 export type RetrievalQueryStrategy =
   (typeof RETRIEVAL_QUERY_STRATEGIES)[number];
 
-export type RetrievalQueryPlannerInput = Readonly<{
-  originalQuery: string;
-  userId?: string;
-  recentMessages?: readonly ChatContextMessage[];
-  candidates?: readonly KnowledgeItem[];
-  attemptedQueries?: readonly string[];
-  fallbackReason?: string;
-  scoreGap?: number | null;
-  diagnosisHint?: RetrievalDiagnosis;
-  allowLlm?: boolean;
-}>;
+export type RetrievalQueryPlannerInput = LineAiUsageContext &
+  Readonly<{
+    originalQuery: string;
+    recentMessages?: readonly ChatContextMessage[];
+    candidates?: readonly KnowledgeItem[];
+    attemptedQueries?: readonly string[];
+    fallbackReason?: string;
+    scoreGap?: number | null;
+    diagnosisHint?: RetrievalDiagnosis;
+    allowLlm?: boolean;
+  }>;
 
 export type RetrievalQueryPlan = Readonly<{
   diagnosis: RetrievalDiagnosis;
@@ -173,17 +174,20 @@ export class RetrievalQueryPlannerService {
       }
 
       planningCallStarted = true;
-      const response = await this.usersAiProviderService.generate({
-        systemInstruction: QUERY_PLANNER_SYSTEM_INSTRUCTION,
-        messages: [
-          {
-            role: 'user',
-            text: this.buildPrompt(input, originalQuery, diagnosis),
-          },
-        ],
-        temperature: 0,
-        maxOutputTokens: 400,
-      });
+      const response = await this.usersAiProviderService.generate(
+        {
+          systemInstruction: QUERY_PLANNER_SYSTEM_INSTRUCTION,
+          messages: [
+            {
+              role: 'user',
+              text: this.buildPrompt(input, originalQuery, diagnosis),
+            },
+          ],
+          temperature: 0,
+          maxOutputTokens: 400,
+        },
+        input,
+      );
       const parsed = this.parseLlmPlan(response.text);
       const queries = this.changedUniqueQueries(
         parsed.queries,

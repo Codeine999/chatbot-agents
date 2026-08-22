@@ -26,11 +26,12 @@ import {
   RetrievalQueryPlannerService,
 } from './retrieval-query-planner.service';
 import { SemanticSearchService } from './semantic-search.service';
+import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
 
-type RetrievalContext = Readonly<{
-  userId?: string;
-  recentMessages?: readonly ChatContextMessage[];
-}>;
+type RetrievalContext = LineAiUsageContext &
+  Readonly<{
+    recentMessages?: readonly ChatContextMessage[];
+  }>;
 
 type CandidatePassResult = Readonly<{
   items: readonly KnowledgeItem[];
@@ -123,6 +124,8 @@ export class KnowledgeRetrievalService {
       plan = await this.retrievalQueryPlannerService.plan({
         originalQuery: originalQuestion,
         userId: context.userId,
+        lineMemberId: context.lineMemberId,
+        conversationId: context.conversationId,
         recentMessages: context.recentMessages ?? [],
         candidates,
         attemptedQueries,

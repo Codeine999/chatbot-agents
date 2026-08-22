@@ -1,5 +1,4 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
-import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
+import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
 import { Public } from '../../../shared/guards/public.decorator';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
@@ -16,9 +15,26 @@ export class AdminAuthController {
     return this.adminAuthService.login(body);
   }
 
+  @Public()
+  @Post('owner')
+  createOwner(@Body() body: CreateAdminDto) {
+    return this.adminAuthService.createOwner(body);
+  }
+
   // @AdminGuard('dev', 'owner')
   @Post('add')
   create(@Body() body: CreateAdminDto) {
     return this.adminAuthService.create(body);
+  }
+
+  @Public()
+  @Post('audit-owner')
+  async audit(): Promise<{ data: boolean; message: string }> {
+    const audit = await this.adminAuthService.authOwner();
+
+    return {
+      data: audit,
+      message: audit ? 'คุณได้สมัครสมาชิกไปแล้ว' : 'ยังไม่มีการสมัครสมาชิก',
+    };
   }
 }

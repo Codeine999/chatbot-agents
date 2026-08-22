@@ -1,6 +1,9 @@
 import type { LineWebhookEvent } from './dto/line';
 
 export const LINE_EVENTS_QUEUE = 'line-events';
+export const LINE_EVENTS_RETRY_QUEUE = 'line-events-retry';
+export const LINE_EVENTS_CONCURRENCY = 10;
+export const LINE_EVENTS_RETRY_CONCURRENCY = 3;
 
 export const LINE_EVENT_JOB = 'process-line-event';
 

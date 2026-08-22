@@ -17,7 +17,6 @@ import {
 import { StickerIntentService } from './sticker-intent.service';
 import { ControlMode } from './types/session.types';
 
-
 @Injectable()
 export class ChatbotService {
   private readonly logger = new Logger(ChatbotService.name);
@@ -38,8 +37,15 @@ export class ChatbotService {
   }
 
   async handleTextMessage(request: ChatRequest): Promise<ChatResponse> {
-    const { userId, text, recentMessages = [] } = request;
+    const {
+      userId,
+      text,
+      recentMessages = [],
+      lineMemberId,
+      conversationId,
+    } = request;
     const input = text.trim();
+    const usage = { userId, lineMemberId, conversationId };
 
     if (!input) {
       return this.response(
@@ -64,7 +70,7 @@ export class ChatbotService {
     const session = await this.userSessionService.get(userId);
 
     const decision = await this.intentRouterService.resolve({
-      userId,
+      ...usage,
       input,
       session,
       recentMessages,
@@ -136,7 +142,7 @@ export class ChatbotService {
       case 'CONTINUE_AI_CHAT':
         return this.aiResponse(
           await this.aiChatService.answerGeneral(input, {
-            userId,
+            ...usage,
             recentMessages,
           }),
           'AI',
@@ -152,7 +158,7 @@ export class ChatbotService {
 
       case 'ANSWER_KNOWLEDGE': {
         const result = await this.aiChatService.answerKnowledge(input, {
-          userId,
+          ...usage,
           recentMessages,
           retrievalQuery: decision.resolvedQuery,
           retrieval: decision.retrieval,
@@ -164,17 +170,14 @@ export class ChatbotService {
 
         const lowConfidenceDecision =
           await this.intentRouterService.resolveLowConfidence({
-            userId,
+            ...usage,
             input,
             recentMessages,
             retrieval: decision.retrieval,
             fallbackReason: 'INSUFFICIENT_CONTEXT',
           });
 
-        return this.executeLowConfidenceDecision(
-          lowConfidenceDecision,
-          userId,
-        );
+        return this.executeLowConfidenceDecision(lowConfidenceDecision, userId);
       }
 
       case 'CONTACT_ADMIN':
@@ -194,6 +197,8 @@ export class ChatbotService {
     return this.aiResponse(
       await this.aiChatService.answerImage(request.image, {
         userId: request.userId,
+        lineMemberId: request.lineMemberId,
+        conversationId: request.conversationId,
         recentMessages: request.recentMessages,
       }),
       'AI',
@@ -227,6 +232,8 @@ export class ChatbotService {
       case 'TEXT':
         return this.handleTextMessage({
           userId: request.userId,
+          lineMemberId: request.lineMemberId,
+          conversationId: request.conversationId,
           text: decision.text,
           recentMessages: request.recentMessages,
         });

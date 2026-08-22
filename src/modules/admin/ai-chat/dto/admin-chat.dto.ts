@@ -26,3 +26,18 @@ export class SendAdminChatMessageDto extends createZodDto(
     text: z.string().trim().min(1).max(20_000),
   }),
 ) {}
+
+export class AdminMemberIdParamDto extends createZodDto(
+  z.object({
+    adminMemberId: z.string().uuid(),
+  }),
+) {}
+
+export class SetAdminAiBudgetDto extends createZodDto(
+  z.object({
+    /** Credit allowance; `null` means unlimited. */
+    limitCredit: z
+      .union([z.number().nonnegative(), z.string().regex(/^\d+(\.\d{1,6})?$/)])
+      .nullable(),
+  }),
+) {}

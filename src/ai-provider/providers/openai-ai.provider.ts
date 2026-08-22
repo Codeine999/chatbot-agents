@@ -12,10 +12,17 @@ import {
 import {
   AiGenerateResponse,
   AiProviderGenerateRequest,
+  AiTokenUsage,
 } from '../types/ai-provider.types';
+import { normalizeTokenUsage } from '../utils/token-usage.utils';
 import { AiProviderAdapter } from './ai-provider.interface';
+import {
+  isTransientProviderFailure,
+  RetryableAiProviderException,
+} from '../errors/ai-provider-error';
 
 type OpenAiResponsePayload = {
+  id?: string;
   output_text?: string;
   output?: Array<{
     content?: Array<{
@@ -23,6 +30,11 @@ type OpenAiResponsePayload = {
       text?: string;
     }>;
   }>;
+  usage?: {
+    input_tokens?: number;
+    input_tokens_details?: { cached_tokens?: number };
+    output_tokens?: number;
+  };
 };
 
 @Injectable()
@@ -80,7 +92,14 @@ export class OpenAiProvider implements AiProviderAdapter {
         this.logger.error(
           `OpenAI API request failed with status=${response.status}`,
         );
-        throw new BadGatewayException('OpenAI generation failed');
+        if (response.status === 429 || response.status >= 500) {
+          throw new RetryableAiProviderException(
+            `OpenAI generation temporarily failed (${response.status})`,
+          );
+        }
+        throw new BadGatewayException(
+          `OpenAI generation rejected (${response.status})`,
+        );
       }
 
       const payload = (await response.json()) as OpenAiResponsePayload;
@@ -89,12 +108,32 @@ export class OpenAiProvider implements AiProviderAdapter {
         text: this.extractText(payload),
         provider: this.name,
         model: request.model,
+        usage: this.toUsage(payload),
+        providerRequestId: payload.id,
       };
     } catch (error) {
       if (error instanceof BadGatewayException) throw error;
       this.logger.error(`OpenAI generation failed: ${String(error)}`);
+      if (isTransientProviderFailure(error)) {
+        throw new RetryableAiProviderException(
+          'OpenAI generation temporarily failed',
+        );
+      }
       throw new BadGatewayException('OpenAI generation failed');
     }
+  }
+
+  /**
+   * `input_tokens` already includes the cached prefix, and `output_tokens`
+   * already includes reasoning tokens.
+   */
+  private toUsage(payload: OpenAiResponsePayload): AiTokenUsage {
+    return normalizeTokenUsage({
+      promptTokens: payload.usage?.input_tokens,
+      cachedInputTokens: payload.usage?.input_tokens_details?.cached_tokens,
+      outputTokens: payload.usage?.output_tokens,
+      cachedInPrompt: true,
+    });
   }
 
   private toContent(message: AiProviderGenerateRequest['messages'][number]) {

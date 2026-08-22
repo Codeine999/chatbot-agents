@@ -59,23 +59,25 @@ export class AdminAuthService {
     const password = await bcrypt.hash(input.password, 12);
 
     try {
-      return await this.prisma.adminMember.create({
-        data: {
-          username: input.username,
-          firstname: input.firstName,
-          lastname: input.lastName,
-          email: input.email.toLowerCase(),
-          phone: input.phone,
-          image: input.image ?? null,
-          password,
-          role: input.role,
-        },
-        select: ADMIN_PUBLIC_SELECT,
-      }).then(({ firstname, lastname, ...admin }) => ({
-        ...admin,
-        firstName: firstname,
-        lastName: lastname,
-      }));
+      return await this.prisma.adminMember
+        .create({
+          data: {
+            username: input.username,
+            firstname: input.firstName,
+            lastname: input.lastName,
+            email: input.email.toLowerCase(),
+            phone: input.phone,
+            image: input.image ?? null,
+            password,
+            role: input.role,
+          },
+          select: ADMIN_PUBLIC_SELECT,
+        })
+        .then(({ firstname, lastname, ...admin }) => ({
+          ...admin,
+          firstName: firstname,
+          lastName: lastname,
+        }));
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
@@ -85,5 +87,57 @@ export class AdminAuthService {
 
       throw error;
     }
+  }
+
+  async createOwner(input: CreateAdminDto) {
+    const existingAdmin = await this.prisma.adminMember.findFirst({
+      select: { id: true },
+    });
+
+    if (existingAdmin) {
+      return 'คุณสมัครไปแล้ว';
+    }
+
+    const password = await bcrypt.hash(input.password, 12);
+
+    try {
+      const admin = await this.prisma.adminMember.create({
+        data: {
+          username: input.username,
+          firstname: input.firstName,
+          lastname: input.lastName,
+          email: input.email.toLowerCase(),
+          phone: input.phone,
+          image: input.image ?? null,
+          password,
+          role: 'owner',
+        },
+        select: ADMIN_PUBLIC_SELECT,
+      });
+
+      const { firstname, lastname, ...safeAdmin } = admin;
+
+      return {
+        ...safeAdmin,
+        firstName: firstname,
+        lastName: lastname,
+      };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new ConflictException('Admin username, email, or phone exists');
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  async authOwner(): Promise<boolean> {
+    const existingAdmin = await this.prisma.adminMember.findFirst({
+      select: { id: true },
+    });
+
+    return Boolean(existingAdmin);
   }
 }

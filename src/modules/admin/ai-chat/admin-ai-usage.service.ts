@@ -1,11 +1,11 @@
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
-  CreditWalletType,
   LineChatSender,
+  Prisma,
+  UsageKind,
 } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
-
-const ADMIN_AI_QUERY_COST = 1;
+import { CreditService } from '../../usage/credit-point/credit.service';
 
 const ADMIN_SUMMARY_SELECT = {
   id: true,
@@ -13,7 +13,6 @@ const ADMIN_SUMMARY_SELECT = {
   firstname: true,
   lastname: true,
   role: true,
-  aiUsage: { select: { messageCount: true, lastUsedAt: true } },
 } as const;
 
 type AdminSummaryRow = {
@@ -22,7 +21,18 @@ type AdminSummaryRow = {
   firstname: string;
   lastname: string;
   role: string;
-  aiUsage: { messageCount: number; lastUsedAt: Date | null } | null;
+};
+
+type UsageTotals = {
+  messageCount: number;
+  lastUsedAt: Date | null;
+  chargedCredit: Prisma.Decimal;
+};
+
+type BudgetRow = {
+  scopeKey: string;
+  limitCredit: Prisma.Decimal | null;
+  usedCredit: Prisma.Decimal;
 };
 
 export type AdminAiUsageSummary = {
@@ -35,107 +45,57 @@ export type AdminAiUsageSummary = {
   lastUsedAt: string | null;
   /** LINE customer replies pushed by this admin (counted from LineChatHistory). */
   customerReplyCount: number;
+  /** Credits this admin has burned in total. */
+  chargedCreditTotal: string;
+  /** Persistent budget for this admin; `limitCredit` null means unlimited. */
+  usedCredit: string;
+  limitCredit: string | null;
 };
 
 /**
- * Back-office AI usage accounting.
+ * Back-office AI usage reporting.
  *
- * Two separate concerns:
- * - per-admin attribution lives in `AdminAiUsage` (who used how much)
- * - the org-wide pool is `CreditWallet[ADMIN_AI_QUERY]`, kept apart from the
- *   customer-facing LINE_MESSAGE / AI_USAGE wallets
- *
- * The wallet gate is opt-in: when no ADMIN_AI_QUERY wallet row exists the
- * feature is treated as unmetered, so admin chat works before billing is set
- * up instead of failing closed on an unconfigured install.
+ * There is no separate admin wallet: admin calls are debited from the single
+ * company `CreditWallet` and attributed through `AiUsageEvent.adminMemberId`,
+ * while each admin's allowance is a `CreditBudget` row scoped by
+ * `scopeKey = adminMemberId`.
  */
 @Injectable()
 export class AdminAiUsageService {
-  private readonly logger = new Logger(AdminAiUsageService.name);
-
-  constructor(private readonly prisma: PrismaService) {}
-
-  /**
-   * Charges the shared admin-AI pool when one is configured.
-   * Throws 402 only when a wallet exists and is out of credit.
-   */
-  async reserveAdminAiCredit(): Promise<void> {
-    const wallet = await this.prisma.creditWallet.findUnique({
-      where: { type: CreditWalletType.ADMIN_AI_QUERY },
-      select: { id: true, active: true },
-    });
-
-    if (!wallet) {
-      this.logger.debug(
-        'No ADMIN_AI_QUERY wallet configured — admin AI usage is unmetered',
-      );
-      return;
-    }
-
-    if (!wallet.active) return;
-
-    const result = await this.prisma.creditWallet.updateMany({
-      where: {
-        type: CreditWalletType.ADMIN_AI_QUERY,
-        active: true,
-        balance: { gte: ADMIN_AI_QUERY_COST },
-      },
-      data: {
-        balance: { decrement: ADMIN_AI_QUERY_COST },
-        usedTotal: { increment: ADMIN_AI_QUERY_COST },
-      },
-    });
-
-    if (result.count === 0) {
-      throw new HttpException(
-        'Insufficient admin AI credit',
-        HttpStatus.PAYMENT_REQUIRED,
-      );
-    }
-  }
-
-  async refundAdminAiCredit(): Promise<void> {
-    await this.prisma.creditWallet.updateMany({
-      where: { type: CreditWalletType.ADMIN_AI_QUERY, active: true },
-      data: {
-        balance: { increment: ADMIN_AI_QUERY_COST },
-        usedTotal: { decrement: ADMIN_AI_QUERY_COST },
-      },
-    });
-  }
-
-  async recordUsage(adminMemberId: string): Promise<void> {
-    await this.prisma.adminAiUsage.upsert({
-      where: { adminMemberId },
-      create: { adminMemberId, messageCount: 1, lastUsedAt: new Date() },
-      update: {
-        messageCount: { increment: 1 },
-        lastUsedAt: new Date(),
-      },
-    });
-  }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly creditService: CreditService,
+  ) {}
 
   async getMyUsage(adminMemberId: string): Promise<AdminAiUsageSummary> {
-    const [admin, customerReplyCount] = await Promise.all([
+    const [admin, totals, customerReplyCount, budgets] = await Promise.all([
       this.prisma.adminMember.findUniqueOrThrow({
         where: { id: adminMemberId },
         select: ADMIN_SUMMARY_SELECT,
       }),
+      this.loadTotals(adminMemberId),
       this.prisma.lineChatHistory.count({
         where: { sender: LineChatSender.ADMIN, sentByAdminId: adminMemberId },
       }),
+      this.creditService.listBudgets(UsageKind.ADMIN_AI_QUERY),
     ]);
 
-    return this.toSummary(admin, customerReplyCount);
+    return this.toSummary(
+      admin,
+      totals.get(adminMemberId),
+      customerReplyCount,
+      budgets.find((budget) => budget.scopeKey === adminMemberId),
+    );
   }
 
   /** Owner/dev view: usage for every admin account. */
   async listAllUsage(): Promise<AdminAiUsageSummary[]> {
-    const [admins, replyCounts] = await Promise.all([
+    const [admins, totals, replyCounts, budgets] = await Promise.all([
       this.prisma.adminMember.findMany({
         select: ADMIN_SUMMARY_SELECT,
         orderBy: { username: 'asc' },
       }),
+      this.loadTotals(),
       this.prisma.lineChatHistory.groupBy({
         by: ['sentByAdminId'],
         where: {
@@ -144,22 +104,83 @@ export class AdminAiUsageService {
         },
         _count: { _all: true },
       }),
+      this.creditService.listBudgets(UsageKind.ADMIN_AI_QUERY),
     ]);
 
     const repliesByAdmin = new Map(
       replyCounts.map((row) => [row.sentByAdminId as string, row._count._all]),
     );
+    const budgetsByAdmin = new Map(
+      budgets.map((budget) => [budget.scopeKey, budget]),
+    );
 
     return admins
       .map((admin) =>
-        this.toSummary(admin, repliesByAdmin.get(admin.id) ?? 0),
+        this.toSummary(
+          admin,
+          totals.get(admin.id),
+          repliesByAdmin.get(admin.id) ?? 0,
+          budgetsByAdmin.get(admin.id),
+        ),
       )
       .sort((a, b) => b.messageCount - a.messageCount);
   }
 
+  /** Sets one admin's AI allowance; `null` limit means unlimited. */
+  async setLimit(adminMemberId: string, limitCredit: string | null) {
+    await this.prisma.adminMember.findUniqueOrThrow({
+      where: { id: adminMemberId },
+      select: { id: true },
+    });
+
+    const budget = await this.creditService.setBudgetLimit(
+      UsageKind.ADMIN_AI_QUERY,
+      adminMemberId,
+      limitCredit === null ? null : new Prisma.Decimal(limitCredit),
+    );
+
+    return {
+      adminMemberId,
+      usedCredit: budget.usedCredit.toString(),
+      limitCredit: budget.limitCredit?.toString() ?? null,
+    };
+  }
+
+  /** Successful admin AI calls grouped by admin, from the usage event log. */
+  private async loadTotals(
+    adminMemberId?: string,
+  ): Promise<Map<string, UsageTotals>> {
+    const rows = await this.prisma.aiUsageEvent.groupBy({
+      by: ['adminMemberId'],
+      where: {
+        kind: UsageKind.ADMIN_AI_QUERY,
+        status: 'success',
+        adminMemberId: adminMemberId ? adminMemberId : { not: null },
+      },
+      _count: { _all: true },
+      _max: { createdAt: true },
+      _sum: { chargedCredit: true },
+    });
+
+    return new Map(
+      rows
+        .filter((row) => row.adminMemberId !== null)
+        .map((row) => [
+          row.adminMemberId as string,
+          {
+            messageCount: row._count._all,
+            lastUsedAt: row._max.createdAt,
+            chargedCredit: row._sum.chargedCredit ?? new Prisma.Decimal(0),
+          },
+        ]),
+    );
+  }
+
   private toSummary(
     admin: AdminSummaryRow,
+    totals: UsageTotals | undefined,
     customerReplyCount: number,
+    budget: BudgetRow | undefined,
   ): AdminAiUsageSummary {
     return {
       adminMemberId: admin.id,
@@ -167,9 +188,14 @@ export class AdminAiUsageService {
       firstname: admin.firstname,
       lastname: admin.lastname,
       role: admin.role,
-      messageCount: admin.aiUsage?.messageCount ?? 0,
-      lastUsedAt: admin.aiUsage?.lastUsedAt?.toISOString() ?? null,
+      messageCount: totals?.messageCount ?? 0,
+      lastUsedAt: totals?.lastUsedAt?.toISOString() ?? null,
       customerReplyCount,
+      chargedCreditTotal: (
+        totals?.chargedCredit ?? new Prisma.Decimal(0)
+      ).toString(),
+      usedCredit: (budget?.usedCredit ?? new Prisma.Decimal(0)).toString(),
+      limitCredit: budget?.limitCredit?.toString() ?? null,
     };
   }
 }

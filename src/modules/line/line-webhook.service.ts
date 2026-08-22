@@ -13,7 +13,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ChatbotService } from '../chatbot/chatbot.service';
 import { LoadContextService } from '../chatbot/context/load-context.service';
 import type { ChatResponse } from '../chatbot/types/chat.types';
-import { CreditService } from '../usage/credit-point/credit.service';
 import type {
   LineMessageEvent,
   LinePostbackEvent,
@@ -25,6 +24,7 @@ import type {
 } from './dto/line-admin.dto';
 import { LineService } from './line-reply.service';
 import { LINE_EVENT_MAX_AGE_MS } from './line-events.queue';
+import { LineAdminService } from './admin/line-admin.service';
 
 type IncomingLineChatMessage = {
   messageType: LineChatMessageType;
@@ -53,7 +53,7 @@ export class LineWebhookService {
     private readonly lineService: LineService,
     private readonly chatbotService: ChatbotService,
     private readonly loadContextService: LoadContextService,
-    private readonly creditService: CreditService,
+    private readonly lineAdminService: LineAdminService,
   ) {}
 
   /**
@@ -66,7 +66,7 @@ export class LineWebhookService {
     const savedIncomingEvent = await this.saveIncomingEvent(event);
 
     if (event.type !== 'message') return;
-    
+
     if (
       event.message.type !== 'text' &&
       event.message.type !== 'image' &&
@@ -74,9 +74,8 @@ export class LineWebhookService {
     ) {
       return;
     }
-  
-    if (!event.source?.userId)  return;
-    
+
+    if (!event.source?.userId) return;
 
     const recentMessages = savedIncomingEvent
       ? await this.loadContextService.load(savedIncomingEvent.conversationId)
@@ -85,10 +84,18 @@ export class LineWebhookService {
     let response: ChatResponse;
     let contextUserText: string;
 
+    // Carried into every AI call so the resulting AiUsageEvent points back at
+    // the thread that caused the spend.
+    const thread = {
+      lineMemberId: savedIncomingEvent?.lineMemberId,
+      conversationId: savedIncomingEvent?.conversationId,
+    };
+
     if (event.message.type === 'text') {
       contextUserText = event.message.text;
       response = await this.chatbotService.handleTextMessage({
         userId: event.source.userId,
+        ...thread,
         text: event.message.text,
         recentMessages,
       });
@@ -104,6 +111,7 @@ export class LineWebhookService {
         const image = await this.lineService.getImageContent(event.message.id);
         response = await this.chatbotService.handleImageMessage({
           userId: event.source.userId,
+          ...thread,
           image,
           recentMessages,
         });
@@ -112,6 +120,7 @@ export class LineWebhookService {
       contextUserText = event.message.text?.trim() || '[sticker]';
       response = await this.chatbotService.handleStickerMessage({
         userId: event.source.userId,
+        ...thread,
         packageId: event.message.packageId,
         stickerId: event.message.stickerId,
         text: event.message.text,
@@ -126,8 +135,6 @@ export class LineWebhookService {
       );
       return;
     }
-
-    // await this.creditService.reserveLineReplyCredit();
 
     const replySent = await this.lineService.replyText(
       event.replyToken,
@@ -175,7 +182,7 @@ export class LineWebhookService {
     const chatMessage = this.toChatMessage(event);
 
     if (!chatMessage) return null;
-    
+
     // A webhook retry can happen after the inbound transaction committed but
     // before LINE was replied to. Reuse the existing row so the conversation
     // unread count and USER history are not written twice.
@@ -233,7 +240,7 @@ export class LineWebhookService {
             stickerResourceType: chatMessage.stickerResourceType,
             mediaUrl: chatMessage.mediaUrl,
             postbackData: chatMessage.postbackData,
-            rawEvent: event as unknown as Prisma.InputJsonValue,
+            rawEvent: event,
             sentStatus: 'received',
             createdAt: messageAt,
           },
@@ -375,7 +382,7 @@ export class LineWebhookService {
       throw new NotFoundException('LINE conversation not found');
     }
 
-    await this.lineService.pushText(
+    await this.lineAdminService.pushText(
       conversation.lineMember.lineUserId,
       body.text,
     );
@@ -449,7 +456,7 @@ export class LineWebhookService {
     });
   }
 
-    /**
+  /**
    * Claims a webhook event for processing by inserting its id under a
    * unique constraint. Returns false when the event was already claimed,
    * so a duplicate delivery is skipped and never replied to twice.
@@ -494,7 +501,7 @@ export class LineWebhookService {
       return existingMember;
     }
 
-    const profile = await this.lineService.getProfile(lineUserId);
+    const profile = await this.lineAdminService.getProfile(lineUserId);
     const syncedAt = new Date();
 
     return this.prisma.lineMember.upsert({

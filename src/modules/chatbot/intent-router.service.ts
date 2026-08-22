@@ -10,6 +10,7 @@ import {
   RouteDecision,
 } from './types/chat.types';
 import { fromRule } from './intent/intent.utils';
+import type { LineAiUsageContext } from '../usage/billing/ai-usage.types';
 
 @Injectable()
 export class IntentRouterService {
@@ -20,13 +21,22 @@ export class IntentRouterService {
     private readonly aiIntentClassifierService: AiIntentClassifierService,
   ) {}
 
-  async resolve(params: {
-    userId: string;
-    input: string;
-    session: ConversationSession | undefined;
-    recentMessages?: readonly ChatContextMessage[];
-  }): Promise<RouteDecision> {
-    const { userId, input, session, recentMessages = [] } = params;
+  async resolve(
+    params: LineAiUsageContext & {
+      userId: string;
+      input: string;
+      session: ConversationSession | undefined;
+      recentMessages?: readonly ChatContextMessage[];
+    },
+  ): Promise<RouteDecision> {
+    const {
+      userId,
+      input,
+      session,
+      recentMessages = [],
+      lineMemberId,
+      conversationId,
+    } = params;
 
     this.logger.debug(
       `session flow=
@@ -91,6 +101,8 @@ export class IntentRouterService {
     // Rule/session routing ends here; retrieval owns cache -> DB -> embedding.
     const retrieval = await this.knowledgeRetrievalService.retrieve(input, {
       userId,
+      lineMemberId,
+      conversationId,
       recentMessages,
     });
 
@@ -110,6 +122,8 @@ export class IntentRouterService {
 
     return this.resolveLowConfidence({
       userId,
+      lineMemberId,
+      conversationId,
       input,
       recentMessages,
       retrieval,
@@ -117,24 +131,30 @@ export class IntentRouterService {
     });
   }
 
-  async resolveLowConfidence(params: {
-    userId: string;
-    input: string;
-    recentMessages?: readonly ChatContextMessage[];
-    retrieval?: KnowledgeRetrievalResult;
-    fallbackReason?: string;
-  }): Promise<RouteDecision> {
+  async resolveLowConfidence(
+    params: LineAiUsageContext & {
+      userId: string;
+      input: string;
+      recentMessages?: readonly ChatContextMessage[];
+      retrieval?: KnowledgeRetrievalResult;
+      fallbackReason?: string;
+    },
+  ): Promise<RouteDecision> {
     const {
       userId,
       input,
       recentMessages = [],
       retrieval,
       fallbackReason,
+      lineMemberId,
+      conversationId,
     } = params;
     const analysis = await this.aiIntentClassifierService.classifyLowConfidence(
       input,
       {
         userId,
+        lineMemberId,
+        conversationId,
         recentMessages,
       },
     );

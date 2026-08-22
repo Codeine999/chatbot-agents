@@ -36,10 +36,34 @@ export type AiProviderGenerateRequest = AiGenerateRequest &
     model: string;
   }>;
 
+/**
+ * Provider-neutral billable token usage.
+ *
+ * `inputTokens` is always the *non-cached* prompt tokens: providers that
+ * report cached reads inside their prompt total (Gemini, OpenAI) have them
+ * subtracted during normalization, so the four buckets never double-count.
+ */
+export type AiTokenUsage = Readonly<{
+  inputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+}>;
+
+export const EMPTY_AI_TOKEN_USAGE: AiTokenUsage = {
+  inputTokens: 0,
+  cachedInputTokens: 0,
+  cacheWriteTokens: 0,
+  outputTokens: 0,
+};
+
 export type AiGenerateResponse = Readonly<{
   text: string;
   provider: AiProviderName;
   model: string;
+  /** Actual usage reported by the provider — the source of truth for billing. */
+  usage: AiTokenUsage;
+  providerRequestId?: string;
 }>;
 
 export type AiProviderRuntimeSetting = Readonly<{

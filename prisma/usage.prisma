@@ -1,8 +1,8 @@
 enum UsageKind {
-  LINE_AI_REPLY       // AI ตอบลูกค้าใน LINE OA
-  ADMIN_AI_QUERY      // แอดมินถาม AI หลังบ้าน
-  EMBEDDING           // สร้าง vector ให้ AnswerPattern
-  LINE_PUSH_MESSAGE   // ค่าส่งข้อความ LINE (ไม่ใช่ token)
+  LINE_AI_REPLY // AI ตอบลูกค้าใน LINE OA
+  ADMIN_AI_QUERY // แอดมินถาม AI หลังบ้าน
+  EMBEDDING // สร้าง vector ให้ AnswerPattern
+  LINE_PUSH_MESSAGE // ค่าส่งข้อความ LINE (ไม่ใช่ token)
 }
 
 enum LedgerType {
@@ -13,30 +13,41 @@ enum LedgerType {
   EXPIRE
 }
 
+enum CreditTopupStatus {
+  PENDING  @map("pending")
+  APPROVED @map("approved")
+  REJECTED @map("rejected")
+}
+
 model AiModelPricing {
   id       String         @id @default(uuid()) @db.Uuid
   provider AiProviderName
   model    String         @db.VarChar(150)
 
-  /// micro-USD ต่อ 1,000,000 tokens — integer ล้วน
-  inputMicroUsdPerMTok       BigInt
-  outputMicroUsdPerMTok      BigInt
-  cachedInputMicroUsdPerMTok BigInt?
-  cacheWriteMicroUsdPerMTok  BigInt?
+  inputCostThbPerMillTokens       Decimal  @default(0) @db.Decimal(20, 6)
+  outputCostThbPerMillTokens      Decimal  @default(0) @db.Decimal(20, 6)
+  cachedInputCostThbPerMillTokens Decimal? @db.Decimal(20, 6)
+  cacheWriteCostThbPerMillTokens  Decimal? @db.Decimal(20, 6)
+
+  inputCreditPerMillTokens       Decimal  @default(0) @db.Decimal(20, 6)
+  outputCreditPerMillTokens      Decimal  @default(0) @db.Decimal(20, 6)
+  cachedInputCreditPerMillTokens Decimal? @db.Decimal(20, 6)
+  cacheWriteCreditPerMillTokens  Decimal? @db.Decimal(20, 6)
 
   effectiveFrom DateTime
   effectiveTo   DateTime?
 
   usageEvents AiUsageEvent[]
 
-  @@map("ai_model_pricing")
   @@unique([provider, model, effectiveFrom])
   @@index([provider, model, effectiveFrom, effectiveTo])
+  @@map("ai_model_pricing")
 }
 
 model AiUsageEvent {
   id        String    @id @default(uuid()) @db.Uuid
   companyId String    @db.Uuid
+  company   Company   @relation(fields: [companyId], references: [id])
   kind      UsageKind
 
   provider AiProviderName
@@ -45,10 +56,10 @@ model AiUsageEvent {
   inputTokens       Int @default(0)
   cachedInputTokens Int @default(0)
   cacheWriteTokens  Int @default(0)
-  outputTokens      Int @default(0)   // รวม reasoning/thoughts แล้ว
+  outputTokens      Int @default(0) // รวม reasoning/thoughts แล้ว
 
-  costMicroUsd BigInt @default(0)     // ต้นทุนจริง — ไม่โชว์ลูกค้า
-  chargedMicro BigInt @default(0)     // เครดิตที่หัก (1 credit = 1e6)
+  costThb       Decimal @default(0) @db.Decimal(20, 6) // ต้นทุนจริง — ไม่โชว์ลูกค้า
+  chargedCredit Decimal @default(0) @db.Decimal(20, 6) // เครดิตที่หัก (1 credit = 1e6)
 
   pricingId String?         @db.Uuid
   pricing   AiModelPricing? @relation(fields: [pricingId], references: [id])
@@ -69,32 +80,32 @@ model AiUsageEvent {
 
   ledgerEntry CreditLedger?
 
-  @@map("ai_usage_events")
   @@index([companyId, createdAt])
   @@index([companyId, kind, createdAt])
   @@index([adminMemberId, createdAt])
   @@index([provider, model, createdAt])
+  @@map("ai_usage_events")
 }
 
 model CreditWallet {
-  id        String @id @default(uuid()) @db.Uuid
-  companyId String @unique @db.Uuid
+  id        String  @id @default(uuid()) @db.Uuid
+  companyId String  @unique @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id])
 
-  /// 1 credit = 1,000,000 micro — ห้ามใช้ Float กับเงิน
-  balanceMicro       BigInt @default(0)
-  reservedMicro      BigInt @default(0)   // จองระหว่างรอ provider ตอบ
-  lifetimeTopupMicro BigInt @default(0)
-  lifetimeSpentMicro BigInt @default(0)
+  balanceCredit       Decimal @default(0) @db.Decimal(20, 6)
+  reservedCredit      Decimal @default(0) @db.Decimal(20, 6) // จองระหว่างรอ provider ตอบ
+  lifetimeTopupCredit Decimal @default(0) @db.Decimal(20, 6)
+  lifetimeSpentCredit Decimal @default(0) @db.Decimal(20, 6)
 
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  ledger  CreditLedger[]
-  budgets CreditBudget[]
+  ledger       CreditLedger[]
+  budgets      CreditBudget[]
 
+  @@unique([id, companyId]) // เผื่อทำ composite FK ตอนขึ้น multi-tenant
   @@map("credit_wallets")
-  @@unique([id, companyId])   // เผื่อทำ composite FK ตอนขึ้น multi-tenant
 }
 
 model CreditBudget {
@@ -104,16 +115,17 @@ model CreditBudget {
 
   kind     UsageKind
   scopeKey String    @default("*") @db.VarChar(64)
-  period   String    @db.VarChar(7)     // "2026-08"
 
-  limitMicro BigInt?  // null = ไม่จำกัด
-  usedMicro  BigInt   @default(0)
+  limitCredit    Decimal? @db.Decimal(20, 6)
+  usedCredit     Decimal  @default(0) @db.Decimal(20, 6)
+  /// Credit held by provider calls that have not settled yet.
+  reservedCredit Decimal  @default(0) @db.Decimal(20, 6)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([walletId, kind, scopeKey])
   @@map("credit_budgets")
-  @@unique([walletId, kind, scopeKey, period])
 }
 
 model CreditLedger {
@@ -121,9 +133,9 @@ model CreditLedger {
   walletId String       @db.Uuid
   wallet   CreditWallet @relation(fields: [walletId], references: [id])
 
-  type              LedgerType
-  amountMicro       BigInt      // + เข้า, - ออก
-  balanceAfterMicro BigInt
+  type               LedgerType
+  amountCredit       Decimal    @default(0) @db.Decimal(20, 6) // + เข้า, - ออก
+  balanceAfterCredit Decimal    @default(0) @db.Decimal(20, 6)
 
   kind         UsageKind?
   usageEventId String?       @unique @db.Uuid
@@ -135,7 +147,38 @@ model CreditLedger {
 
   createdAt DateTime @default(now())
 
-  @@map("credit_ledger")
   @@index([walletId, createdAt])
   @@index([walletId, kind, createdAt])
+  @@map("credit_ledger")
+}
+
+model CreditTopupHistory {
+  id        String  @id @default(uuid()) @db.Uuid
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id])
+
+  type         PaymentType @default(Slip)
+  creditAmount Decimal @db.Decimal(20, 6)
+  slipImage    String  @db.VarChar(500)
+
+  status CreditTopupStatus @default(PENDING)
+
+  requestedById String      @db.Uuid
+  requestedBy   AdminMember @relation("CreditTopupRequestedBy", fields: [requestedById], references: [id])
+
+  approvedById String?      @db.Uuid
+  approvedBy   AdminMember? @relation("CreditTopupApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  rejectedById String?      @db.Uuid
+  rejectedBy   AdminMember? @relation("CreditTopupRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
+  rejectedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, createdAt])
+  @@index([status, createdAt])
+  @@index([requestedById, createdAt])
+  @@map("credit_topups")
 }

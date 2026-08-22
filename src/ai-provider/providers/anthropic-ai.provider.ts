@@ -12,14 +12,27 @@ import {
 import {
   AiGenerateResponse,
   AiProviderGenerateRequest,
+  AiTokenUsage,
 } from '../types/ai-provider.types';
+import { normalizeTokenUsage } from '../utils/token-usage.utils';
 import { AiProviderAdapter } from './ai-provider.interface';
+import {
+  isTransientProviderFailure,
+  RetryableAiProviderException,
+} from '../errors/ai-provider-error';
 
 type AnthropicResponsePayload = {
+  id?: string;
   content?: Array<{
     type?: string;
     text?: string;
   }>;
+  usage?: {
+    input_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+    output_tokens?: number;
+  };
 };
 
 @Injectable()
@@ -79,7 +92,14 @@ export class AnthropicAiProvider implements AiProviderAdapter {
         this.logger.error(
           `Anthropic API request failed with status=${response.status}`,
         );
-        throw new BadGatewayException('Anthropic generation failed');
+        if (response.status === 429 || response.status >= 500) {
+          throw new RetryableAiProviderException(
+            `Anthropic generation temporarily failed (${response.status})`,
+          );
+        }
+        throw new BadGatewayException(
+          `Anthropic generation rejected (${response.status})`,
+        );
       }
 
       const payload = (await response.json()) as AnthropicResponsePayload;
@@ -92,12 +112,33 @@ export class AnthropicAiProvider implements AiProviderAdapter {
           .join('\n'),
         provider: this.name,
         model: request.model,
+        usage: this.toUsage(payload),
+        providerRequestId: payload.id,
       };
     } catch (error) {
       if (error instanceof BadGatewayException) throw error;
       this.logger.error(`Anthropic generation failed: ${String(error)}`);
+      if (isTransientProviderFailure(error)) {
+        throw new RetryableAiProviderException(
+          'Anthropic generation temporarily failed',
+        );
+      }
       throw new BadGatewayException('Anthropic generation failed');
     }
+  }
+
+  /**
+   * Anthropic reports `input_tokens` with cache reads/writes already excluded,
+   * so the prompt count is used as-is.
+   */
+  private toUsage(payload: AnthropicResponsePayload): AiTokenUsage {
+    return normalizeTokenUsage({
+      promptTokens: payload.usage?.input_tokens,
+      cachedInputTokens: payload.usage?.cache_read_input_tokens,
+      cacheWriteTokens: payload.usage?.cache_creation_input_tokens,
+      outputTokens: payload.usage?.output_tokens,
+      cachedInPrompt: false,
+    });
   }
 
   private toContent(message: AiProviderGenerateRequest['messages'][number]) {

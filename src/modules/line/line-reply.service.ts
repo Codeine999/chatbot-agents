@@ -62,54 +62,6 @@ export class LineService {
     );
   }
 
-  private getAccessToken(): string {
-    return this.configService.getOrThrow<string>('LINE_CHANNEL_ACCESS_TOKEN');
-  }
-
-  async getProfile(lineUserId: string): Promise<LineProfile> {
-    return this.getJson<LineProfile>(
-      `/v2/bot/profile/${encodeURIComponent(lineUserId)}`,
-      'LINE profile',
-    );
-  }
-
-  async getBotInfo(): Promise<LineBotInfo> {
-    return this.getJson<LineBotInfo>('/v2/bot/info', 'LINE bot info');
-  }
-
-  /** `date` must be `YYYYMMDD`. LINE insight data can lag by a few days. */
-  async getFollowerInsight(date: string): Promise<LineFollowerInsight> {
-    return this.getJson<LineFollowerInsight>(
-      `/v2/bot/insight/followers?date=${encodeURIComponent(date)}`,
-      'LINE follower insight',
-    );
-  }
-
-  async getMessageQuotaConsumption(): Promise<LineMessageQuotaConsumption> {
-    return this.getJson<LineMessageQuotaConsumption>(
-      '/v2/bot/message/quota/consumption',
-      'LINE message quota consumption',
-    );
-  }
-
-  private async getJson<T>(path: string, resource: string): Promise<T> {
-    const response = await fetch(`https://api.line.me${path}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${this.getAccessToken()}`,
-      },
-      signal: AbortSignal.timeout(this.httpTimeoutMs),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`${resource} error:`, errorText);
-      throw new InternalServerErrorException(`Failed to get ${resource}`);
-    }
-
-    return response.json() as Promise<T>;
-  }
-
   async getImageContent(messageId: string): Promise<AiProviderImage> {
     const response = await fetch(
       `https://api-data.line.me/v2/bot/message/${encodeURIComponent(messageId)}/content`,
@@ -158,11 +110,6 @@ export class LineService {
     };
   }
 
-  /**
-   * Replies via the LINE reply API, gated by the global reply limit.
-   * Returns false when the reply was dropped by the limiter — a safe drop
-   * is preferred over retrying with a reply token that may expire.
-   */
   async replyText(replyToken: string, text: string): Promise<boolean> {
     const replyBudget = await this.rateLimitService.consume(
       'rl:line:global:reply',
@@ -207,36 +154,6 @@ export class LineService {
     return true;
   }
 
-  async pushText(lineUserId: string, text: string): Promise<void> {
-    const accessToken = this.getAccessToken();
-
-    const response = await fetch('https://api.line.me/v2/bot/message/push', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        to: lineUserId,
-        messages: [
-          {
-            type: 'text',
-            text,
-          },
-        ],
-      }),
-      signal: AbortSignal.timeout(this.httpTimeoutMs),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('LINE push error:', errorText);
-      throw new InternalServerErrorException('Failed to push LINE message');
-    }
-
-    await this.companyService.recordOutboundMessage();
-  }
-
   private resolveImageMediaType(
     header: string | null,
     bytes: Buffer,
@@ -278,4 +195,9 @@ export class LineService {
 
     return null;
   }
+
+  private getAccessToken(): string {
+    return this.configService.getOrThrow<string>('LINE_CHANNEL_ACCESS_TOKEN');
+  }
+
 }

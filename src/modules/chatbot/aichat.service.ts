@@ -48,6 +48,8 @@ export class AiChatService {
       context.retrieval ??
       (await this.knowledgeRetrievalService.retrieve(retrievalQuery, {
         userId: context.userId,
+        lineMemberId: context.lineMemberId,
+        conversationId: context.conversationId,
         recentMessages: context.recentMessages,
       }));
 
@@ -95,7 +97,7 @@ export class AiChatService {
       messages,
       systemInstruction,
       fallbackMessage,
-      context.userId,
+      context,
     );
   }
 
@@ -116,18 +118,21 @@ export class AiChatService {
     }
 
     try {
-      const response = await this.usersAiProviderService.generate({
-        systemInstruction: this.buildImageSystemInstruction(tone),
-        messages: [
-          {
-            role: 'user',
-            text: 'จำแนกความปลอดภัยของภาพและอธิบายเฉพาะกรณี SAFE_GENERAL ตาม JSON schema ที่กำหนด',
-            images: [image],
-          },
-        ],
-        temperature: 0,
-        maxOutputTokens: AI_GENERATION_CONFIG.maxOutputTokens,
-      });
+      const response = await this.usersAiProviderService.generate(
+        {
+          systemInstruction: this.buildImageSystemInstruction(tone),
+          messages: [
+            {
+              role: 'user',
+              text: 'จำแนกความปลอดภัยของภาพและอธิบายเฉพาะกรณี SAFE_GENERAL ตาม JSON schema ที่กำหนด',
+              images: [image],
+            },
+          ],
+          temperature: 0,
+          maxOutputTokens: AI_GENERATION_CONFIG.maxOutputTokens,
+        },
+        context,
+      );
       const analysis = parseImageAnalysisResponse(response.text);
 
       if (!analysis || !isSafeImageAnalysis(analysis)) {
@@ -178,19 +183,22 @@ export class AiChatService {
     messages: readonly AiProviderMessage[],
     systemInstruction: string,
     fallbackMessage: string,
-    userId?: string,
+    context: AiRequestContext,
   ): Promise<AiAnswerResult> {
-    if (!(await this.aiBudgetService.tryConsume(userId))) {
+    if (!(await this.aiBudgetService.tryConsume(context.userId))) {
       return { text: fallbackMessage, isFallback: true };
     }
 
     try {
-      const response = await this.usersAiProviderService.generate({
-        messages,
-        systemInstruction,
-        temperature: AI_GENERATION_CONFIG.temperature,
-        maxOutputTokens: AI_GENERATION_CONFIG.maxOutputTokens,
-      });
+      const response = await this.usersAiProviderService.generate(
+        {
+          messages,
+          systemInstruction,
+          temperature: AI_GENERATION_CONFIG.temperature,
+          maxOutputTokens: AI_GENERATION_CONFIG.maxOutputTokens,
+        },
+        context,
+      );
       const text = response.text.trim();
       return text
         ? { text, isFallback: false }
@@ -224,12 +232,15 @@ export class AiChatService {
     }
 
     try {
-      const response = await this.usersAiProviderService.generate({
-        messages,
-        systemInstruction,
-        temperature: 0,
-        maxOutputTokens: AI_GENERATION_CONFIG.maxOutputTokens,
-      });
+      const response = await this.usersAiProviderService.generate(
+        {
+          messages,
+          systemInstruction,
+          temperature: 0,
+          maxOutputTokens: AI_GENERATION_CONFIG.maxOutputTokens,
+        },
+        context,
+      );
       const text = response.text.trim();
 
       if (this.isInsufficientContext(text)) {
@@ -315,12 +326,12 @@ export class AiChatService {
       tone ? `โทนคำตอบ: ${tone}` : null,
       `คืน JSON เท่านั้นตามรูปแบบนี้:
       {"classification":"SAFE_GENERAL|TRANSACTION|BUSINESS_UNVERIFIED|UNREADABLE","answer":"..."}`,
-            `กฎการจำแนก:
+      `กฎการจำแนก:
       - TRANSACTION: สลิป หลักฐานโอนเงิน หน้าจอธนาคาร QR ชำระเงิน ใบเสร็จ ยอดเงิน เลขบัญชี หรือข้อมูลธุรกรรมทุกชนิด
       - BUSINESS_UNVERIFIED: คำตอบที่ต้องอาศัยข้อมูลร้าน เช่น ราคา สต็อก โปรโมชั่น การจัดส่ง นโยบาย สถานะคำสั่งซื้อ หรือการยืนยันจากระบบ
       - UNREADABLE: ภาพไม่ชัด อ่านไม่ได้ หรือไม่มั่นใจ
       - SAFE_GENERAL: อธิบายวัตถุ บุคคล สัตว์ สถานที่ หรือข้อความทั่วไปที่เห็นได้ชัด โดยไม่แต่งข้อมูล`,
-            `กฎคำตอบ:
+      `กฎคำตอบ:
       - ถ้าเป็น TRANSACTION, BUSINESS_UNVERIFIED หรือ UNREADABLE ให้ answer เป็นสตริงว่าง
       - ถ้าเป็น SAFE_GENERAL ให้ตอบภาษาไทย สุภาพ กระชับ เฉพาะสิ่งที่เห็นในภาพ
       - ห้ามถอดหรือเปิดเผยเลขบัญชี เบอร์โทร ยอดเงิน หรือข้อมูลส่วนบุคคล

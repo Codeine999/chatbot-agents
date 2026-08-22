@@ -8,6 +8,8 @@ import { AdminAnswerPatternController } from './knowledge/admin-answer-pattern.c
 import { AdminAnswerPatternService } from './knowledge/admin-answer-pattern.service';
 import { AiModule } from '../chatbot/ai.module';
 import { AdminChatModule } from './ai-chat/admin-chat.module';
+import { CompanyModule } from './company/company.module';
+import { AdminBillModule } from './bill/admin-bill.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { AdminChatModule } from './ai-chat/admin-chat.module';
     AiProviderModule,
     AiModule,
     AdminChatModule,
+    CompanyModule,
+    AdminBillModule,
   ],
   controllers: [AdminController, AdminAnswerPatternController],
   providers: [AdminService, AdminAnswerPatternService],

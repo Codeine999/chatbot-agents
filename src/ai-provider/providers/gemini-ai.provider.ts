@@ -13,8 +13,21 @@ import {
 import {
   AiGenerateResponse,
   AiProviderGenerateRequest,
+  AiTokenUsage,
 } from '../types/ai-provider.types';
+import { normalizeTokenUsage } from '../utils/token-usage.utils';
 import { AiProviderAdapter } from './ai-provider.interface';
+import {
+  isTransientProviderFailure,
+  RetryableAiProviderException,
+} from '../errors/ai-provider-error';
+
+type GeminiUsageMetadata = {
+  promptTokenCount?: number;
+  cachedContentTokenCount?: number;
+  candidatesTokenCount?: number;
+  thoughtsTokenCount?: number;
+};
 
 @Injectable()
 export class GeminiAiProvider implements AiProviderAdapter {
@@ -59,11 +72,32 @@ export class GeminiAiProvider implements AiProviderAdapter {
         text: response.text?.trim() ?? '',
         provider: this.name,
         model: request.model,
+        usage: this.toUsage(response.usageMetadata),
+        providerRequestId: response.responseId,
       };
     } catch (error) {
       this.logger.error(`Gemini generation failed: ${String(error)}`);
+      if (isTransientProviderFailure(error)) {
+        throw new RetryableAiProviderException(
+          'Gemini generation temporarily failed',
+        );
+      }
       throw new BadGatewayException('Gemini generation failed');
     }
+  }
+
+  /**
+   * `promptTokenCount` already includes cached content, and reasoning is
+   * reported separately as `thoughtsTokenCount` but billed as output.
+   */
+  private toUsage(usage: GeminiUsageMetadata | undefined): AiTokenUsage {
+    return normalizeTokenUsage({
+      promptTokens: usage?.promptTokenCount,
+      cachedInputTokens: usage?.cachedContentTokenCount,
+      outputTokens:
+        (usage?.candidatesTokenCount ?? 0) + (usage?.thoughtsTokenCount ?? 0),
+      cachedInPrompt: true,
+    });
   }
 
   private toContents(request: AiProviderGenerateRequest): Content[] {

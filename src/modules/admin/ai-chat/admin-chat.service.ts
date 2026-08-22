@@ -3,7 +3,6 @@ import { AdminChatRole } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AdminAiProviderService } from '../../ai/admin-ai-provider.service';
 import type { AiProviderMessage } from '../../../ai-provider/types/ai-provider.types';
-import { AdminAiUsageService } from './admin-ai-usage.service';
 
 /** Turns kept as context for the next AI call (most recent first, then re-ordered). */
 const CONTEXT_MESSAGE_LIMIT = 20;
@@ -23,7 +22,6 @@ export class AdminChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly adminAiProviderService: AdminAiProviderService,
-    private readonly usageService: AdminAiUsageService,
   ) {}
 
   async listRooms(adminMemberId: string) {
@@ -97,6 +95,10 @@ export class AdminChatService {
    * the shared ADMIN-scope provider, then persists the reply. The room is
    * created on the fly when `roomId` is omitted so the UI can send from a
    * blank screen without a separate call.
+   *
+   * Credit is validated and debited inside `AdminAiProviderService.generate`
+   * from the actual token usage — an insufficient balance or an exhausted
+   * admin budget throws before the provider is called.
    */
   async sendMessage(
     adminMemberId: string,
@@ -112,25 +114,10 @@ export class AdminChatService {
 
     const history = await this.loadContext(room.id);
 
-    await this.usageService.reserveAdminAiCredit();
-
-    let reply: Awaited<
-      ReturnType<AdminAiProviderService['generate']>
-    >;
-
-    try {
-      reply = await this.adminAiProviderService.generate(adminMemberId, {
-        systemInstruction: ADMIN_CHAT_SYSTEM_INSTRUCTION,
-        messages: [...history, { role: 'user', text }],
-      });
-    } catch (error) {
-      // The pool was charged before the call; give it back so a provider
-      // outage does not silently burn the org's admin-AI credit.
-      await this.usageService.refundAdminAiCredit();
-      throw error;
-    }
-
-    await this.usageService.recordUsage(adminMemberId);
+    const reply = await this.adminAiProviderService.generate(adminMemberId, {
+      systemInstruction: ADMIN_CHAT_SYSTEM_INSTRUCTION,
+      messages: [...history, { role: 'user', text }],
+    });
 
     const now = new Date();
 

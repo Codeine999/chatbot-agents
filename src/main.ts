@@ -19,13 +19,13 @@ import { ADMIN_PROFILE_IMAGE_MAX_BYTES } from './modules/admin/constants/admin-u
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    new FastifyAdapter({
+      // Multipart files are limited to 5MB below; leave room for form fields
+      // and MIME boundaries so Fastify does not reject them at its 1MB default.
+      bodyLimit: ADMIN_PROFILE_IMAGE_MAX_BYTES + 1024 * 1024,
+    }),
   );
 
-  // Raw body is only needed on the LINE webhook route, where the
-  // signature is an HMAC of the exact bytes LINE sent. Keeping the
-  // default utf8 encoding avoids replacing the JSON content-type
-  // parser that the Nest Fastify adapter already registered.
   await app.register(fastifyRawBody, {
     field: 'rawBody',
     global: false,

@@ -131,31 +131,38 @@ export type ChatResponse = Readonly<{
   contextPolicy: ChatContextPolicy;
 }>;
 
-export type ChatRequest = Readonly<{
-  userId: string;
-  text: string;
-  recentMessages?: readonly ChatContextMessage[];
-}>;
+export type ChatRequest = LineAiUsageContext &
+  Readonly<{
+    userId: string;
+    text: string;
+    recentMessages?: readonly ChatContextMessage[];
+  }>;
 
-export type ImageChatRequest = Readonly<{
-  userId: string;
-  image: AiProviderImage;
-  recentMessages?: readonly ChatContextMessage[];
-}>;
+export type ImageChatRequest = LineAiUsageContext &
+  Readonly<{
+    userId: string;
+    image: AiProviderImage;
+    recentMessages?: readonly ChatContextMessage[];
+  }>;
 
-export type StickerChatRequest = Readonly<{
-  userId: string;
-  packageId: string;
-  stickerId: string;
-  text?: string;
-  keywords?: readonly string[];
-  recentMessages?: readonly ChatContextMessage[];
-}>;
+export type StickerChatRequest = LineAiUsageContext &
+  Readonly<{
+    userId: string;
+    packageId: string;
+    stickerId: string;
+    text?: string;
+    keywords?: readonly string[];
+    recentMessages?: readonly ChatContextMessage[];
+  }>;
 
-export type AiRequestContext = Readonly<{
-  userId?: string;
-  recentMessages?: readonly ChatContextMessage[];
-}>;
+/**
+ * `userId`, `lineMemberId` and `conversationId` travel together so a billed
+ * AI call can be attributed to the LINE thread that triggered it.
+ */
+export type AiRequestContext = LineAiUsageContext &
+  Readonly<{
+    recentMessages?: readonly ChatContextMessage[];
+  }>;
 
 export type KnowledgeAnswerContext = AiRequestContext &
   Readonly<{
@@ -181,3 +188,4 @@ export type KnowledgeItem = {
 };
 
 import type { AiProviderImage } from '../../../ai-provider/types/ai-provider.types';
+import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';

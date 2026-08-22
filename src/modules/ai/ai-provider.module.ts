@@ -12,11 +12,18 @@ import { UsersAiProviderService } from './users-ai-provider.service';
 import { AnthropicAiProvider } from '../../ai-provider/providers/anthropic-ai.provider';
 import { GeminiAiProvider } from '../../ai-provider/providers/gemini-ai.provider';
 import { OpenAiProvider } from '../../ai-provider/providers/openai-ai.provider';
+import { AiBillingModule } from '../usage/billing/ai-billing.module';
 import { EmbeddingModule } from '../../infra/embedding/embedding.module';
 import { EmbeddingService } from './embedding.service';
 
 @Module({
-  imports: [AuthModule, PrismaModule, RedisModule, EmbeddingModule],
+  imports: [
+    AuthModule,
+    PrismaModule,
+    RedisModule,
+    EmbeddingModule,
+    AiBillingModule,
+  ],
   controllers: [AiProviderSettingsController],
   providers: [
     AiModelCatalogService,

@@ -14,10 +14,12 @@ import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
 import { AdminChatService } from './admin-chat.service';
 import { AdminAiUsageService } from './admin-ai-usage.service';
 import {
+  AdminMemberIdParamDto,
   CreateAdminChatRoomDto,
   RenameAdminChatRoomDto,
   RoomIdParamDto,
   SendAdminChatMessageDto,
+  SetAdminAiBudgetDto,
 } from './dto/admin-chat.dto';
 
 /**
@@ -64,7 +66,10 @@ export class AdminChatController {
     @Req() request: AdminRequest,
     @Param() params: RoomIdParamDto,
   ) {
-    await this.adminChatService.deleteRoom(this.adminId(request), params.roomId);
+    await this.adminChatService.deleteRoom(
+      this.adminId(request),
+      params.roomId,
+    );
     return { success: true };
   }
 
@@ -95,6 +100,19 @@ export class AdminChatController {
   @Get('usage')
   listAllUsage() {
     return this.usageService.listAllUsage();
+  }
+
+  /** Owner/dev: set one admin's AI budget (`null` = unlimited). */
+  @AdminGuard('dev', 'owner')
+  @Patch('usage/:adminMemberId/budget')
+  setBudget(
+    @Param() params: AdminMemberIdParamDto,
+    @Body() body: SetAdminAiBudgetDto,
+  ) {
+    return this.usageService.setLimit(
+      params.adminMemberId,
+      body.limitCredit === null ? null : String(body.limitCredit),
+    );
   }
 
   private adminId(request: AdminRequest): string {
