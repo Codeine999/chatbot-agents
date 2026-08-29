@@ -4,6 +4,7 @@ import {
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerTheme, SwaggerThemeNameEnum } from 'swagger-themes';
 import { Logger } from '@nestjs/common';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
@@ -15,6 +16,7 @@ import { join } from 'node:path';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { ADMIN_PROFILE_IMAGE_MAX_BYTES } from './modules/admin/constants/admin-upload.constants';
+
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -52,6 +54,7 @@ async function bootstrap() {
       const allowedOrigins = [
         'http://localhost:5173',
         'https://chatbot-dashboard-r6ac.vercel.app',
+        'http://localhost:8080'
       ];
 
       const isVercelPreview =
@@ -84,8 +87,15 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
+  const theme = new SwaggerTheme();
+  const nordDarkCss = theme
+    .getBuffer(SwaggerThemeNameEnum.NORD_DARK)
+    .toString()
+    .replace(/^\s*@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*/, '')
+    .replace(/\s*}\s*$/, '');
 
   SwaggerModule.setup('docs', app, cleanupOpenApiDoc(document), {
+    customCss: nordDarkCss,
     swaggerOptions: {
       persistAuthorization: true,
     },

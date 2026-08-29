@@ -102,9 +102,8 @@ model AdminMember {
   sentLineMessages LineChatHistory[]
 
   requestedCreditTopupHistories CreditTopupHistory[] @relation("CreditTopupRequestedBy")
-  approvedCreditTopupHistories CreditTopupHistory[]  @relation("CreditTopupApprovedBy")
-  rejectedCreditTopupHistories CreditTopupHistory[]  @relation("CreditTopupRejectedBy")
-
+  approvedCreditTopupHistories  CreditTopupHistory[] @relation("CreditTopupApprovedBy")
+  rejectedCreditTopupHistories  CreditTopupHistory[] @relation("CreditTopupRejectedBy")
 }
 
 /// One back-office AI chat thread ("room"), private to the admin who owns it.

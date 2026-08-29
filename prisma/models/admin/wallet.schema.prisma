@@ -19,74 +19,6 @@ enum CreditTopupStatus {
   REJECTED @map("rejected")
 }
 
-model AiModelPricing {
-  id       String         @id @default(uuid()) @db.Uuid
-  provider AiProviderName
-  model    String         @db.VarChar(150)
-
-  inputCostThbPerMillTokens       Decimal  @default(0) @db.Decimal(20, 6)
-  outputCostThbPerMillTokens      Decimal  @default(0) @db.Decimal(20, 6)
-  cachedInputCostThbPerMillTokens Decimal? @db.Decimal(20, 6)
-  cacheWriteCostThbPerMillTokens  Decimal? @db.Decimal(20, 6)
-
-  inputCreditPerMillTokens       Decimal  @default(0) @db.Decimal(20, 6)
-  outputCreditPerMillTokens      Decimal  @default(0) @db.Decimal(20, 6)
-  cachedInputCreditPerMillTokens Decimal? @db.Decimal(20, 6)
-  cacheWriteCreditPerMillTokens  Decimal? @db.Decimal(20, 6)
-
-  effectiveFrom DateTime
-  effectiveTo   DateTime?
-
-  usageEvents AiUsageEvent[]
-
-  @@unique([provider, model, effectiveFrom])
-  @@index([provider, model, effectiveFrom, effectiveTo])
-  @@map("ai_model_pricing")
-}
-
-model AiUsageEvent {
-  id        String    @id @default(uuid()) @db.Uuid
-  companyId String    @db.Uuid
-  company   Company   @relation(fields: [companyId], references: [id])
-  kind      UsageKind
-
-  provider AiProviderName
-  model    String         @db.VarChar(150)
-
-  inputTokens       Int @default(0)
-  cachedInputTokens Int @default(0)
-  cacheWriteTokens  Int @default(0)
-  outputTokens      Int @default(0) // รวม reasoning/thoughts แล้ว
-
-  costThb       Decimal @default(0) @db.Decimal(20, 6) // ต้นทุนจริง — ไม่โชว์ลูกค้า
-  chargedCredit Decimal @default(0) @db.Decimal(20, 6) // เครดิตที่หัก (1 credit = 1e6)
-
-  pricingId String?         @db.Uuid
-  pricing   AiModelPricing? @relation(fields: [pricingId], references: [id])
-
-  adminMemberId String?      @db.Uuid
-  adminMember   AdminMember? @relation(fields: [adminMemberId], references: [id], onDelete: SetNull)
-
-  /// ไม่ผูก FK — เป็น log ไม่ควรบล็อกการลบ conversation/member
-  lineMemberId   String? @db.Uuid
-  conversationId String? @db.Uuid
-
-  status            String  @default("success") @db.VarChar(20) // success | failed | timeout
-  errorCode         String? @db.VarChar(100)
-  latencyMs         Int?
-  providerRequestId String? @db.VarChar(255)
-
-  createdAt DateTime @default(now())
-
-  ledgerEntry CreditLedger?
-
-  @@index([companyId, createdAt])
-  @@index([companyId, kind, createdAt])
-  @@index([adminMemberId, createdAt])
-  @@index([provider, model, createdAt])
-  @@map("ai_usage_events")
-}
-
 model CreditWallet {
   id        String  @id @default(uuid()) @db.Uuid
   companyId String  @unique @db.Uuid
@@ -101,8 +33,8 @@ model CreditWallet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  ledger       CreditLedger[]
-  budgets      CreditBudget[]
+  ledger  CreditLedger[]
+  budgets CreditBudget[]
 
   @@unique([id, companyId]) // เผื่อทำ composite FK ตอนขึ้น multi-tenant
   @@map("credit_wallets")
@@ -153,13 +85,19 @@ model CreditLedger {
 }
 
 model CreditTopupHistory {
-  id        String  @id @default(uuid()) @db.Uuid
-  companyId String  @db.Uuid
-  company   Company @relation(fields: [companyId], references: [id])
+  id        String      @id @default(uuid()) @db.Uuid
+  companyId String      @db.Uuid
+  company   Company     @relation(fields: [companyId], references: [id])
+  type      PaymentType @default(Slip)
 
-  type         PaymentType @default(Slip)
-  creditAmount Decimal @db.Decimal(20, 6)
-  slipImage    String  @db.VarChar(500)
+  /// Nullable only for records created before exchange-rate top-ups existed.
+  exchangeRateId String?             @db.Uuid
+  exchangeRate   CreditExchangeRate? @relation(fields: [exchangeRateId], references: [id], onDelete: Restrict)
+  packagePriceId String?              @db.Uuid
+  packagePrice   CreditPackagePrice?  @relation(fields: [packagePriceId], references: [id], onDelete: Restrict)
+  paidAmount     Decimal?            @db.Decimal(20, 6)
+  creditAmount   Decimal             @db.Decimal(20, 6)
+  slipImage      String              @db.VarChar(500)
 
   status CreditTopupStatus @default(PENDING)
 
@@ -180,5 +118,7 @@ model CreditTopupHistory {
   @@index([companyId, createdAt])
   @@index([status, createdAt])
   @@index([requestedById, createdAt])
+  @@index([exchangeRateId])
+  @@index([packagePriceId])
   @@map("credit_topups")
 }
