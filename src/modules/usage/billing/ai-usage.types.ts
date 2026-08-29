@@ -9,6 +9,12 @@ export type LineAiUsageContext = Readonly<{
   userId?: string;
   lineMemberId?: string;
   conversationId?: string;
+  /**
+   * Stable id of the inbound event being answered (the LINE
+   * `webhookEventId`). Billing derives its ledger idempotency key from it, so
+   * re-processing the same event settles once instead of debiting again.
+   */
+  turnId?: string;
 }>;
 
 /** What one AI call costs us (`costThb`) and what the customer pays for it. */

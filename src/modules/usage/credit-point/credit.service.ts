@@ -388,7 +388,13 @@ export class CreditService {
       // reaches here has already been charged, and the whole transaction was
       // rolled back rather than debited twice.
       const settled = await this.findSettledUsage(idempotencyKey, error);
-      if (settled) return settled;
+      if (settled) {
+        // The rollback also undid this attempt's hold release, so the credit
+        // reserved by *this* call is still sitting on the wallet. Give it back
+        // explicitly — the first settlement already moved the real balance.
+        await this.releaseAiCredit(reservation);
+        return settled;
+      }
 
       throw error;
     }

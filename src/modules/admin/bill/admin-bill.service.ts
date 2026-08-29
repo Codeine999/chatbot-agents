@@ -4,28 +4,38 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
-import type { FastifyRequest } from 'fastify';
-import { randomUUID } from 'node:crypto';
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { join } from 'node:path';
 import {
   CreditTopupStatus,
   LedgerType,
-  PaymentType,
   Prisma,
 } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CompanyService } from '../company/company.service';
 import {
-  BILL_SLIP_ALLOWED_EXTENSIONS,
-  BILL_SLIP_MAX_BYTES,
   BILL_SLIP_MIME_TO_EXTENSION,
   BILL_SLIP_UPLOAD_URL_PREFIX,
 } from './admin-bill.constants';
+import { CreateTopupDto } from './dto/top-up.dto';
+import { CalculateCreditDto } from './dto/calculate-credit.dto';
+import { GetBillHistoryQueryDto } from './dto/get-history.dto';
+import { MultipartUploadService } from '../../../shared/upload/multipart-upload.service';
 
 const BILL_SLIP_UPLOAD_DIR = join(process.cwd(), 'uploads', 'billing');
+const BILL_SLIP_STORE_OPTIONS = {
+  uploadDirectory: BILL_SLIP_UPLOAD_DIR,
+  publicUrlPrefix: BILL_SLIP_UPLOAD_URL_PREFIX,
+  mimeToExtension: BILL_SLIP_MIME_TO_EXTENSION,
+} as const;
 const SERIALIZABLE_RETRY_LIMIT = 3;
+const BILL_HISTORY_PAGE_SIZE = 8;
+
+type CreditSelectionInput = Readonly<{
+  packageId?: string;
+  paidAmount?: string;
+}>;
 
 @Injectable()
 export class AdminBillService {
@@ -34,108 +44,83 @@ export class AdminBillService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly companyService: CompanyService,
+    private readonly multipartUploadService: MultipartUploadService,
   ) {}
 
-  async createTopup(requestedById: string, request: FastifyRequest) {
-    if (!request.isMultipart()) {
-      throw new BadRequestException('Credit amount and slip are required');
-    }
+  async getExchangeRate() {
+    const rate = await this.findActiveExchangeRate();
 
-    let rawCredit = '';
-    let rawType = 'Slip';
-    let slipBuffer: Buffer | undefined;
-    let slipExtension = '';
+    return {
+      id: rate.id,
+      creditsPerThb: rate.creditsPerThb.toString(),
+      effectiveFrom: rate.effectiveFrom,
+      effectiveTo: rate.effectiveTo,
+    };
+  }
 
-    try {
-      for await (const part of request.parts({
-        limits: { files: 1, fileSize: BILL_SLIP_MAX_BYTES },
-      })) {
-        if (part.type === 'file') {
-          if (
-            (part.fieldname !== 'slip' && part.fieldname !== 'image') ||
-            slipBuffer
-          ) {
-            throw new BadRequestException(
-              'Only one payment image is allowed in the slip or image field',
-            );
-          }
+  async getPackages() {
+    const [rate, packages] = await Promise.all([
+      this.findActiveExchangeRate(),
+      this.prisma.creditPackagePrice.findMany({
+        where: { active: true },
+        orderBy: [{ sortOrder: 'asc' }, { priceThb: 'asc' }],
+        select: {
+          id: true,
+          name: true,
+          priceThb: true,
+          popular: true,
+          sortOrder: true,
+        },
+      }),
+    ]);
 
-          const clientExtension = extname(part.filename).toLowerCase();
-          if (
-            !BILL_SLIP_ALLOWED_EXTENSIONS.includes(
-              clientExtension as (typeof BILL_SLIP_ALLOWED_EXTENSIONS)[number],
-            )
-          ) {
-            throw new BadRequestException(
-              `Unsupported slip extension. Allowed: ${BILL_SLIP_ALLOWED_EXTENSIONS.join(', ')}`,
-            );
-          }
+    return {
+      creditsPerThb: rate.creditsPerThb.toString(),
+      packages: packages.map((packagePrice) =>
+        this.toCreditQuote({
+          packageId: packagePrice.id,
+          packageName: packagePrice.name,
+          paidAmount: packagePrice.priceThb,
+          creditsPerThb: rate.creditsPerThb,
+          popular: packagePrice.popular,
+          sortOrder: packagePrice.sortOrder,
+        }),
+      ),
+    };
+  }
 
-          slipExtension = BILL_SLIP_MIME_TO_EXTENSION[part.mimetype];
-          if (!slipExtension) {
-            throw new BadRequestException(
-              `Unsupported slip type. Allowed: ${Object.keys(
-                BILL_SLIP_MIME_TO_EXTENSION,
-              ).join(', ')}`,
-            );
-          }
+  async calculateCredit(dto: CalculateCreditDto) {
+    const rate = await this.findActiveExchangeRate();
+    const selection = await this.resolveSelection(dto);
 
-          slipBuffer = await part.toBuffer();
-          if (part.file.truncated) {
-            throw new BadRequestException(
-              `Slip exceeds the ${BILL_SLIP_MAX_BYTES / (1024 * 1024)}MB limit`,
-            );
-          }
+    return this.toCreditQuote({
+      ...selection,
+      creditsPerThb: rate.creditsPerThb,
+    });
+  }
 
-          continue;
-        }
-
-        if (part.fieldname === 'credit' || part.fieldname === 'creditAmount') {
-          rawCredit = String(part.value).trim();
-        } else if (part.fieldname === 'type') {
-          rawType = String(part.value).trim();
-        }
-      }
-    } catch (error) {
-      if (error instanceof BadRequestException) throw error;
-      throw new BadRequestException('Invalid multipart top-up data');
-    }
-
-    const paymentType = this.parsePaymentType(rawType);
-
-    let creditAmount: Prisma.Decimal;
-    try {
-      creditAmount = new Prisma.Decimal(rawCredit);
-    } catch {
-      throw new BadRequestException('Credit amount must be a valid number');
-    }
-
-    if (
-      !creditAmount.isFinite() ||
-      creditAmount.lessThanOrEqualTo(0) ||
-      creditAmount.decimalPlaces() > 6 ||
-      !slipBuffer ||
-      !slipExtension
-    ) {
-      throw new BadRequestException(
-        'A positive credit amount and one slip image are required',
-      );
-    }
-
+  async createTopup(requestedById: string, dto: CreateTopupDto) {
+    const rate = await this.findActiveExchangeRate();
+    const selection = await this.resolveSelection(dto);
+    const creditAmount = this.toCreditAmount(
+      selection.paidAmount,
+      rate.creditsPerThb,
+    );
     const companyId = await this.companyService.getCompanyId();
-    await mkdir(BILL_SLIP_UPLOAD_DIR, { recursive: true });
-
-    const filename = `${randomUUID()}${slipExtension}`;
-    const slipFilePath = join(BILL_SLIP_UPLOAD_DIR, filename);
-    const slipImage = `${BILL_SLIP_UPLOAD_URL_PREFIX}/${filename}`;
-    await writeFile(slipFilePath, slipBuffer);
+    const slipImage = await this.multipartUploadService.store(
+      dto.slip,
+      BILL_SLIP_STORE_OPTIONS,
+    );
 
     try {
       return await this.prisma.creditTopupHistory.create({
         data: {
           companyId,
           requestedById,
-          type: paymentType,
+          type: dto.type,
+          exchangeRateId: rate.id,
+          packagePriceId: selection.packageId,
+          paidAmount: selection.paidAmount,
           creditAmount,
           slipImage,
         },
@@ -146,7 +131,10 @@ export class AdminBillService {
         },
       });
     } catch (error) {
-      await this.deleteStoredSlip(slipImage);
+      await this.multipartUploadService.delete(
+        slipImage,
+        BILL_SLIP_STORE_OPTIONS,
+      );
       throw error;
     }
   }
@@ -265,42 +253,155 @@ export class AdminBillService {
     });
   }
 
-  async getHistory() {
+  async getHistory(query: GetBillHistoryQueryDto) {
     const companyId = await this.companyService.getCompanyId();
-
-    return this.prisma.creditTopupHistory.findMany({
-      where: { companyId },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: {
-        requestedBy: {
-          select: { id: true, username: true },
-        },
-        approvedBy: {
-          select: { id: true, username: true },
-        },
-        rejectedBy: {
-          select: { id: true, username: true },
-        },
+    const where: Prisma.CreditTopupHistoryWhereInput = {
+      companyId,
+      ...(query.status === 'paid'
+        ? { status: CreditTopupStatus.APPROVED }
+        : query.status === 'pending'
+          ? { status: CreditTopupStatus.PENDING }
+          : query.status === 'failed'
+            ? { status: CreditTopupStatus.REJECTED }
+            : {}),
+    };
+    const skip = (query.page - 1) * BILL_HISTORY_PAGE_SIZE;
+    const include = {
+      requestedBy: {
+        select: { id: true, username: true },
       },
-    });
+      approvedBy: {
+        select: { id: true, username: true },
+      },
+      rejectedBy: {
+        select: { id: true, username: true },
+      },
+    } as const;
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.creditTopupHistory.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: BILL_HISTORY_PAGE_SIZE,
+        include,
+      }),
+      this.prisma.creditTopupHistory.count({ where }),
+    ]);
+
+    return {
+      items,
+      pagination: {
+        page: query.page,
+        limit: BILL_HISTORY_PAGE_SIZE,
+        total,
+        totalPages: Math.ceil(total / BILL_HISTORY_PAGE_SIZE),
+        hasPreviousPage: query.page > 1,
+        hasNextPage: skip + items.length < total,
+      },
+    };
   }
 
-  private parsePaymentType(value: string): PaymentType {
-    const normalized = value
-      .trim()
-      .toLowerCase()
-      .replace(/[-_\s]/g, '');
+  private async findActiveExchangeRate() {
+    const now = new Date();
+    const rate = await this.prisma.creditExchangeRate.findFirst({
+      where: {
+        effectiveFrom: { lte: now },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+      },
+      orderBy: { effectiveFrom: 'desc' },
+      select: {
+        id: true,
+        creditsPerThb: true,
+        effectiveFrom: true,
+        effectiveTo: true,
+      },
+    });
 
-    if (normalized === '1' || normalized === 'slip') {
-      return PaymentType.Slip;
+    if (!rate) {
+      throw new ServiceUnavailableException(
+        'Credit exchange rate is not configured',
+      );
     }
 
-    if (normalized === '2' || normalized === 'qrcode') {
-      return PaymentType.QRcode;
+    return rate;
+  }
+
+  private async resolveSelection(input: CreditSelectionInput): Promise<{
+    packageId?: string;
+    packageName?: string;
+    popular?: boolean;
+    sortOrder?: number;
+    paidAmount: Prisma.Decimal;
+  }> {
+    if (input.packageId) {
+      const packagePrice = await this.prisma.creditPackagePrice.findFirst({
+        where: { id: input.packageId, active: true },
+        select: {
+          id: true,
+          name: true,
+          priceThb: true,
+          popular: true,
+          sortOrder: true,
+        },
+      });
+
+      if (!packagePrice) {
+        throw new NotFoundException('Active credit package not found');
+      }
+
+      return {
+        packageId: packagePrice.id,
+        packageName: packagePrice.name,
+        popular: packagePrice.popular,
+        sortOrder: packagePrice.sortOrder,
+        paidAmount: packagePrice.priceThb,
+      };
     }
 
-    throw new BadRequestException('Top-up type must be Slip, QRcode, 1, or 2');
+    if (input.paidAmount) {
+      return { paidAmount: new Prisma.Decimal(input.paidAmount) };
+    }
+
+    throw new BadRequestException('Send exactly one packageId or paidAmount');
+  }
+
+  private toCreditQuote(input: {
+    packageId?: string;
+    packageName?: string;
+    paidAmount: Prisma.Decimal;
+    creditsPerThb: Prisma.Decimal;
+    popular?: boolean;
+    sortOrder?: number;
+  }) {
+    const creditAmount = this.toCreditAmount(
+      input.paidAmount,
+      input.creditsPerThb,
+    );
+
+    return {
+      source: input.packageId ? ('package' as const) : ('custom' as const),
+      packageId: input.packageId ?? null,
+      packageName: input.packageName ?? null,
+      paidAmount: input.paidAmount.toString(),
+      creditsPerThb: input.creditsPerThb.toString(),
+      creditAmount: creditAmount.toString(),
+      pricePerCredit: input.paidAmount
+        .div(creditAmount)
+        .toDecimalPlaces(6, Prisma.Decimal.ROUND_HALF_UP)
+        .toString(),
+      popular: input.popular ?? false,
+      sortOrder: input.sortOrder ?? null,
+    };
+  }
+
+  private toCreditAmount(
+    paidAmount: Prisma.Decimal,
+    creditsPerThb: Prisma.Decimal,
+  ): Prisma.Decimal {
+    return paidAmount
+      .mul(creditsPerThb)
+      .toDecimalPlaces(6, Prisma.Decimal.ROUND_HALF_UP);
   }
 
   private async runSerializable<T>(
@@ -324,16 +425,5 @@ export class AdminBillService {
     }
 
     throw new Error('Serializable credit top-up retry exhausted');
-  }
-
-  private async deleteStoredSlip(slipImage: string): Promise<void> {
-    if (!slipImage.startsWith(`${BILL_SLIP_UPLOAD_URL_PREFIX}/`)) return;
-
-    const filename = slipImage.slice(BILL_SLIP_UPLOAD_URL_PREFIX.length + 1);
-    try {
-      await unlink(join(BILL_SLIP_UPLOAD_DIR, filename));
-    } catch {
-      // Best-effort cleanup; a missing file is not an error.
-    }
   }
 }

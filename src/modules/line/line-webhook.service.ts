@@ -89,6 +89,9 @@ export class LineWebhookService {
     const thread = {
       lineMemberId: savedIncomingEvent?.lineMemberId,
       conversationId: savedIncomingEvent?.conversationId,
+      // Ledger idempotency: re-processing the same webhook event settles the
+      // same AI calls once instead of debiting the wallet a second time.
+      turnId: event.webhookEventId,
     };
 
     if (event.message.type === 'text') {
@@ -129,19 +132,26 @@ export class LineWebhookService {
       });
     }
 
-    if (Date.now() - event.timestamp > LINE_EVENT_MAX_AGE_MS) {
-      this.logger.warn(
-        `Skipping stale LINE reply for webhookEventId=${event.webhookEventId}`,
+    // The answer has already been generated and billed at this point, so a
+    // dead reply token or an exhausted reply budget must not silently throw it
+    // away — fall back to a push so the customer still gets what they paid for.
+    const replyTokenExpired =
+      Date.now() - event.timestamp > LINE_EVENT_MAX_AGE_MS;
+
+    const replySent = replyTokenExpired
+      ? false
+      : await this.lineService.replyText(event.replyToken, response.text);
+
+    if (!replySent) {
+      const pushed = await this.pushUndeliveredReply(
+        event.source.userId,
+        response.text,
+        replyTokenExpired ? 'reply token expired' : 'reply budget exhausted',
+        event.webhookEventId,
       );
-      return;
+
+      if (!pushed) return;
     }
-
-    const replySent = await this.lineService.replyText(
-      event.replyToken,
-      response.text,
-    );
-
-    if (!replySent) return;
 
     if (savedIncomingEvent) {
       try {
@@ -169,6 +179,32 @@ export class LineWebhookService {
       } else if (response.contextPolicy === 'CLEAR') {
         await this.loadContextService.clear(savedIncomingEvent.conversationId);
       }
+    }
+  }
+
+  /**
+   * Last-resort delivery for an answer whose reply token can no longer be
+   * used. Returns false when the push also fails, so the caller skips writing
+   * history for a message the customer never received.
+   */
+  private async pushUndeliveredReply(
+    lineUserId: string,
+    text: string,
+    reason: string,
+    webhookEventId: string,
+  ): Promise<boolean> {
+    try {
+      await this.lineAdminService.pushText(lineUserId, text);
+      this.logger.warn(
+        `Pushed reply for webhookEventId=${webhookEventId} (${reason})`,
+      );
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Failed to push reply for webhookEventId=${webhookEventId} (${reason})`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      return false;
     }
   }
 

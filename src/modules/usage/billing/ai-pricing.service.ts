@@ -55,7 +55,9 @@ export class AiPricingService {
     if (!pricing) {
       // Never block a reply that already cost us a provider call — log the
       // usage at zero credit and let the back office add the missing price.
-      this.logger.warn(
+      // This is real money leaving with nothing debited, so it is an error,
+      // not a warning: see GET /api/admin/ai-pricing/unpriced.
+      this.logger.error(
         `No active AiModelPricing for ${provider}/${model}; usage recorded uncharged`,
       );
       return ZERO_COST;

@@ -3,7 +3,18 @@ import { DEFAULT_AI_MAX_OUTPUT_TOKENS } from './ai-provider.constants';
 import { AiGenerateRequest, AiTokenUsage } from '../types/ai-provider.types';
 
 const MESSAGE_ENVELOPE_TOKEN_RESERVE = 256;
-const IMAGE_TOKEN_RESERVE_FLOOR = 16_384;
+
+/**
+ * Upper bound for one image, in tokens.
+ *
+ * Vision billing is a function of pixel dimensions, not file size: every
+ * provider downscales before tokenizing, so a large photo and a small one
+ * settle at a similar cost (Anthropic caps around 1.6k tokens per image,
+ * OpenAI high-detail around 1.1k, Gemini 258 per 768px tile). Reserving the
+ * decoded byte count instead would hold millions of credits' worth of tokens
+ * for a single photo and bounce it as insufficient credit.
+ */
+const IMAGE_TOKEN_RESERVE = 4_000;
 
 /** Provider counters are optional and occasionally absent — never NaN a bill. */
 export function toTokenCount(value: unknown): number {
@@ -42,9 +53,9 @@ export function normalizeTokenUsage(input: {
  * Conservative provider-neutral upper bound used only while reserving credit.
  *
  * UTF-8 bytes are an upper bound for byte-fallback text tokenizers. Message
- * envelope headroom covers provider-added role/content framing. Images use
- * their decoded byte count with a floor because image billing depends on
- * dimensions rather than text tokenization. Settlement always uses the actual
+ * envelope headroom covers provider-added role/content framing. Images are
+ * reserved at a flat per-image ceiling because vision billing depends on
+ * resized dimensions, not on file size. Settlement always uses the actual
  * counters returned by the provider, never this estimate.
  */
 export function estimateMaxTokenUsage(
@@ -61,11 +72,7 @@ export function estimateMaxTokenUsage(
     MESSAGE_ENVELOPE_TOKEN_RESERVE;
   const imageTokens = request.messages.reduce(
     (total, message) =>
-      total +
-      (message.images ?? []).reduce((imageTotal, image) => {
-        const decodedBytes = Buffer.byteLength(image.data, 'base64');
-        return imageTotal + Math.max(decodedBytes, IMAGE_TOKEN_RESERVE_FLOOR);
-      }, 0),
+      total + (message.images?.length ?? 0) * IMAGE_TOKEN_RESERVE,
     0,
   );
 

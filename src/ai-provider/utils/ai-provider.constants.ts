@@ -4,6 +4,22 @@ export const DEFAULT_AI_PROVIDER_CACHE_TTL_SEC = 300;
 export const DEFAULT_AI_REQUEST_TIMEOUT_MS = 12_000;
 export const DEFAULT_AI_MAX_OUTPUT_TOKENS = 500;
 
+/**
+ * Attempts per billed generation, retried in place rather than by re-queuing
+ * the whole LINE turn: a re-queued turn would re-run the classifier and the
+ * query planner (billing them again) against a reply token that expires about
+ * a minute after delivery.
+ */
+export const DEFAULT_AI_MAX_ATTEMPTS = 2;
+export const DEFAULT_AI_RETRY_DELAY_MS = 300;
+
+/**
+ * A retry is only started while the call has spent less than this. It keeps
+ * the in-place retry inside the LINE reply-token window instead of trading a
+ * dead token for a second attempt.
+ */
+export const DEFAULT_AI_RETRY_BUDGET_MS = 20_000;
+
 export const AI_PROVIDER_LABELS = {
   GEMINI: 'Google Gemini',
   OPENAI: 'OpenAI',

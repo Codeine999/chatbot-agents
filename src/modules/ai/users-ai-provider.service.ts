@@ -39,6 +39,7 @@ export class UsersAiProviderService {
       request,
       lineMemberId: context.lineMemberId,
       conversationId: context.conversationId,
+      turnId: context.turnId,
       call: () => this.aiProviderService.generateWith(provider, model, request),
     });
   }

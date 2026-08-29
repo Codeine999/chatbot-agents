@@ -1,4 +1,16 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { setTimeout as delay } from 'node:timers/promises';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { isRetryableAiProviderError } from '../../ai-provider/errors/ai-provider-error';
+import {
+  DEFAULT_AI_MAX_ATTEMPTS,
+  DEFAULT_AI_RETRY_BUDGET_MS,
+  DEFAULT_AI_RETRY_DELAY_MS,
+} from '../../ai-provider/utils/ai-provider.constants';
 import { AiProviderSettingsService } from './ai-provider-settings.service';
 import { AiProviderAdapter } from '../../ai-provider/providers/ai-provider.interface';
 import { AnthropicAiProvider } from '../../ai-provider/providers/anthropic-ai.provider';
@@ -13,19 +25,37 @@ import {
 
 @Injectable()
 export class AiProviderService {
+  private readonly logger = new Logger(AiProviderService.name);
   private readonly providers: ReadonlyMap<AiProviderName, AiProviderAdapter>;
+  private readonly maxAttempts: number;
+  private readonly retryDelayMs: number;
+  private readonly retryBudgetMs: number;
 
   constructor(
     private readonly settingsService: AiProviderSettingsService,
     geminiProvider: GeminiAiProvider,
     openAiProvider: OpenAiProvider,
     anthropicProvider: AnthropicAiProvider,
+    configService: ConfigService,
   ) {
     this.providers = new Map<AiProviderName, AiProviderAdapter>([
       [geminiProvider.name, geminiProvider],
       [openAiProvider.name, openAiProvider],
       [anthropicProvider.name, anthropicProvider],
     ]);
+
+    this.maxAttempts = this.positiveNumber(
+      configService.get('AI_PROVIDER_MAX_ATTEMPTS'),
+      DEFAULT_AI_MAX_ATTEMPTS,
+    );
+    this.retryDelayMs = this.positiveNumber(
+      configService.get('AI_PROVIDER_RETRY_DELAY_MS'),
+      DEFAULT_AI_RETRY_DELAY_MS,
+    );
+    this.retryBudgetMs = this.positiveNumber(
+      configService.get('AI_PROVIDER_RETRY_BUDGET_MS'),
+      DEFAULT_AI_RETRY_BUDGET_MS,
+    );
   }
 
   async generate(
@@ -49,9 +79,52 @@ export class AiProviderService {
       );
     }
 
-    return provider.generate({
-      ...request,
-      model,
-    });
+    return this.generateWithRetry(provider, model, request);
+  }
+
+  /**
+   * Retries a transient provider failure in place, inside the one billed call.
+   *
+   * Doing it here rather than by re-queuing the LINE job matters twice over:
+   * the reservation and settlement stay paired to a single wallet hold, and
+   * the sibling calls of the same turn (intent classifier, query planner) are
+   * not re-run and re-charged for one flaky HTTP response.
+   */
+  private async generateWithRetry(
+    provider: AiProviderAdapter,
+    model: string,
+    request: AiGenerateRequest,
+  ): Promise<AiGenerateResponse> {
+    const startedAt = Date.now();
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      try {
+        return await provider.generate({ ...request, model });
+      } catch (error) {
+        lastError = error;
+
+        const elapsedMs = Date.now() - startedAt;
+        const canRetry =
+          attempt < this.maxAttempts &&
+          isRetryableAiProviderError(error) &&
+          elapsedMs < this.retryBudgetMs;
+
+        if (!canRetry) break;
+
+        this.logger.warn(
+          `Retrying ${provider.name}/${model} after transient failure ` +
+            `(attempt ${attempt}/${this.maxAttempts}, ${elapsedMs}ms elapsed)`,
+        );
+        await delay(this.retryDelayMs);
+      }
+    }
+
+    throw lastError;
+  }
+
+  private positiveNumber(value: unknown, fallback: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   }
 }

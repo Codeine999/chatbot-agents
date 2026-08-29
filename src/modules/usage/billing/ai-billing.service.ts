@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { UsageKind } from '../../../generated/prisma/client';
 import type {
@@ -23,11 +24,14 @@ export type BilledGenerationParams = Readonly<{
   model: string;
   request: AiGenerateRequest;
   adminMemberId?: string;
-  /** Stable across BullMQ attempts so a retried request cannot debit twice. */
+  /**
+   * Overrides the derived ledger key. Leave unset for LINE traffic: a
+   * `turnId` produces a key that is stable across attempts on its own.
+   */
   idempotencyKey?: string;
   call: () => Promise<AiGenerateResponse>;
 }> &
-  Pick<LineAiUsageContext, 'lineMemberId' | 'conversationId'>;
+  Pick<LineAiUsageContext, 'lineMemberId' | 'conversationId' | 'turnId'>;
 
 /**
  * One billed AI call:
@@ -124,6 +128,7 @@ export class AiBillingService {
     try {
       await this.creditService.recordAiUsage({
         reservation,
+        idempotencyKey: this.idempotencyKey(params),
         kind: params.kind,
         provider: outcome.provider ?? params.provider,
         model: outcome.model ?? params.model,
@@ -135,8 +140,7 @@ export class AiBillingService {
         conversationId: params.conversationId,
         providerRequestId: outcome.providerRequestId,
         latencyMs: outcome.latencyMs,
-        errorCode: outcome.errorCode,
-        idempotencyKey: params.idempotencyKey,
+        errorCode: outcome.errorCode ?? this.unpricedCode(outcome),
       });
     } catch (error) {
       this.logger.error(
@@ -160,6 +164,62 @@ export class AiBillingService {
           : String(releaseError),
       );
     }
+  }
+
+  /**
+   * Marks a settled call whose model had no active price, so unmetered spend
+   * is queryable on `AiUsageEvent` instead of living only in a log line.
+   */
+  private unpricedCode(outcome: {
+    status: 'success' | 'failed';
+    usage: AiGenerateResponse['usage'];
+    cost: AiUsageCost;
+  }): string | undefined {
+    if (outcome.status !== 'success' || outcome.cost.pricingId) {
+      return undefined;
+    }
+
+    const billedTokens =
+      outcome.usage.inputTokens +
+      outcome.usage.cachedInputTokens +
+      outcome.usage.cacheWriteTokens +
+      outcome.usage.outputTokens;
+
+    return billedTokens > 0 ? 'MISSING_PRICING' : undefined;
+  }
+
+  /**
+   * Ledger key for this call.
+   *
+   * One inbound message can bill several times (classifier, query planner,
+   * grounded answer), so the turn id alone is not unique. Hashing the exact
+   * request keeps each of those calls separate while making all of them
+   * reproduce the same key if the same event is processed again — which is
+   * what turns the unique index on `CreditLedger.idempotencyKey` into a real
+   * double-charge guard rather than a random UUID that can never collide.
+   */
+  private idempotencyKey(params: BilledGenerationParams): string | undefined {
+    if (params.idempotencyKey) return params.idempotencyKey;
+    if (!params.turnId) return undefined;
+
+    const fingerprint = createHash('sha256')
+      .update(
+        JSON.stringify([
+          params.kind,
+          params.provider,
+          params.model,
+          params.request.systemInstruction ?? '',
+          params.request.messages.map((message) => [
+            message.role,
+            message.text,
+            (message.images ?? []).length,
+          ]),
+        ]),
+      )
+      .digest('hex')
+      .slice(0, 32);
+
+    return `usage:${params.turnId}:${fingerprint}`;
   }
 
   private toErrorCode(error: unknown): string {

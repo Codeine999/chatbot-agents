@@ -70,7 +70,20 @@ function createContext() {
       findUnique: jest.fn().mockImplementation(() => budget),
       upsert: jest.fn(),
     },
-    $transaction: jest.fn().mockImplementation((work) => work(tx)),
+    // Roll back on failure the way Postgres does, so a test can tell a
+    // committed settlement apart from one that threw halfway through.
+    $transaction: jest.fn().mockImplementation(async (work) => {
+      const walletBefore = { ...wallet };
+      const budgetBefore = { ...budget };
+
+      try {
+        return await work(tx);
+      } catch (error) {
+        Object.assign(wallet, walletBefore);
+        Object.assign(budget, budgetBefore);
+        throw error;
+      }
+    }),
   } as unknown as PrismaService;
   const companyService = {
     getCompanyId: jest
@@ -83,6 +96,8 @@ function createContext() {
 
   return {
     service: new CreditService(prisma, companyService, configService),
+    prisma,
+    tx,
     wallet,
     budget,
   };
@@ -167,6 +182,87 @@ describe('CreditService credit gate', () => {
     expect(context.wallet.balanceCredit.toString()).toBe('100');
     expect(context.wallet.reservedCredit.toString()).toBe('0');
     expect(context.budget.usedCredit.toString()).toBe('0');
+    expect(context.budget.reservedCredit.toString()).toBe('0');
+  });
+
+  it('debits once and frees the hold when the same usage settles twice', async () => {
+    const context = createContext();
+    const settled = {
+      usageEventId: '00000000-0000-0000-0000-0000000000ee',
+      amountCredit: decimal(-12),
+      balanceAfterCredit: decimal(88),
+    };
+
+    // First settlement: the real debit.
+    const first = await context.service.reserveAiCredit(
+      UsageKind.LINE_AI_REPLY,
+      '*',
+      decimal(15),
+    );
+    await context.service.recordAiUsage({
+      reservation: first,
+      kind: UsageKind.LINE_AI_REPLY,
+      provider: 'OPENAI',
+      model: 'gpt-test',
+      usage: {
+        inputTokens: 10,
+        cachedInputTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 10,
+      },
+      cost: {
+        pricingId: null,
+        costThb: decimal(1),
+        chargedCredit: decimal(12),
+      },
+      status: 'success',
+      idempotencyKey: 'usage:event-1:abc',
+    });
+
+    // Replay: the unique ledger key rejects the second write, and the
+    // transaction that would have released the hold rolls back with it.
+    const duplicate = new Prisma.PrismaClientKnownRequestError('duplicate', {
+      code: 'P2002',
+      clientVersion: 'test',
+    });
+    context.tx.creditLedger.create.mockRejectedValueOnce(duplicate);
+    (context.prisma as any).creditLedger = {
+      findUnique: jest.fn().mockResolvedValue(settled),
+    };
+
+    const second = await context.service.reserveAiCredit(
+      UsageKind.LINE_AI_REPLY,
+      '*',
+      decimal(15),
+    );
+
+    const replay = await context.service.recordAiUsage({
+      reservation: second,
+      kind: UsageKind.LINE_AI_REPLY,
+      provider: 'OPENAI',
+      model: 'gpt-test',
+      usage: {
+        inputTokens: 10,
+        cachedInputTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 10,
+      },
+      cost: {
+        pricingId: null,
+        costThb: decimal(1),
+        chargedCredit: decimal(12),
+      },
+      status: 'success',
+      idempotencyKey: 'usage:event-1:abc',
+    });
+
+    expect(replay.usageEventId).toBe(settled.usageEventId);
+    expect(replay.chargedCredit.toString()).toBe('12');
+
+    // Charged once, and the replay's hold is handed back instead of being
+    // stranded on the wallet by the rolled-back transaction.
+    expect(context.wallet.balanceCredit.toString()).toBe('88');
+    expect(context.wallet.reservedCredit.toString()).toBe('0');
     expect(context.budget.reservedCredit.toString()).toBe('0');
   });
 });

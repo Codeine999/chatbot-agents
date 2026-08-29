@@ -10,6 +10,10 @@ import { AiModule } from '../chatbot/ai.module';
 import { AdminChatModule } from './ai-chat/admin-chat.module';
 import { CompanyModule } from './company/company.module';
 import { AdminBillModule } from './bill/admin-bill.module';
+import { AdminAiPricingModule } from './pricing/admin-ai-pricing.module';
+import { CreditExchangeRateModule } from './dev/credit/credit-exchange-rate.module';
+import { AdminWalletModule } from './wallet/admin-wallet.module';
+import { AdminUsageModule } from './usage/admin-usage.module';
 
 @Module({
   imports: [
@@ -20,6 +24,10 @@ import { AdminBillModule } from './bill/admin-bill.module';
     AdminChatModule,
     CompanyModule,
     AdminBillModule,
+    AdminAiPricingModule,
+    CreditExchangeRateModule,
+    AdminWalletModule,
+    AdminUsageModule,
   ],
   controllers: [AdminController, AdminAnswerPatternController],
   providers: [AdminService, AdminAnswerPatternService],
