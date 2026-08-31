@@ -3,15 +3,29 @@ model AiModelPricing {
   provider AiProviderName
   model    String         @db.VarChar(150)
 
+  // ต้นทุน Input ที่บริษัทต้องจ่าย เป็นบาท
   inputCostThbPerMillTokens       Decimal  @default(0) @db.Decimal(20, 6)
+  // ต้นทุน Output ที่บริษัทต้องจ่าย เป็นบาท
   outputCostThbPerMillTokens      Decimal  @default(0) @db.Decimal(20, 6)
+
   cachedInputCostThbPerMillTokens Decimal? @db.Decimal(20, 6)
   cacheWriteCostThbPerMillTokens  Decimal? @db.Decimal(20, 6)
 
+  // เครดิตลูกค้าที่จะหักจาก Input
   inputCreditPerMillTokens       Decimal  @default(0) @db.Decimal(20, 6)
+  // เครดิตลูกค้าที่จะหักจาก Output
   outputCreditPerMillTokens      Decimal  @default(0) @db.Decimal(20, 6)
+  
   cachedInputCreditPerMillTokens Decimal? @db.Decimal(20, 6)
   cacheWriteCreditPerMillTokens  Decimal? @db.Decimal(20, 6)
+
+  /// Applies to the whole request when all input buckets combined exceed this value.
+  longContextThresholdTokens           Int?
+  /// Optional multipliers for the corresponding base rates above; null means 1x.
+  longContextInputRateMultiplier       Decimal? @db.Decimal(10, 6)
+  longContextOutputRateMultiplier      Decimal? @db.Decimal(10, 6)
+  longContextCachedInputRateMultiplier Decimal? @db.Decimal(10, 6)
+  longContextCacheWriteRateMultiplier  Decimal? @db.Decimal(10, 6)
 
   effectiveFrom DateTime
   effectiveTo   DateTime?

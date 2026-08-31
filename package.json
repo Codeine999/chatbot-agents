@@ -18,7 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-e2e.json",
-    "prisma:generate": "bunx prisma generate"
+    "prisma:generate": "bunx prisma generate",
+    "seed:ai-pricing": "nest build && node dist/src/scripts/seed-ai-pricing.js"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.1",

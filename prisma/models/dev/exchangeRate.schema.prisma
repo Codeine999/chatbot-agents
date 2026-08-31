@@ -1,7 +1,7 @@
 model CreditExchangeRate {
-  id            String   @id @default(uuid()) @db.Uuid
-  creditsPerThb Decimal  @db.Decimal(20, 6)
-  effectiveFrom DateTime @default(now())
+  id            String    @id @default(uuid()) @db.Uuid
+  creditsPerThb Decimal   @db.Decimal(20, 6)
+  effectiveFrom DateTime  @default(now())
   effectiveTo   DateTime?
 
   topups CreditTopupHistory[]

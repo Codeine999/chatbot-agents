@@ -93,8 +93,8 @@ model CreditTopupHistory {
   /// Nullable only for records created before exchange-rate top-ups existed.
   exchangeRateId String?             @db.Uuid
   exchangeRate   CreditExchangeRate? @relation(fields: [exchangeRateId], references: [id], onDelete: Restrict)
-  packagePriceId String?              @db.Uuid
-  packagePrice   CreditPackagePrice?  @relation(fields: [packagePriceId], references: [id], onDelete: Restrict)
+  packagePriceId String?             @db.Uuid
+  packagePrice   CreditPackagePrice? @relation(fields: [packagePriceId], references: [id], onDelete: Restrict)
   paidAmount     Decimal?            @db.Decimal(20, 6)
   creditAmount   Decimal             @db.Decimal(20, 6)
   slipImage      String              @db.VarChar(500)
