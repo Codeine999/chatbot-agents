@@ -35,29 +35,24 @@ export function normalizeTokenUsage(input: {
   cacheWriteTokens?: unknown;
   outputTokens: unknown;
   cachedInPrompt: boolean;
+  cacheWriteInPrompt?: boolean;
 }): AiTokenUsage {
   const promptTokens = toTokenCount(input.promptTokens);
   const cachedInputTokens = toTokenCount(input.cachedInputTokens);
+  const cacheWriteTokens = toTokenCount(input.cacheWriteTokens);
+  const bucketedPromptTokens =
+    cachedInputTokens + (input.cacheWriteInPrompt ? cacheWriteTokens : 0);
 
   return {
     inputTokens: input.cachedInPrompt
-      ? Math.max(0, promptTokens - cachedInputTokens)
+      ? Math.max(0, promptTokens - bucketedPromptTokens)
       : promptTokens,
     cachedInputTokens,
-    cacheWriteTokens: toTokenCount(input.cacheWriteTokens),
+    cacheWriteTokens,
     outputTokens: toTokenCount(input.outputTokens),
   };
 }
 
-/**
- * Conservative provider-neutral upper bound used only while reserving credit.
- *
- * UTF-8 bytes are an upper bound for byte-fallback text tokenizers. Message
- * envelope headroom covers provider-added role/content framing. Images are
- * reserved at a flat per-image ceiling because vision billing depends on
- * resized dimensions, not on file size. Settlement always uses the actual
- * counters returned by the provider, never this estimate.
- */
 export function estimateMaxTokenUsage(
   request: AiGenerateRequest,
 ): AiTokenUsage {

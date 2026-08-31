@@ -1,19 +1,10 @@
 import { Prisma } from '../../../generated/prisma/client';
 
-/**
- * Attribution carried alongside a customer-facing AI call so the resulting
- * `AiUsageEvent` can be traced back to the LINE thread that caused it.
- * `userId` is the LINE user id (rate-limit key), not a database id.
- */
+
 export type LineAiUsageContext = Readonly<{
   userId?: string;
   lineMemberId?: string;
   conversationId?: string;
-  /**
-   * Stable id of the inbound event being answered (the LINE
-   * `webhookEventId`). Billing derives its ledger idempotency key from it, so
-   * re-processing the same event settles once instead of debiting again.
-   */
   turnId?: string;
 }>;
 
@@ -21,7 +12,6 @@ export type LineAiUsageContext = Readonly<{
 export type AiUsageCost = Readonly<{
   costThb: Prisma.Decimal;
   chargedCredit: Prisma.Decimal;
-  /** The `AiModelPricing` row used, or null when the model has no price yet. */
   pricingId: string | null;
 }>;
 

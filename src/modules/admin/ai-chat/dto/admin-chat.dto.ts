@@ -19,6 +19,12 @@ export class RenameAdminChatRoomDto extends createZodDto(
   }),
 ) {}
 
+/**
+ * There is deliberately no `provider`/`model` here. The AI used for a
+ * back-office turn is read from the stored `AiProviderSetting` (ADMIN scope);
+ * a body naming a model is ignored rather than honoured, so an admin cannot
+ * bill the shared wallet at a rate nobody published.
+ */
 export class SendAdminChatMessageDto extends createZodDto(
   z.object({
     /** Omit to start a new room; the title is derived from the first message. */

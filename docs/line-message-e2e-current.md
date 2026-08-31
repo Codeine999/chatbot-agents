@@ -448,7 +448,7 @@ AiSetting        { id, systemPrompt, tone, fallbackMessage, active }
 | `strikes:line:user:<id>` | `BanService` | counter | 86400 | จำนวน strike |
 | `spam:line:user:<id>:last-text` | `SpamDetectorService` | string | 30 วินาที | ข้อความล่าสุด normalize แล้ว |
 | `spam:line:user:<id>:same-count` | `SpamDetectorService` | counter | 30 วินาที | จำนวนซ้ำ |
-| `ai:provider:setting:<scope>` | `AiProviderSettingsService` | string | `AI_PROVIDER_CACHE_TTL_SEC` (ขั้นต่ำ 30) | `AiProviderRuntimeSetting` JSON — cache miss/พังแล้วอ่าน PostgreSQL ต่อได้ |
+| `ai:provider-setting:v1:<scope>` | `AiProviderSettingsService` | string | ไม่มีวันหมดอายุ | `AiProviderRuntimeSetting` JSON — write-through เมื่อแก้ setting; cache miss/พังแล้วอ่าน PostgreSQL ต่อได้ |
 | BullMQ keys | BullMQ | หลายชนิด | ตาม job | queue/job/retry |
 
 ---

@@ -9,6 +9,7 @@ import { AdminJwtService } from './admin-jwt.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
+import { CreditService } from '../../usage/credit-point/credit.service';
 
 const ADMIN_PUBLIC_SELECT = {
   id: true,
@@ -28,6 +29,7 @@ export class AdminAuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly adminJwtService: AdminJwtService,
+    private readonly creditService: CreditService,
   ) {}
 
   async login(input: AdminLoginDto) {
@@ -46,6 +48,7 @@ export class AdminAuthService {
     });
 
     const { password: _password, ...safeAdmin } = admin;
+    void _password;
 
     return {
       accessToken,
@@ -57,28 +60,41 @@ export class AdminAuthService {
 
   async create(input: CreateAdminDto) {
     const password = await bcrypt.hash(input.password, 12);
+    let createdAdminId: string | undefined;
 
     try {
-      return await this.prisma.adminMember
-        .create({
-          data: {
-            username: input.username,
-            firstname: input.firstName,
-            lastname: input.lastName,
-            email: input.email.toLowerCase(),
-            phone: input.phone,
-            image: input.image ?? null,
-            password,
-            role: input.role,
-          },
-          select: ADMIN_PUBLIC_SELECT,
-        })
-        .then(({ firstname, lastname, ...admin }) => ({
-          ...admin,
-          firstName: firstname,
-          lastName: lastname,
-        }));
+      const created = await this.prisma.adminMember.create({
+        data: {
+          username: input.username,
+          firstname: input.firstName,
+          lastname: input.lastName,
+          email: input.email.toLowerCase(),
+          phone: input.phone,
+          image: input.image ?? null,
+          password,
+          role: input.role,
+        },
+        select: ADMIN_PUBLIC_SELECT,
+      });
+      createdAdminId = created.id;
+
+      if (created.role === 'admin') {
+        await this.creditService.setBudgetLimit(
+          'ADMIN_AI_QUERY',
+          created.id,
+          new Prisma.Decimal(input.aiBudgetLimitCredit ?? 0),
+        );
+      }
+
+      const { firstname, lastname, ...admin } = created;
+      return { ...admin, firstName: firstname, lastName: lastname };
     } catch (error) {
+      if (createdAdminId) {
+        await this.prisma.adminMember
+          .delete({ where: { id: createdAdminId } })
+          .catch(() => undefined);
+      }
+
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
           throw new ConflictException('Admin username, email, or phone exists');

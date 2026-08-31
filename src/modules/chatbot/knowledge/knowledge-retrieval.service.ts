@@ -126,6 +126,7 @@ export class KnowledgeRetrievalService {
         userId: context.userId,
         lineMemberId: context.lineMemberId,
         conversationId: context.conversationId,
+        turnId: context.turnId,
         recentMessages: context.recentMessages ?? [],
         candidates,
         attemptedQueries,

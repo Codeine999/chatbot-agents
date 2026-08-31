@@ -2,6 +2,10 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ADMIN_ROLES } from '../../../../shared/guards/admin-auth.types';
 
+const creditLimit = z
+  .union([z.number().nonnegative(), z.string().regex(/^\d+(\.\d{1,6})?$/)])
+  .transform((value) => String(value));
+
 export class CreateAdminDto extends createZodDto(
   z.object({
     username: z.string().trim().min(3).max(100),
@@ -12,5 +16,7 @@ export class CreateAdminDto extends createZodDto(
     phone: z.string().trim().min(3).max(30),
     image: z.string().trim().url().nullable().optional(),
     role: z.enum(ADMIN_ROLES),
+    /** Initial ADMIN_AI_QUERY allowance; omitted admin accounts start locked. */
+    aiBudgetLimitCredit: creditLimit.optional(),
   }),
 ) {}

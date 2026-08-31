@@ -1,10 +1,16 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AI_PROVIDER_LABELS } from '../../../ai-provider/utils/ai-provider.constants';
+import {
+  AI_PROVIDER_LABELS,
+  AI_PROVIDER_TEXT_MODELS,
+} from '../../../ai-provider/utils/ai-provider.constants';
+import { AI_PROVIDER_ADAPTERS } from '../../../ai-provider/providers/ai-provider.registry';
+import type { AiProviderAdapterRegistry } from '../../../ai-provider/providers/ai-provider.registry';
 import {
   AI_PROVIDER_NAMES,
   AiProviderCatalogItem,
@@ -15,13 +21,26 @@ import {
 
 @Injectable()
 export class AiModelCatalogService {
-  constructor(private readonly configService: ConfigService) {}
+  private readonly providerAdapters: ReadonlyMap<
+    AiProviderName,
+    AiProviderAdapterRegistry[number]
+  >;
+
+  constructor(
+    private readonly configService: ConfigService,
+    @Inject(AI_PROVIDER_ADAPTERS)
+    adapters: AiProviderAdapterRegistry,
+  ) {
+    this.providerAdapters = new Map(
+      adapters.map((adapter) => [adapter.name, adapter]),
+    );
+  }
 
   getCatalog(): readonly AiProviderCatalogItem[] {
     return AI_PROVIDER_NAMES.map((provider) => ({
       provider,
       label: AI_PROVIDER_LABELS[provider],
-      available: this.hasApiKey(provider),
+      available: this.isProviderAvailable(provider),
       models: this.getModels(provider),
     }));
   }
@@ -33,14 +52,8 @@ export class AiModelCatalogService {
       ),
       this.configService.get<string>(`${provider}_MODEL`),
       ...this.getScopedModels(provider),
+      ...AI_PROVIDER_TEXT_MODELS[provider],
     ];
-
-    if (provider === 'GEMINI') {
-      candidates.push(
-        this.configService.get<string>('GEMINI_MODEL') ??
-          'gemini-3.1-flash-lite',
-      );
-    }
 
     return [
       ...new Set(candidates.map((model) => model?.trim()).filter(Boolean)),
@@ -57,7 +70,8 @@ export class AiModelCatalogService {
       .toUpperCase();
     const provider = isAiProviderName(configuredProvider)
       ? configuredProvider
-      : 'GEMINI';
+      : (this.getCatalog().find((item) => item.available)?.provider ??
+        'GEMINI');
     const configuredModel = this.configService
       .get<string>(`AI_${scope}_MODEL`)
       ?.trim();
@@ -96,21 +110,16 @@ export class AiModelCatalogService {
     }
 
     if (!catalog.available) {
-      throw new ServiceUnavailableException(
-        `${provider} API key is not configured`,
-      );
+      throw new ServiceUnavailableException(`${provider} is not configured`);
     }
   }
 
-  private hasApiKey(provider: AiProviderName): boolean {
-    const keyName =
-      provider === 'GEMINI'
-        ? 'GEMINI_API_KEY'
-        : provider === 'OPENAI'
-          ? 'OPENAI_API_KEY'
-          : 'ANTHROPIC_API_KEY';
+  isConfiguredModel(provider: AiProviderName, model: string): boolean {
+    return this.getModels(provider).includes(model.trim());
+  }
 
-    return Boolean(this.configService.get<string>(keyName)?.trim());
+  private isProviderAvailable(provider: AiProviderName): boolean {
+    return this.providerAdapters.get(provider)?.isConfigured() ?? false;
   }
 
   private getScopedModels(provider: AiProviderName): Array<string | undefined> {

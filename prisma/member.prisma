@@ -1,0 +1,13 @@
+model Member {
+  uuid          String       @id @default(uuid()) @db.Uuid
+  username      String       @unique
+  password      String
+  firstname     String
+  lastname      String
+  phone         String       @unique
+  bankname      String
+  banknumber    String       @unique
+  statusaccount String       @default("pending")
+  payments      UserPayment[]
+  lineMembers   LineMember[]
+}

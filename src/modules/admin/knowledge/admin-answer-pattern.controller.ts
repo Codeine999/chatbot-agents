@@ -29,6 +29,11 @@ export class AdminAnswerPatternController {
     return this.answerPatternService.list();
   }
 
+  @Get('count')
+  count() {
+    return this.answerPatternService.count();
+  }
+
   @AdminGuard('dev', 'owner')
   @Post('reindex')
   reindex() {

@@ -9,16 +9,21 @@ import {
 } from '@nestjs/common';
 import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
 import { AdminAiPricingService } from './admin-ai-pricing.service';
+import { AiPricingCatalogService } from './ai-pricing-catalog.service';
 import {
   AiModelPricingIdParamDto,
   ListAiModelPricingQueryDto,
+  SeedAiModelPricingDto,
   UpsertAiModelPricingDto,
 } from './dto/admin-ai-pricing.dto';
 
 @AdminGuard('dev', 'owner')
 @Controller('api/admin/ai-pricing')
 export class AdminAiPricingController {
-  constructor(private readonly pricingService: AdminAiPricingService) {}
+  constructor(
+    private readonly pricingService: AdminAiPricingService,
+    private readonly catalogService: AiPricingCatalogService,
+  ) {}
 
   @Get()
   list(@Query() query: ListAiModelPricingQueryDto) {
@@ -34,6 +39,15 @@ export class AdminAiPricingController {
   @Post()
   upsert(@Body() body: UpsertAiModelPricingDto) {
     return this.pricingService.upsert(body);
+  }
+
+  /**
+   * Publishes the built-in provider list prices, converted to credit rates.
+   * Without this a fresh install has no prices and every AI call is refused.
+   */
+  @Post('defaults')
+  seedDefaults(@Body() body: SeedAiModelPricingDto) {
+    return this.catalogService.seedDefaults({ overwrite: body.overwrite });
   }
 
   @Delete(':id')

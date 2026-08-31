@@ -50,6 +50,7 @@ export class AiChatService {
         userId: context.userId,
         lineMemberId: context.lineMemberId,
         conversationId: context.conversationId,
+        turnId: context.turnId,
         recentMessages: context.recentMessages,
       }));
 
@@ -60,7 +61,10 @@ export class AiChatService {
 
     const setting = await this.getActiveAiSetting();
 
-    if (retrieval.route === 'RAG' && retrieval.selectedItems.length > 0) {
+    // A DIRECT hit whose stored answer is blank still retrieved real context.
+    // Ground a generated answer on it instead of dropping straight to the
+    // fallback message.
+    if (retrieval.selectedItems.length > 0) {
       return this.generateFromKnowledge(
         [...retrieval.selectedItems],
         message,

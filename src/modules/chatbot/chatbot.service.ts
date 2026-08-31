@@ -43,9 +43,10 @@ export class ChatbotService {
       recentMessages = [],
       lineMemberId,
       conversationId,
+      turnId,
     } = request;
     const input = text.trim();
-    const usage = { userId, lineMemberId, conversationId };
+    const usage = { userId, lineMemberId, conversationId, turnId };
 
     if (!input) {
       return this.response(
@@ -199,6 +200,7 @@ export class ChatbotService {
         userId: request.userId,
         lineMemberId: request.lineMemberId,
         conversationId: request.conversationId,
+        turnId: request.turnId,
         recentMessages: request.recentMessages,
       }),
       'AI',
@@ -234,6 +236,7 @@ export class ChatbotService {
           userId: request.userId,
           lineMemberId: request.lineMemberId,
           conversationId: request.conversationId,
+          turnId: request.turnId,
           text: decision.text,
           recentMessages: request.recentMessages,
         });

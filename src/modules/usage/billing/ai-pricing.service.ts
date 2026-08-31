@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type {
@@ -10,15 +10,17 @@ import { estimateMaxTokenUsage } from '../../../ai-provider/utils/token-usage.ut
 import { AiUsageCost } from './ai-usage.types';
 
 const TOKENS_PER_MILLION = new Prisma.Decimal(1_000_000);
+const ONE_RATE_MULTIPLIER = new Prisma.Decimal(1);
 const CREDIT_SCALE = 6;
 
-const ZERO_COST: AiUsageCost = {
-  costThb: new Prisma.Decimal(0),
-  chargedCredit: new Prisma.Decimal(0),
-  pricingId: null,
-};
+type RateMultipliers = Readonly<{
+  input: Prisma.Decimal;
+  output: Prisma.Decimal;
+  cachedInput: Prisma.Decimal;
+  cacheWrite: Prisma.Decimal;
+}>;
 
-type PricingRow = {
+export type PricingRow = {
   id: string;
   inputCostThbPerMillTokens: Prisma.Decimal;
   outputCostThbPerMillTokens: Prisma.Decimal;
@@ -28,20 +30,22 @@ type PricingRow = {
   outputCreditPerMillTokens: Prisma.Decimal;
   cachedInputCreditPerMillTokens: Prisma.Decimal | null;
   cacheWriteCreditPerMillTokens: Prisma.Decimal | null;
+  longContextThresholdTokens: number | null;
+  longContextInputRateMultiplier: Prisma.Decimal | null;
+  longContextOutputRateMultiplier: Prisma.Decimal | null;
+  longContextCachedInputRateMultiplier: Prisma.Decimal | null;
+  longContextCacheWriteRateMultiplier: Prisma.Decimal | null;
 };
 
-/**
- * Turns actual provider token usage into money (`costThb`, what we pay) and
- * credits (`chargedCredit`, what the customer pays), using the
- * `AiModelPricing` row that is active for that provider/model right now.
- *
- * All arithmetic stays in `Prisma.Decimal` — credits are money and must never
- * pass through a JavaScript float.
- */
+export type AiPricingQuote = Readonly<{
+  provider: AiProviderName;
+  model: string;
+  pricing: PricingRow;
+  reservedCredit: Prisma.Decimal;
+}>;
+
 @Injectable()
 export class AiPricingService {
-  private readonly logger = new Logger(AiPricingService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
   async calculate(
@@ -50,66 +54,123 @@ export class AiPricingService {
     usage: AiTokenUsage,
     at: Date = new Date(),
   ): Promise<AiUsageCost> {
-    const pricing = await this.findActivePricing(provider, model, at);
+    const pricing = await this.requireActivePricing(provider, model, at);
 
-    if (!pricing) {
-      // Never block a reply that already cost us a provider call — log the
-      // usage at zero credit and let the back office add the missing price.
-      // This is real money leaving with nothing debited, so it is an error,
-      // not a warning: see GET /api/admin/ai-pricing/unpriced.
-      this.logger.error(
-        `No active AiModelPricing for ${provider}/${model}; usage recorded uncharged`,
-      );
-      return ZERO_COST;
-    }
+    return this.calculateWithPricing(pricing, usage);
+  }
+
+  async createQuote(
+    provider: AiProviderName,
+    model: string,
+    request: AiGenerateRequest,
+    at: Date = new Date(),
+  ): Promise<AiPricingQuote> {
+    const pricing = await this.requireActivePricing(provider, model, at);
 
     return {
-      pricingId: pricing.id,
-      costThb: this.total(usage, {
-        input: pricing.inputCostThbPerMillTokens,
-        output: pricing.outputCostThbPerMillTokens,
-        cachedInput: pricing.cachedInputCostThbPerMillTokens,
-        cacheWrite: pricing.cacheWriteCostThbPerMillTokens,
-      }),
-      chargedCredit: this.total(usage, {
-        input: pricing.inputCreditPerMillTokens,
-        output: pricing.outputCreditPerMillTokens,
-        cachedInput: pricing.cachedInputCreditPerMillTokens,
-        cacheWrite: pricing.cacheWriteCreditPerMillTokens,
-      }),
+      provider,
+      model,
+      pricing,
+      reservedCredit: this.reservationCredit(pricing, request),
     };
   }
 
-  /**
-   * Maximum customer credit held before a provider call. The input estimate is
-   * charged at the most expensive configured input/cache rate so cache bucket
-   * selection cannot make the final charge exceed the reservation.
-   */
+  calculateQuote(quote: AiPricingQuote, usage: AiTokenUsage): AiUsageCost {
+    return this.calculateWithPricing(quote.pricing, usage);
+  }
+
+  private calculateWithPricing(
+    pricing: PricingRow,
+    usage: AiTokenUsage,
+  ): AiUsageCost {
+    const multipliers = this.rateMultipliers(
+      pricing,
+      this.totalInputTokens(usage),
+    );
+
+    return {
+      pricingId: pricing.id,
+      costThb: this.total(
+        usage,
+        {
+          input: pricing.inputCostThbPerMillTokens,
+          output: pricing.outputCostThbPerMillTokens,
+          cachedInput: pricing.cachedInputCostThbPerMillTokens,
+          cacheWrite: pricing.cacheWriteCostThbPerMillTokens,
+        },
+        multipliers,
+      ),
+      chargedCredit: this.total(
+        usage,
+        {
+          input: pricing.inputCreditPerMillTokens,
+          output: pricing.outputCreditPerMillTokens,
+          cachedInput: pricing.cachedInputCreditPerMillTokens,
+          cacheWrite: pricing.cacheWriteCreditPerMillTokens,
+        },
+        multipliers,
+      ),
+    };
+  }
+
   async estimateReservationCredit(
     provider: AiProviderName,
     model: string,
     request: AiGenerateRequest,
     at: Date = new Date(),
   ): Promise<Prisma.Decimal> {
-    const pricing = await this.findActivePricing(provider, model, at);
-    if (!pricing) return new Prisma.Decimal(0);
+    return (await this.createQuote(provider, model, request, at))
+      .reservedCredit;
+  }
 
+  private reservationCredit(
+    pricing: PricingRow,
+    request: AiGenerateRequest,
+  ): Prisma.Decimal {
+    const estimate = estimateMaxTokenUsage(request);
+    const multipliers = this.rateMultipliers(
+      pricing,
+      this.totalInputTokens(estimate),
+    );
     const normalInput = pricing.inputCreditPerMillTokens;
     const inputRate = [
-      normalInput,
-      pricing.cachedInputCreditPerMillTokens ?? normalInput,
-      pricing.cacheWriteCreditPerMillTokens ?? normalInput,
+      normalInput.mul(multipliers.input),
+      (pricing.cachedInputCreditPerMillTokens ?? normalInput).mul(
+        multipliers.cachedInput,
+      ),
+      (pricing.cacheWriteCreditPerMillTokens ?? normalInput).mul(
+        multipliers.cacheWrite,
+      ),
     ].reduce((highest, rate) => (rate.greaterThan(highest) ? rate : highest));
 
-    const estimate = estimateMaxTokenUsage(request);
     return this.perMillion(estimate.inputTokens, inputRate)
       .plus(
         this.perMillion(
           estimate.outputTokens,
-          pricing.outputCreditPerMillTokens,
+          pricing.outputCreditPerMillTokens.mul(multipliers.output),
         ),
       )
       .toDecimalPlaces(CREDIT_SCALE, Prisma.Decimal.ROUND_CEIL);
+  }
+
+  private async requireActivePricing(
+    provider: AiProviderName,
+    model: string,
+    at: Date,
+  ): Promise<PricingRow> {
+    const pricing = await this.findActivePricing(provider, model, at);
+
+    if (
+      !pricing ||
+      !pricing.inputCreditPerMillTokens.greaterThan(0) ||
+      !pricing.outputCreditPerMillTokens.greaterThan(0)
+    ) {
+      throw new ServiceUnavailableException(
+        `No active billable AI pricing for ${provider}/${model}`,
+      );
+    }
+
+    return pricing;
   }
 
   findActivePricing(
@@ -135,15 +196,15 @@ export class AiPricingService {
         outputCreditPerMillTokens: true,
         cachedInputCreditPerMillTokens: true,
         cacheWriteCreditPerMillTokens: true,
+        longContextThresholdTokens: true,
+        longContextInputRateMultiplier: true,
+        longContextOutputRateMultiplier: true,
+        longContextCachedInputRateMultiplier: true,
+        longContextCacheWriteRateMultiplier: true,
       },
     });
   }
 
-  /**
-   * Cache rates are optional. When one is missing the tokens are billed at the
-   * normal input rate rather than at zero — an unconfigured cache discount
-   * must not silently give the usage away for free.
-   */
   private total(
     usage: AiTokenUsage,
     rates: {
@@ -152,22 +213,66 @@ export class AiPricingService {
       cachedInput: Prisma.Decimal | null;
       cacheWrite: Prisma.Decimal | null;
     },
+    multipliers: RateMultipliers,
   ): Prisma.Decimal {
-    return this.perMillion(usage.inputTokens, rates.input)
+    return this.perMillion(
+      usage.inputTokens,
+      rates.input.mul(multipliers.input),
+    )
       .plus(
         this.perMillion(
           usage.cachedInputTokens,
-          rates.cachedInput ?? rates.input,
+          (rates.cachedInput ?? rates.input).mul(multipliers.cachedInput),
         ),
       )
       .plus(
         this.perMillion(
           usage.cacheWriteTokens,
-          rates.cacheWrite ?? rates.input,
+          (rates.cacheWrite ?? rates.input).mul(multipliers.cacheWrite),
         ),
       )
-      .plus(this.perMillion(usage.outputTokens, rates.output))
+      .plus(
+        this.perMillion(
+          usage.outputTokens,
+          rates.output.mul(multipliers.output),
+        ),
+      )
       .toDecimalPlaces(CREDIT_SCALE, Prisma.Decimal.ROUND_HALF_UP);
+  }
+
+  /**
+   * Long-context pricing is selected from all disjoint input buckets. Output
+   * tokens never decide the tier, but the selected output multiplier applies
+   * to the whole request once the input threshold is exceeded.
+   */
+  private rateMultipliers(
+    pricing: PricingRow,
+    totalInputTokens: number,
+  ): RateMultipliers {
+    if (
+      pricing.longContextThresholdTokens === null ||
+      totalInputTokens <= pricing.longContextThresholdTokens
+    ) {
+      return {
+        input: ONE_RATE_MULTIPLIER,
+        output: ONE_RATE_MULTIPLIER,
+        cachedInput: ONE_RATE_MULTIPLIER,
+        cacheWrite: ONE_RATE_MULTIPLIER,
+      };
+    }
+
+    return {
+      input: pricing.longContextInputRateMultiplier ?? ONE_RATE_MULTIPLIER,
+      output: pricing.longContextOutputRateMultiplier ?? ONE_RATE_MULTIPLIER,
+      cachedInput:
+        pricing.longContextCachedInputRateMultiplier ?? ONE_RATE_MULTIPLIER,
+      cacheWrite:
+        pricing.longContextCacheWriteRateMultiplier ?? ONE_RATE_MULTIPLIER,
+    };
+  }
+
+  private totalInputTokens(usage: AiTokenUsage): number {
+    return usage.inputTokens + usage.cachedInputTokens + usage.cacheWriteTokens;
   }
 
   private perMillion(tokens: number, rate: Prisma.Decimal): Prisma.Decimal {

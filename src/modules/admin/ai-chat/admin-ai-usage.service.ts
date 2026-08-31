@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   LineChatSender,
   Prisma,
@@ -126,12 +126,18 @@ export class AdminAiUsageService {
       .sort((a, b) => b.messageCount - a.messageCount);
   }
 
-  /** Sets one admin's AI allowance; `null` limit means unlimited. */
+  /** `null` is unlimited for owner/dev; normal admin accounts require a cap. */
   async setLimit(adminMemberId: string, limitCredit: string | null) {
-    await this.prisma.adminMember.findUniqueOrThrow({
+    const admin = await this.prisma.adminMember.findUniqueOrThrow({
       where: { id: adminMemberId },
-      select: { id: true },
+      select: { id: true, role: true },
     });
+
+    if (admin.role === 'admin' && limitCredit === null) {
+      throw new BadRequestException(
+        'A finite AI credit budget is required for admin accounts',
+      );
+    }
 
     const budget = await this.creditService.setBudgetLimit(
       UsageKind.ADMIN_AI_QUERY,

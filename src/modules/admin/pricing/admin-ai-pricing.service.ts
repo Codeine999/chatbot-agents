@@ -21,6 +21,11 @@ const PRICING_SELECT = {
   outputCreditPerMillTokens: true,
   cachedInputCreditPerMillTokens: true,
   cacheWriteCreditPerMillTokens: true,
+  longContextThresholdTokens: true,
+  longContextInputRateMultiplier: true,
+  longContextOutputRateMultiplier: true,
+  longContextCachedInputRateMultiplier: true,
+  longContextCacheWriteRateMultiplier: true,
   effectiveFrom: true,
   effectiveTo: true,
 } as const;
@@ -28,10 +33,8 @@ const PRICING_SELECT = {
 /**
  * Back-office CRUD for `AiModelPricing`.
  *
- * Without a row that is active for a provider/model, `AiPricingService` prices
- * the call at zero: the provider bill still arrives but the customer wallet is
- * never debited. This is the only way to put those rows in place, so
- * `unpriced()` exists to make the gap visible before it costs real money.
+ * A provider/model without an active billable row is blocked before the paid
+ * provider call. `unpriced()` lets an owner find and configure those gaps.
  */
 @Injectable()
 export class AdminAiPricingService {
@@ -96,6 +99,19 @@ export class AdminAiPricingService {
       cacheWriteCreditPerMillTokens: this.optionalDecimal(
         body.cacheWriteCreditPerMillTokens,
       ),
+      longContextThresholdTokens: body.longContextThresholdTokens ?? null,
+      longContextInputRateMultiplier: this.optionalDecimal(
+        body.longContextInputRateMultiplier,
+      ),
+      longContextOutputRateMultiplier: this.optionalDecimal(
+        body.longContextOutputRateMultiplier,
+      ),
+      longContextCachedInputRateMultiplier: this.optionalDecimal(
+        body.longContextCachedInputRateMultiplier,
+      ),
+      longContextCacheWriteRateMultiplier: this.optionalDecimal(
+        body.longContextCacheWriteRateMultiplier,
+      ),
     };
 
     return this.prisma.$transaction(async (tx) => {
@@ -143,8 +159,7 @@ export class AdminAiPricingService {
 
   /**
    * Every selectable provider/model that has no active price right now.
-   * A non-empty list means those calls are running the provider bill up while
-   * charging the wallet nothing.
+   * A non-empty list means those provider/model choices are blocked.
    */
   async unpriced() {
     const now = new Date();
@@ -153,11 +168,22 @@ export class AdminAiPricingService {
         effectiveFrom: { lte: now },
         OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
       },
-      select: { provider: true, model: true },
+      select: {
+        provider: true,
+        model: true,
+        inputCreditPerMillTokens: true,
+        outputCreditPerMillTokens: true,
+      },
     });
 
     const pricedKeys = new Set(
-      priced.map((row) => `${row.provider}:${row.model}`),
+      priced
+        .filter(
+          (row) =>
+            row.inputCreditPerMillTokens.greaterThan(0) &&
+            row.outputCreditPerMillTokens.greaterThan(0),
+        )
+        .map((row) => `${row.provider}:${row.model}`),
     );
 
     const missing = AI_PROVIDER_NAMES.flatMap((provider) =>
@@ -168,7 +194,7 @@ export class AdminAiPricingService {
 
     if (missing.length > 0) {
       this.logger.warn(
-        `${missing.length} configured model(s) have no active pricing and bill at zero credit`,
+        `${missing.length} configured model(s) have no active pricing and are blocked`,
       );
     }
 

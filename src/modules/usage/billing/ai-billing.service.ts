@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { UsageKind } from '../../../generated/prisma/client';
 import type {
   AiGenerateRequest,
@@ -18,30 +22,17 @@ import {
 
 export type BilledGenerationParams = Readonly<{
   kind: UsageKind;
-  /** `*` for the shared LINE pool, the admin id for a per-admin budget. */
   scopeKey?: string;
+  requireBudgetLimit?: boolean;
   provider: AiProviderName;
   model: string;
   request: AiGenerateRequest;
   adminMemberId?: string;
-  /**
-   * Overrides the derived ledger key. Leave unset for LINE traffic: a
-   * `turnId` produces a key that is stable across attempts on its own.
-   */
   idempotencyKey?: string;
   call: () => Promise<AiGenerateResponse>;
 }> &
   Pick<LineAiUsageContext, 'lineMemberId' | 'conversationId' | 'turnId'>;
 
-/**
- * One billed AI call:
- *
- *   reserve credit -> call provider -> read actual usage -> price it ->
- *   settle wallet + budget + ledger.
- *
- * A provider failure releases the reservation and is logged without touching
- * the customer's actual balance.
- */
 @Injectable()
 export class AiBillingService {
   private readonly logger = new Logger(AiBillingService.name);
@@ -52,15 +43,17 @@ export class AiBillingService {
   ) {}
 
   async runBilled(params: BilledGenerationParams): Promise<AiGenerateResponse> {
-    const reservedCredit = await this.pricingService.estimateReservationCredit(
+    const quote = await this.pricingService.createQuote(
       params.provider,
       params.model,
       params.request,
     );
+
     const reservation = await this.creditService.reserveAiCredit(
       params.kind,
       params.scopeKey ?? LINE_AI_BUDGET_SCOPE_KEY,
-      reservedCredit,
+      quote.reservedCredit,
+      { requireBudgetLimit: params.requireBudgetLimit ?? false },
     );
 
     const startedAt = Date.now();
@@ -83,13 +76,19 @@ export class AiBillingService {
     const latencyMs = Date.now() - startedAt;
     let cost: AiUsageCost;
     try {
-      cost = await this.pricingService.calculate(
-        response.provider,
-        response.model,
-        response.usage,
-      );
+      this.assertMeteredResponse(params, response);
+      cost = this.pricingService.calculateQuote(quote, response.usage);
     } catch (error) {
-      await this.releaseAfterBillingFailure(reservation);
+      await this.record(reservation, params, {
+        status: 'failed',
+        usage: response.usage,
+        cost: ZERO_AI_USAGE_COST,
+        latencyMs,
+        providerRequestId: response.providerRequestId,
+        provider: response.provider,
+        model: response.model,
+        errorCode: this.toErrorCode(error),
+      });
       throw error;
     }
 
@@ -106,11 +105,6 @@ export class AiBillingService {
     return response;
   }
 
-  /**
-   * Settlement never fails the caller: the provider answer has already been
-   * produced and paid for upstream, so a billing write error is logged for
-   * reconciliation instead of losing the reply.
-   */
   private async record(
     reservation: CreditHold,
     params: BilledGenerationParams,
@@ -140,7 +134,7 @@ export class AiBillingService {
         conversationId: params.conversationId,
         providerRequestId: outcome.providerRequestId,
         latencyMs: outcome.latencyMs,
-        errorCode: outcome.errorCode ?? this.unpricedCode(outcome),
+        errorCode: outcome.errorCode,
       });
     } catch (error) {
       this.logger.error(
@@ -148,6 +142,7 @@ export class AiBillingService {
         error instanceof Error ? error.stack : String(error),
       );
       await this.releaseAfterBillingFailure(reservation);
+      if (outcome.status === 'success') throw error;
     }
   }
 
@@ -166,38 +161,33 @@ export class AiBillingService {
     }
   }
 
-  /**
-   * Marks a settled call whose model had no active price, so unmetered spend
-   * is queryable on `AiUsageEvent` instead of living only in a log line.
-   */
-  private unpricedCode(outcome: {
-    status: 'success' | 'failed';
-    usage: AiGenerateResponse['usage'];
-    cost: AiUsageCost;
-  }): string | undefined {
-    if (outcome.status !== 'success' || outcome.cost.pricingId) {
-      return undefined;
+  private assertMeteredResponse(
+    params: BilledGenerationParams,
+    response: AiGenerateResponse,
+  ): void {
+    if (
+      response.provider !== params.provider ||
+      response.model !== params.model
+    ) {
+      throw new ServiceUnavailableException(
+        'AI provider returned a different provider/model than the reserved pricing quote',
+      );
     }
 
-    const billedTokens =
-      outcome.usage.inputTokens +
-      outcome.usage.cachedInputTokens +
-      outcome.usage.cacheWriteTokens +
-      outcome.usage.outputTokens;
-
-    return billedTokens > 0 ? 'MISSING_PRICING' : undefined;
+    const inputTokens =
+      response.usage.inputTokens +
+      response.usage.cachedInputTokens +
+      response.usage.cacheWriteTokens;
+    if (
+      inputTokens <= 0 ||
+      (response.text.trim().length > 0 && response.usage.outputTokens <= 0)
+    ) {
+      throw new ServiceUnavailableException(
+        `${response.provider}/${response.model} did not return billable token usage`,
+      );
+    }
   }
 
-  /**
-   * Ledger key for this call.
-   *
-   * One inbound message can bill several times (classifier, query planner,
-   * grounded answer), so the turn id alone is not unique. Hashing the exact
-   * request keeps each of those calls separate while making all of them
-   * reproduce the same key if the same event is processed again — which is
-   * what turns the unique index on `CreditLedger.idempotencyKey` into a real
-   * double-charge guard rather than a random UUID that can never collide.
-   */
   private idempotencyKey(params: BilledGenerationParams): string | undefined {
     if (params.idempotencyKey) return params.idempotencyKey;
     if (!params.turnId) return undefined;

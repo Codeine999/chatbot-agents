@@ -2,7 +2,10 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { AdminChatRole } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AdminAiProviderService } from '../../ai/admin-ai-provider.service';
-import type { AiProviderMessage } from '../../../ai-provider/types/ai-provider.types';
+import type {
+  AiGenerateResponse,
+  AiProviderMessage,
+} from '../../../ai-provider/types/ai-provider.types';
 
 /** Turns kept as context for the next AI call (most recent first, then re-ordered). */
 const CONTEXT_MESSAGE_LIMIT = 20;
@@ -33,6 +36,28 @@ export class AdminChatService {
         title: true,
         lastMessageAt: true,
         createdAt: true,
+      },
+    });
+  }
+
+  async listAllRooms() {
+    return this.prisma.adminChatRoom.findMany({
+      orderBy: { lastMessageAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        lastMessageAt: true,
+        createdAt: true,
+        adminMember: {
+          select: {
+            id: true,
+            username: true,
+            firstname: true,
+            lastname: true,
+            role: true,
+          },
+        },
+        _count: { select: { messages: true } },
       },
     });
   }
@@ -69,13 +94,46 @@ export class AdminChatService {
 
   async deleteRoom(adminMemberId: string, roomId: string): Promise<void> {
     await this.assertRoomOwner(adminMemberId, roomId);
-    // Messages cascade with the room.
     await this.prisma.adminChatRoom.delete({ where: { id: roomId } });
   }
 
   async listMessages(adminMemberId: string, roomId: string) {
     await this.assertRoomOwner(adminMemberId, roomId);
 
+    return this.findMessages(roomId);
+  }
+
+  async listAllMessages(roomId: string) {
+    const room = await this.prisma.adminChatRoom.findUnique({
+      where: { id: roomId },
+      select: {
+        id: true,
+        title: true,
+        lastMessageAt: true,
+        createdAt: true,
+        adminMember: {
+          select: {
+            id: true,
+            username: true,
+            firstname: true,
+            lastname: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!room) {
+      throw new NotFoundException('Chat room not found');
+    }
+
+    return {
+      room,
+      data: await this.findMessages(roomId),
+    };
+  }
+
+  private findMessages(roomId: string) {
     return this.prisma.adminChatMessage.findMany({
       where: { roomId },
       orderBy: { createdAt: 'asc' },
@@ -90,16 +148,6 @@ export class AdminChatService {
     });
   }
 
-  /**
-   * Runs one admin chat turn: persists the admin's message, answers it with
-   * the shared ADMIN-scope provider, then persists the reply. The room is
-   * created on the fly when `roomId` is omitted so the UI can send from a
-   * blank screen without a separate call.
-   *
-   * Credit is validated and debited inside `AdminAiProviderService.generate`
-   * from the actual token usage — an insufficient balance or an exhausted
-   * admin budget throws before the provider is called.
-   */
   async sendMessage(
     adminMemberId: string,
     input: { roomId?: string; text: string },
@@ -112,35 +160,14 @@ export class AdminChatService {
           data: { adminMemberId, title: this.deriveTitle(text) },
         });
 
-    const history = await this.loadContext(room.id);
-
-    const reply = await this.adminAiProviderService.generate(adminMemberId, {
-      systemInstruction: ADMIN_CHAT_SYSTEM_INSTRUCTION,
-      messages: [...history, { role: 'user', text }],
-    });
-
     const now = new Date();
-
-    const [, assistantMessage] = await this.prisma.$transaction([
+    const [userMessage] = await this.prisma.$transaction([
       this.prisma.adminChatMessage.create({
         data: {
           roomId: room.id,
           role: AdminChatRole.USER,
           content: text,
           createdAt: now,
-        },
-      }),
-      this.prisma.adminChatMessage.create({
-        data: {
-          roomId: room.id,
-          role: AdminChatRole.ASSISTANT,
-          content: reply.text,
-          provider: reply.provider,
-          model: reply.model,
-          // Keep the assistant turn strictly after the user turn so
-          // `orderBy createdAt` never interleaves a pair written in the
-          // same millisecond.
-          createdAt: new Date(now.getTime() + 1),
         },
         select: {
           id: true,
@@ -157,9 +184,60 @@ export class AdminChatService {
       }),
     ]);
 
+    const history = await this.loadContext(room.id);
+
+    let reply: AiGenerateResponse;
+    try {
+      reply = await this.adminAiProviderService.generate(
+        adminMemberId,
+        {
+          systemInstruction: ADMIN_CHAT_SYSTEM_INSTRUCTION,
+          messages: history,
+        },
+        { idempotencyKey: `admin-chat:${userMessage.id}` },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Admin AI reply failed room=${room.id}: ${String(error)}`,
+      );
+      throw error;
+    }
+
+    const generatedAt = new Date();
+    const assistantCreatedAt =
+      generatedAt.getTime() > now.getTime()
+        ? generatedAt
+        : new Date(now.getTime() + 1);
+
+    const [assistantMessage] = await this.prisma.$transaction([
+      this.prisma.adminChatMessage.create({
+        data: {
+          roomId: room.id,
+          role: AdminChatRole.ASSISTANT,
+          content: reply.text,
+          provider: reply.provider,
+          model: reply.model,
+          createdAt: assistantCreatedAt,
+        },
+        select: {
+          id: true,
+          role: true,
+          content: true,
+          provider: true,
+          model: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.adminChatRoom.update({
+        where: { id: room.id },
+        data: { lastMessageAt: assistantCreatedAt },
+      }),
+    ]);
+
     return {
       roomId: room.id,
       roomTitle: room.title,
+      userMessage,
       reply: assistantMessage,
     };
   }
@@ -178,18 +256,12 @@ export class AdminChatService {
     }));
   }
 
-  /**
-   * Every room read/write goes through here — a room is only reachable by the
-   * admin who owns it, so one admin can never read another's history.
-   */
   private async assertRoomOwner(adminMemberId: string, roomId: string) {
     const room = await this.prisma.adminChatRoom.findFirst({
       where: { id: roomId, adminMemberId },
     });
 
     if (!room) {
-      // Deliberately "not found" rather than "forbidden": an admin should not
-      // be able to probe whether another admin's room id exists.
       throw new NotFoundException('Chat room not found');
     }
 

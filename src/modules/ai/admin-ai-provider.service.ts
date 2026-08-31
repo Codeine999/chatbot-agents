@@ -3,15 +3,11 @@ import { AdminAiProviderSettingsService } from './ai-setting/admin-ai-provider-s
 import { AiModelCatalogService } from './ai-setting/ai-model-catalog.service';
 import { AiProviderService } from './ai-provider.service';
 import {
-  AdminAiGenerateRequest,
+  AiGenerateRequest,
   AiGenerateResponse,
 } from '../../ai-provider/types/ai-provider.types';
 import { AiBillingService } from '../usage/billing/ai-billing.service';
 
-/**
- * Injectable entry point for back-office AI modules.
- * HTTP/WebSocket callers must authenticate with AdminGuard before invoking it.
- */
 @Injectable()
 export class AdminAiProviderService {
   constructor(
@@ -23,7 +19,8 @@ export class AdminAiProviderService {
 
   async generate(
     adminMemberId: string,
-    request: AdminAiGenerateRequest,
+    request: AiGenerateRequest,
+    context: { idempotencyKey?: string } = {},
   ): Promise<AiGenerateResponse> {
     const setting = await this.settingsService.get(adminMemberId);
 
@@ -31,38 +28,20 @@ export class AdminAiProviderService {
       throw new ForbiddenException('AI is disabled for this admin account');
     }
 
-    const {
-      provider: requestedProvider,
-      model: requestedModel,
-      ...input
-    } = request;
-
-    const provider = requestedProvider ?? setting.provider;
-
-    if (!setting.allowedProviders.includes(provider)) {
-      throw new ForbiddenException(
-        `${provider} is not allowed for this admin account`,
-      );
-    }
-
-    const model =
-      requestedModel?.trim() ||
-      (provider === setting.provider
-        ? setting.model
-        : this.catalogService.getDefaultModel(provider));
+    const { provider, model } = setting;
 
     this.catalogService.assertSelectable(provider, model);
 
-    // Admins draw from the same company wallet as LINE, but each against
-    // their own persistent `CreditBudget` scope.
     return this.billingService.runBilled({
       kind: 'ADMIN_AI_QUERY',
       scopeKey: adminMemberId,
       adminMemberId,
+      requireBudgetLimit: setting.role === 'admin',
+      idempotencyKey: context.idempotencyKey,
       provider,
       model,
-      request: input,
-      call: () => this.aiProviderService.generateWith(provider, model, input),
+      request,
+      call: () => this.aiProviderService.generateWith(provider, model, request),
     });
   }
 }

@@ -24,13 +24,6 @@ export type AiGenerateRequest = Readonly<{
   maxOutputTokens?: number;
 }>;
 
-/** A provider/model choice that applies only to one admin request. */
-export type AdminAiGenerateRequest = AiGenerateRequest &
-  Readonly<{
-    provider?: AiProviderName;
-    model?: string;
-  }>;
-
 export type AiProviderGenerateRequest = AiGenerateRequest &
   Readonly<{
     model: string;
@@ -82,8 +75,8 @@ export type AiProviderCatalogItem = Readonly<{
 
 export type AdminAiProviderRuntimeSetting = Readonly<{
   adminMemberId: string;
+  role: 'dev' | 'owner' | 'admin';
   enabled: boolean;
-  allowedProviders: readonly AiProviderName[];
   provider: AiProviderName;
   model: string;
   updatedAt: string;

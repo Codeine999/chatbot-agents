@@ -32,13 +32,41 @@ export class CreateAdminAnswerPatternDto extends createZodDto(
   createAnswerPatternSchema,
 ) {}
 
+const updateAnswerPatternSchema = z
+  .object({
+    ...answerPatternFields,
+    // Unlike creation, a PATCH must not supply the default language when it
+    // was omitted; otherwise updating one field would reset it to `th`.
+    language: z.string().trim().min(1).max(10).optional(),
+    /** Appends values without replacing the current keyword list. */
+    addKeywords: answerPatternFields.keywords.optional(),
+    /** Removes matching values without replacing the current keyword list. */
+    removeKeywords: answerPatternFields.keywords.optional(),
+  })
+  .partial()
+  .superRefine((value, context) => {
+    if (Object.keys(value).length === 0) {
+      context.addIssue({
+        code: 'custom',
+        message: 'At least one field is required',
+      });
+    }
+
+    if (
+      value.keywords !== undefined &&
+      (value.addKeywords !== undefined || value.removeKeywords !== undefined)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['keywords'],
+        message:
+          'Use either keywords to replace the list, or addKeywords/removeKeywords to change individual values',
+      });
+    }
+  });
+
 export class UpdateAdminAnswerPatternDto extends createZodDto(
-  z
-    .object(answerPatternFields)
-    .partial()
-    .refine((value) => Object.keys(value).length > 0, {
-      message: 'At least one field is required',
-    }),
+  updateAnswerPatternSchema,
 ) {}
 
 export class AdminAnswerPatternIdParamDto extends createZodDto(

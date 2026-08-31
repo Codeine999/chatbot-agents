@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AnswerPattern, Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmbeddingService } from '../../ai/embedding.service';
@@ -20,6 +24,15 @@ export class AdminAnswerPatternService {
     return this.prisma.answerPattern.findMany({
       orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
     });
+  }
+
+  async count(): Promise<{ total: number; active: number }> {
+    const [total, active] = await Promise.all([
+      this.prisma.answerPattern.count(),
+      this.prisma.answerPattern.count({ where: { active: true } }),
+    ]);
+
+    return { total, active };
   }
 
   async create(input: CreateAdminAnswerPatternDto): Promise<AnswerPattern> {
@@ -55,7 +68,16 @@ export class AdminAnswerPatternService {
       throw new NotFoundException('Answer pattern not found');
     }
 
-    const merged = { ...existing, ...input };
+    const { addKeywords, removeKeywords, ...updates } = input;
+    const keywords =
+      addKeywords !== undefined || removeKeywords !== undefined
+        ? this.patchKeywords(existing.keywords, addKeywords, removeKeywords)
+        : updates.keywords;
+    const data = {
+      ...updates,
+      ...(keywords !== undefined ? { keywords } : {}),
+    };
+    const merged = { ...existing, ...data };
     const embedding = await this.embeddingService.embedDocument(
       this.embeddingDocument(merged),
     );
@@ -63,7 +85,7 @@ export class AdminAnswerPatternService {
     const pattern = await this.prisma.$transaction(async (tx) => {
       const pattern = await tx.answerPattern.update({
         where: { id },
-        data: input,
+        data,
       });
       await this.upsertVector(
         tx,
@@ -143,6 +165,33 @@ export class AdminAnswerPatternService {
     ]
       .filter(Boolean)
       .join('\n');
+  }
+
+  private patchKeywords(
+    current: string[],
+    addKeywords: string[] | undefined,
+    removeKeywords: string[] | undefined,
+  ): string[] {
+    const normalize = (value: string) => value.trim().toLocaleLowerCase();
+    const remove = new Set((removeKeywords ?? []).map(normalize));
+    const keywords = current.filter(
+      (keyword) => !remove.has(normalize(keyword)),
+    );
+    const seen = new Set(keywords.map(normalize));
+
+    for (const keyword of addKeywords ?? []) {
+      const normalized = normalize(keyword);
+      if (!seen.has(normalized)) {
+        keywords.push(keyword);
+        seen.add(normalized);
+      }
+    }
+
+    if (keywords.length > 100) {
+      throw new BadRequestException('Keywords cannot exceed 100 values');
+    }
+
+    return keywords;
   }
 
   private async upsertVector(

@@ -1,0 +1,27 @@
+enum PaymentType {
+  QRcode
+  Slip
+}
+
+enum PaymentStatus {
+  pending
+  success
+  fail
+  reject
+}
+
+model UserPayment {
+  id          String        @id @default(uuid()) @db.Uuid
+  username    String
+  paymentType PaymentType
+  status      PaymentStatus @default(pending)
+  payAmount   Decimal @default(0) @db.Decimal(20, 6)
+  approveBy   String?       @db.Uuid
+  approvedAt  DateTime?
+  member      Member        @relation(fields: [username], references: [username])
+  createdAt   DateTime      @default(now())
+
+  @@index([username])
+  @@index([status])
+  @@index([approveBy])
+}

@@ -1,12 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../infra/redis/redis.module';
 import { PrismaService } from '../../prisma/prisma.service';
-import {
-  AI_PROVIDER_SETTING_CACHE_PREFIX,
-  DEFAULT_AI_PROVIDER_CACHE_TTL_SEC,
-} from '../../ai-provider/utils/ai-provider.constants';
+import { AI_PROVIDER_SETTING_CACHE_PREFIX } from '../../ai-provider/utils/ai-provider.constants';
 import { AiModelCatalogService } from './ai-setting/ai-model-catalog.service';
 import {
   AiProviderName,
@@ -19,23 +15,14 @@ import {
 @Injectable()
 export class AiProviderSettingsService {
   private readonly logger = new Logger(AiProviderSettingsService.name);
-  private readonly cacheTtlSec: number;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly catalogService: AiModelCatalogService,
-    configService: ConfigService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
-  ) {
-    const configuredCacheTtl = Number(
-      configService.get<string>('AI_PROVIDER_CACHE_TTL_SEC') ??
-        DEFAULT_AI_PROVIDER_CACHE_TTL_SEC,
-    );
-    this.cacheTtlSec = Number.isFinite(configuredCacheTtl)
-      ? Math.max(30, configuredCacheTtl)
-      : DEFAULT_AI_PROVIDER_CACHE_TTL_SEC;
-  }
+  ) {}
 
+  // Get Ai modal details from redis reuse
   async get(scope: AiProviderScope): Promise<AiProviderRuntimeSetting> {
     const cached = await this.readCache(scope);
     if (cached) return cached;
@@ -76,13 +63,18 @@ export class AiProviderSettingsService {
       where: { scope },
     });
 
-    if (existing) return this.toRuntimeSetting(existing);
+    if (
+      existing &&
+      this.catalogService.isConfiguredModel(existing.provider, existing.model)
+    ) {
+      return this.toRuntimeSetting(existing);
+    }
 
     const fallback = this.catalogService.getDefaultSelection(scope);
     const created = await this.prisma.aiProviderSetting.upsert({
       where: { scope },
       create: { scope, ...fallback },
-      update: {},
+      update: fallback,
     });
 
     return this.toRuntimeSetting(created);
@@ -98,7 +90,12 @@ export class AiProviderSettingsService {
       if (!raw) return null;
 
       const parsed: unknown = JSON.parse(raw);
-      if (this.isRuntimeSetting(parsed) && parsed.scope === scope) {
+      if (
+        this.isRuntimeSetting(parsed) &&
+        parsed.scope === scope &&
+        this.catalogService.isConfiguredModel(parsed.provider, parsed.model)
+      ) {
+        await this.redis.persist(key);
         return parsed;
       }
 
@@ -121,8 +118,6 @@ export class AiProviderSettingsService {
       await this.redis.set(
         this.cacheKey(setting.scope),
         JSON.stringify(setting),
-        'EX',
-        this.cacheTtlSec,
       );
       return true;
     } catch (error) {

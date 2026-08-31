@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import {
+  Inject,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -13,9 +14,8 @@ import {
 } from '../../ai-provider/utils/ai-provider.constants';
 import { AiProviderSettingsService } from './ai-provider-settings.service';
 import { AiProviderAdapter } from '../../ai-provider/providers/ai-provider.interface';
-import { AnthropicAiProvider } from '../../ai-provider/providers/anthropic-ai.provider';
-import { GeminiAiProvider } from '../../ai-provider/providers/gemini-ai.provider';
-import { OpenAiProvider } from '../../ai-provider/providers/openai-ai.provider';
+import { AI_PROVIDER_ADAPTERS } from '../../ai-provider/providers/ai-provider.registry';
+import type { AiProviderAdapterRegistry } from '../../ai-provider/providers/ai-provider.registry';
 import {
   AiGenerateRequest,
   AiGenerateResponse,
@@ -33,16 +33,11 @@ export class AiProviderService {
 
   constructor(
     private readonly settingsService: AiProviderSettingsService,
-    geminiProvider: GeminiAiProvider,
-    openAiProvider: OpenAiProvider,
-    anthropicProvider: AnthropicAiProvider,
+    @Inject(AI_PROVIDER_ADAPTERS)
+    providerAdapters: AiProviderAdapterRegistry,
     configService: ConfigService,
   ) {
-    this.providers = new Map<AiProviderName, AiProviderAdapter>([
-      [geminiProvider.name, geminiProvider],
-      [openAiProvider.name, openAiProvider],
-      [anthropicProvider.name, anthropicProvider],
-    ]);
+    this.providers = this.createProviderMap(providerAdapters);
 
     this.maxAttempts = this.positiveNumber(
       configService.get('AI_PROVIDER_MAX_ATTEMPTS'),
@@ -126,5 +121,20 @@ export class AiProviderService {
   private positiveNumber(value: unknown, fallback: number): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
+  private createProviderMap(
+    adapters: AiProviderAdapterRegistry,
+  ): ReadonlyMap<AiProviderName, AiProviderAdapter> {
+    const providers = new Map<AiProviderName, AiProviderAdapter>();
+
+    for (const adapter of adapters) {
+      if (providers.has(adapter.name)) {
+        throw new Error(`Duplicate AI provider adapter: ${adapter.name}`);
+      }
+      providers.set(adapter.name, adapter);
+    }
+
+    return providers;
   }
 }

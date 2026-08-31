@@ -74,8 +74,8 @@ export class CreditService {
     );
 
     this.minBalanceCredit = new Prisma.Decimal(
-      Number.isFinite(configured) && configured >= 0
-        ? configured
+      Number.isFinite(configured)
+        ? Math.max(DEFAULT_MIN_AI_BALANCE_CREDIT, configured)
         : DEFAULT_MIN_AI_BALANCE_CREDIT,
     );
   }
@@ -174,6 +174,7 @@ export class CreditService {
     kind: UsageKind,
     scopeKey: string,
     amountCredit: Prisma.Decimal,
+    options: { requireBudgetLimit?: boolean } = {},
   ): Promise<CreditHold> {
     const amount = amountCredit.toDecimalPlaces(6, Prisma.Decimal.ROUND_CEIL);
     if (amount.isNegative()) {
@@ -209,22 +210,39 @@ export class CreditService {
         throw new InsufficientCreditException('AI credit wallet is inactive');
       }
 
+      if (options.requireBudgetLimit && !currentBudget.limitCredit) {
+        throw new InsufficientCreditException(
+          `${kind} budget limit is not configured for scope ${scopeKey}`,
+        );
+      }
+
       const available = currentWallet.balanceCredit.minus(
         currentWallet.reservedCredit,
       );
       const availableAfterReservation = available.minus(amount);
-      if (availableAfterReservation.lessThan(this.minBalanceCredit)) {
+      if (availableAfterReservation.lessThanOrEqualTo(this.minBalanceCredit)) {
         throw new InsufficientCreditException(
           `Insufficient AI credit: reserving ${amount.toString()} from ` +
             `${available.toString()} available would leave ` +
-            `${availableAfterReservation.toString()} < ` +
+            `${availableAfterReservation.toString()} <= ` +
             `${this.minBalanceCredit.toString()} minimum`,
         );
       }
 
-      const projectedBudget = currentBudget.usedCredit
-        .plus(currentBudget.reservedCredit)
-        .plus(amount);
+      const committedBudget = currentBudget.usedCredit.plus(
+        currentBudget.reservedCredit,
+      );
+      if (
+        currentBudget.limitCredit &&
+        committedBudget.greaterThanOrEqualTo(currentBudget.limitCredit)
+      ) {
+        throw new InsufficientCreditException(
+          `${kind} budget exhausted for scope ${scopeKey}: ` +
+            `${committedBudget.toString()}/${currentBudget.limitCredit.toString()} credits`,
+        );
+      }
+
+      const projectedBudget = committedBudget.plus(amount);
       if (
         currentBudget.limitCredit &&
         projectedBudget.greaterThan(currentBudget.limitCredit)
@@ -298,7 +316,7 @@ export class CreditService {
           walletBefore.balanceCredit
             .minus(otherWalletReservations)
             .minus(chargedCredit)
-            .lessThan(this.minBalanceCredit)
+            .lessThanOrEqualTo(this.minBalanceCredit)
         ) {
           throw new InsufficientCreditException(
             `Actual AI charge ${chargedCredit.toString()} exceeds reserved and available credit`,

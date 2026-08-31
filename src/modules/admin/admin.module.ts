@@ -14,6 +14,8 @@ import { AdminAiPricingModule } from './pricing/admin-ai-pricing.module';
 import { CreditExchangeRateModule } from './dev/credit/credit-exchange-rate.module';
 import { AdminWalletModule } from './wallet/admin-wallet.module';
 import { AdminUsageModule } from './usage/admin-usage.module';
+import { AdminSysCategoryController } from './knowledge/admin-sys-category.controller';
+import { AdminSysCategoryService } from './knowledge/admin-sys-category.service';
 
 @Module({
   imports: [
@@ -29,7 +31,11 @@ import { AdminUsageModule } from './usage/admin-usage.module';
     AdminWalletModule,
     AdminUsageModule,
   ],
-  controllers: [AdminController, AdminAnswerPatternController],
-  providers: [AdminService, AdminAnswerPatternService],
+  controllers: [
+    AdminController,
+    AdminAnswerPatternController,
+    AdminSysCategoryController,
+  ],
+  providers: [AdminService, AdminAnswerPatternService, AdminSysCategoryService],
 })
 export class AdminModule {}

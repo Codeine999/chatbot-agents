@@ -36,6 +36,7 @@ export class IntentRouterService {
       recentMessages = [],
       lineMemberId,
       conversationId,
+      turnId,
     } = params;
 
     this.logger.debug(
@@ -103,6 +104,7 @@ export class IntentRouterService {
       userId,
       lineMemberId,
       conversationId,
+      turnId,
       recentMessages,
     });
 
@@ -124,6 +126,7 @@ export class IntentRouterService {
       userId,
       lineMemberId,
       conversationId,
+      turnId,
       input,
       recentMessages,
       retrieval,
@@ -148,6 +151,7 @@ export class IntentRouterService {
       fallbackReason,
       lineMemberId,
       conversationId,
+      turnId,
     } = params;
     const analysis = await this.aiIntentClassifierService.classifyLowConfidence(
       input,
@@ -155,6 +159,7 @@ export class IntentRouterService {
         userId,
         lineMemberId,
         conversationId,
+        turnId,
         recentMessages,
       },
     );

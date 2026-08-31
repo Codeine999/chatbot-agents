@@ -5,21 +5,13 @@ import {
 } from '@nestjs/common';
 import { AuthenticatedAdmin } from '../../../shared/guards/admin-auth.types';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { allowedProvidersForAdminRole } from './admin-ai-provider.policy';
-import { AiModelCatalogService } from './ai-model-catalog.service';
 import { AiProviderSettingsService } from '../ai-provider-settings.service';
 import { AdminAiProviderRuntimeSetting } from '../../../ai-provider/types/ai-provider.types';
 
-/**
- * All admins share one AI provider/model (AiProviderSettingsService, scope=ADMIN).
- * Role still caps which shared provider an account may actually use, and each
- * admin account can be switched on/off independently via `aiEnabled`.
- */
 @Injectable()
 export class AdminAiProviderSettingsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly catalogService: AiModelCatalogService,
     private readonly aiProviderSettingsService: AiProviderSettingsService,
   ) {}
 
@@ -33,23 +25,14 @@ export class AdminAiProviderSettingsService {
       throw new NotFoundException('Admin member not found');
     }
 
-    const allowedProviders = allowedProvidersForAdminRole(adminMember.role);
     const shared = await this.aiProviderSettingsService.get('ADMIN');
-
-    const provider = allowedProviders.includes(shared.provider)
-      ? shared.provider
-      : allowedProviders[0];
-    const model =
-      provider === shared.provider
-        ? shared.model
-        : this.catalogService.getDefaultModel(provider);
 
     return {
       adminMemberId: adminMember.id,
+      role: adminMember.role,
       enabled: adminMember.aiEnabled,
-      allowedProviders,
-      provider,
-      model,
+      provider: shared.provider,
+      model: shared.model,
       updatedAt: shared.updatedAt,
     };
   }

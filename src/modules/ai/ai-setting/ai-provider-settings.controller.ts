@@ -32,11 +32,8 @@ export class AiProviderSettingsController {
 
   @AdminGuard()
   @Get('catalog/me')
-  async getMyCatalog(@Req() request: AdminRequest) {
-    const setting = await this.adminSettingsService.get(this.adminId(request));
-    return this.catalogService
-      .getCatalog()
-      .filter((item) => setting.allowedProviders.includes(item.provider));
+  getMyCatalog() {
+    return this.catalogService.getCatalog();
   }
 
   @AdminGuard()

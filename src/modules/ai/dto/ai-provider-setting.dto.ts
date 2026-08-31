@@ -50,7 +50,5 @@ export class AdminAiGenerateDto extends createZodDto(
       .min(1),
     temperature: z.number().min(0).max(2).optional(),
     maxOutputTokens: z.number().int().positive().max(32_000).optional(),
-    provider: z.enum(AI_PROVIDER_NAMES).optional(),
-    model: z.string().trim().min(1).max(150).optional(),
   }),
 ) {}

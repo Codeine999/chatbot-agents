@@ -81,6 +81,20 @@ export class AdminChatController {
     );
   }
 
+  /** Owner/dev read-only audit across every admin's conversation history. */
+  @AdminGuard('dev', 'owner')
+  @Get('owner/rooms')
+  listAllRooms() {
+    return this.adminChatService.listAllRooms();
+  }
+
+  /** Owner/dev may inspect another admin's messages, but cannot mutate them. */
+  @AdminGuard('dev', 'owner')
+  @Get('owner/rooms/:roomId/messages')
+  listAllMessages(@Param() params: RoomIdParamDto) {
+    return this.adminChatService.listAllMessages(params.roomId);
+  }
+
   @Post('messages')
   @HttpCode(200)
   sendMessage(
@@ -102,7 +116,7 @@ export class AdminChatController {
     return this.usageService.listAllUsage();
   }
 
-  /** Owner/dev: set one admin's AI budget (`null` = unlimited). */
+  /** Owner/dev: set an AI budget (`null` only for owner/dev targets). */
   @AdminGuard('dev', 'owner')
   @Patch('usage/:adminMemberId/budget')
   setBudget(

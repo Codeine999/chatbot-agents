@@ -32,7 +32,10 @@ type OpenAiResponsePayload = {
   }>;
   usage?: {
     input_tokens?: number;
-    input_tokens_details?: { cached_tokens?: number };
+    input_tokens_details?: {
+      cached_tokens?: number;
+      cache_write_tokens?: number;
+    };
     output_tokens?: number;
   };
 };
@@ -77,6 +80,8 @@ export class OpenAiProvider implements AiProviderAdapter {
             content: this.toContent(message),
           })),
           temperature: request.temperature,
+          // Keep billing on the standard tier represented by AiModelPricing.
+          service_tier: 'default',
           max_output_tokens:
             request.maxOutputTokens ?? DEFAULT_AI_MAX_OUTPUT_TOKENS,
         }),
@@ -131,8 +136,10 @@ export class OpenAiProvider implements AiProviderAdapter {
     return normalizeTokenUsage({
       promptTokens: payload.usage?.input_tokens,
       cachedInputTokens: payload.usage?.input_tokens_details?.cached_tokens,
+      cacheWriteTokens: payload.usage?.input_tokens_details?.cache_write_tokens,
       outputTokens: payload.usage?.output_tokens,
       cachedInPrompt: true,
+      cacheWriteInPrompt: true,
     });
   }
 

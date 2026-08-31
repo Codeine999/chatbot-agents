@@ -12,9 +12,17 @@ import { UsersAiProviderService } from './users-ai-provider.service';
 import { AnthropicAiProvider } from '../../ai-provider/providers/anthropic-ai.provider';
 import { GeminiAiProvider } from '../../ai-provider/providers/gemini-ai.provider';
 import { OpenAiProvider } from '../../ai-provider/providers/openai-ai.provider';
+import { AI_PROVIDER_ADAPTERS } from '../../ai-provider/providers/ai-provider.registry';
+import type { AiProviderAdapter } from '../../ai-provider/providers/ai-provider.interface';
 import { AiBillingModule } from '../usage/billing/ai-billing.module';
 import { EmbeddingModule } from '../../infra/embedding/embedding.module';
 import { EmbeddingService } from './embedding.service';
+
+const AI_PROVIDER_ADAPTER_CLASSES = [
+  GeminiAiProvider,
+  OpenAiProvider,
+  AnthropicAiProvider,
+] as const;
 
 @Module({
   imports: [
@@ -29,9 +37,12 @@ import { EmbeddingService } from './embedding.service';
     AiModelCatalogService,
     AiProviderSettingsService,
     AdminAiProviderSettingsService,
-    GeminiAiProvider,
-    OpenAiProvider,
-    AnthropicAiProvider,
+    ...AI_PROVIDER_ADAPTER_CLASSES,
+    {
+      provide: AI_PROVIDER_ADAPTERS,
+      inject: [...AI_PROVIDER_ADAPTER_CLASSES],
+      useFactory: (...adapters: AiProviderAdapter[]) => adapters,
+    },
     AiProviderService,
     UsersAiProviderService,
     AdminAiProviderService,
