@@ -39,6 +39,12 @@ export type LineMessageQuotaConsumption = {
   totalUsage: number;
 };
 
+export type LineMessageQuota = {
+  /** `none` means the plan has no push-message cap, so `value` is absent. */
+  type: 'none' | 'limited';
+  value?: number;
+};
+
 @Injectable()
 export class LineAdminService {
   private readonly logger = new Logger(LineAdminService.name);
@@ -84,6 +90,16 @@ export class LineAdminService {
     return getJson<LineFollowerInsight>(
       `/v2/bot/insight/followers?date=${encodeURIComponent(date)}`,
       'LINE follower insight',
+      this.getAccessToken(),
+      this.httpTimeoutMs,
+    );
+  }
+
+  /** Monthly push-message allowance of the LINE plan. */
+  async getMessageQuota(): Promise<LineMessageQuota> {
+    return getJson<LineMessageQuota>(
+      '/v2/bot/message/quota',
+      'LINE message quota',
       this.getAccessToken(),
       this.httpTimeoutMs,
     );

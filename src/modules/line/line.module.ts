@@ -61,5 +61,6 @@ import { LineWebhookService } from './line-webhook.service';
     LineEventsProcessor,
     LineEventsRetryProcessor,
   ],
+  exports: [LineAdminService],
 })
 export class LineModule {}

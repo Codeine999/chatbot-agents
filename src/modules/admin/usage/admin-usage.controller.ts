@@ -12,4 +12,16 @@ export class AdminUsageController {
   getUsage(@Req() request: AdminRequest) {
     return this.adminUsageService.getUsage(request.admin!.id);
   }
+
+  @Get('line/push-message')
+  getLinePushMessageQuota() {
+    return this.adminUsageService.getLinePushMessageQuota();
+  }
+
+  @Get('account')
+  getUsageAllAdmin(@Req() request: AdminRequest) {
+    return this.adminUsageService.getUsageAllAdmin(request.admin!);
+  }
+
+  
 }
