@@ -24,4 +24,5 @@ model UserPayment {
   @@index([username])
   @@index([status])
   @@index([approveBy])
+  @@index([status, createdAt])
 }

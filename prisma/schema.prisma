@@ -254,6 +254,8 @@ model LineChatHistory {
   @@index([conversationId, createdAt])
   @@index([lineMemberId])
   @@index([sentByAdminId])
+  @@index([createdAt])
+  @@index([sender, createdAt])
 }
 
 model AnswerPatternVector {
