@@ -75,6 +75,34 @@ export class AiPricingService {
     };
   }
 
+  /**
+   * Quote for an input-only model. Embeddings return a vector rather than
+   * tokens, so there is nothing to reserve for output and the pricing row is
+   * accepted with an output rate of zero. The reservation is the estimated
+   * input cost itself — unlike a generation, the real usage cannot exceed the
+   * text that was already measured before the call.
+   */
+  async createEmbeddingQuote(
+    provider: AiProviderName,
+    model: string,
+    estimatedUsage: AiTokenUsage,
+    at: Date = new Date(),
+  ): Promise<AiPricingQuote> {
+    const pricing = await this.requireActivePricing(provider, model, at, {
+      requiresOutputRate: false,
+    });
+
+    return {
+      provider,
+      model,
+      pricing,
+      reservedCredit: this.calculateWithPricing(
+        pricing,
+        estimatedUsage,
+      ).chargedCredit.toDecimalPlaces(CREDIT_SCALE, Prisma.Decimal.ROUND_CEIL),
+    };
+  }
+
   calculateQuote(quote: AiPricingQuote, usage: AiTokenUsage): AiUsageCost {
     return this.calculateWithPricing(quote.pricing, usage);
   }
@@ -153,17 +181,25 @@ export class AiPricingService {
       .toDecimalPlaces(CREDIT_SCALE, Prisma.Decimal.ROUND_CEIL);
   }
 
+  /**
+   * `requiresOutputRate: false` is for input-only models (embeddings), whose
+   * published output rate is legitimately zero. Every other caller keeps the
+   * strict check, so a chat model with a half-configured price stays blocked
+   * rather than silently billing nothing for its replies.
+   */
   private async requireActivePricing(
     provider: AiProviderName,
     model: string,
     at: Date,
+    options: { requiresOutputRate?: boolean } = {},
   ): Promise<PricingRow> {
     const pricing = await this.findActivePricing(provider, model, at);
+    const requiresOutputRate = options.requiresOutputRate ?? true;
 
     if (
       !pricing ||
       !pricing.inputCreditPerMillTokens.greaterThan(0) ||
-      !pricing.outputCreditPerMillTokens.greaterThan(0)
+      (requiresOutputRate && !pricing.outputCreditPerMillTokens.greaterThan(0))
     ) {
       throw new ServiceUnavailableException(
         `No active billable AI pricing for ${provider}/${model}`,

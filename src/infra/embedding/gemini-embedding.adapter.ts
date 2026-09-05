@@ -11,10 +11,26 @@ import {
   EmbeddingRequest,
   EmbeddingResult,
 } from './embedding-adapter.interface';
+import { EMPTY_AI_TOKEN_USAGE } from '../../ai-provider/types/ai-provider.types';
+import {
+  estimateEmbeddingTokenUsage,
+  toTokenCount,
+} from '../../ai-provider/utils/token-usage.utils';
+
+const DEFAULT_EMBEDDING_MODEL = 'gemini-embedding-001';
 
 @Injectable()
 export class GeminiEmbeddingAdapter implements EmbeddingAdapter {
   constructor(private readonly configService: ConfigService) {}
+
+  readonly provider = 'GEMINI' as const;
+
+  get model(): string {
+    return (
+      this.configService.get<string>('GEMINI_EMBEDDING_MODEL') ||
+      DEFAULT_EMBEDDING_MODEL
+    );
+  }
 
   async embed(request: EmbeddingRequest): Promise<EmbeddingResult> {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY')?.trim();
@@ -23,9 +39,7 @@ export class GeminiEmbeddingAdapter implements EmbeddingAdapter {
       throw new ServiceUnavailableException('GEMINI API key is not configured');
     }
 
-    const model =
-      this.configService.get<string>('GEMINI_EMBEDDING_MODEL') ||
-      'gemini-embedding-001';
+    const model = this.model;
     const usesPromptTaskInstruction = this.usesPromptTaskInstruction(model);
 
     try {
@@ -51,7 +65,8 @@ export class GeminiEmbeddingAdapter implements EmbeddingAdapter {
         },
       });
 
-      const values = response.embeddings?.[0]?.values;
+      const embedding = response.embeddings?.[0];
+      const values = embedding?.values;
 
       if (
         !values ||
@@ -63,7 +78,19 @@ export class GeminiEmbeddingAdapter implements EmbeddingAdapter {
         );
       }
 
-      return { values, model };
+      // `statistics` is only populated on Vertex; the Developer API used here
+      // reports nothing, so billing falls back to the local estimate.
+      const reportedTokens = toTokenCount(embedding?.statistics?.tokenCount);
+
+      return {
+        values,
+        model,
+        usage:
+          reportedTokens > 0
+            ? { ...EMPTY_AI_TOKEN_USAGE, inputTokens: reportedTokens }
+            : estimateEmbeddingTokenUsage(request.text),
+        usageEstimated: reportedTokens === 0,
+      };
     } catch (error) {
       if (error instanceof ServiceUnavailableException) throw error;
       throw new BadGatewayException(

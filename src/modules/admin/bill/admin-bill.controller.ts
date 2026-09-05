@@ -59,7 +59,7 @@ export class AdminBillController {
     return this.adminBillService.createTopup(request.admin!.id, dto);
   }
 
-  // @AdminGuard('dev')
+  @AdminGuard('dev')
   @Post('topup/:id/confirm')
   @HttpCode(200)
   confirmTopup(
@@ -69,7 +69,7 @@ export class AdminBillController {
     return this.adminBillService.confirmTopup(topupId, request.admin!.id);
   }
 
-  // @AdminGuard('dev')
+  @AdminGuard('dev')
   @Post('topup/:id/reject')
   @HttpCode(200)
   rejectTopup(

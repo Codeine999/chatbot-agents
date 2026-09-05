@@ -43,6 +43,7 @@ enum AiProviderName {
   GEMINI
   OPENAI
   ANTHROPIC
+  MAXPLUS
 }
 
 enum AdminChatRole {

@@ -1,8 +1,9 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post } from '@nestjs/common';
 import { Public } from '../../../shared/guards/public.decorator';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
+import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
 
 @Controller('api/admin/auth')
 export class AdminAuthController {
@@ -15,16 +16,16 @@ export class AdminAuthController {
     return this.adminAuthService.login(body);
   }
 
+  @AdminGuard('dev', 'owner')
+  @Post('add')
+  create(@Body() body: CreateAdminDto) {
+    return this.adminAuthService.create(body);
+  }
+
   @Public()
   @Post('owner')
   createOwner(@Body() body: CreateAdminDto) {
     return this.adminAuthService.createOwner(body);
-  }
-
-  // @AdminGuard('dev', 'owner')
-  @Post('add')
-  create(@Body() body: CreateAdminDto) {
-    return this.adminAuthService.create(body);
   }
 
   @Public()

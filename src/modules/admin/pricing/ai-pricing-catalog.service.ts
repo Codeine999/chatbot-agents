@@ -5,6 +5,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import {
   AI_MODEL_LIST_PRICES,
   AiModelListPrice,
+  isBillableCreditRates,
 } from '../../usage/billing/ai-model-list-prices';
 import { AdminAiPricingService } from './admin-ai-pricing.service';
 import type { UpsertAiModelPricingDto } from './dto/admin-ai-pricing.dto';
@@ -200,6 +201,11 @@ export class AiPricingCatalogService {
     };
   }
 
+  /**
+   * Provider/model pairs that already have a usable price, so a re-run leaves
+   * them alone. Input-only models are judged on their input rate alone —
+   * otherwise every seed run would republish the embedding prices forever.
+   */
   private async activeBillableKeys(
     at: Date = new Date(),
   ): Promise<Set<string>> {
@@ -215,13 +221,18 @@ export class AiPricingCatalogService {
         outputCreditPerMillTokens: true,
       },
     });
+    const inputOnlyKeys = new Set(
+      AI_MODEL_LIST_PRICES.filter((price) => price.inputOnly).map(
+        (price) => `${price.provider}:${price.model}`,
+      ),
+    );
 
     return new Set(
       rows
-        .filter(
-          (row) =>
-            row.inputCreditPerMillTokens.greaterThan(0) &&
-            row.outputCreditPerMillTokens.greaterThan(0),
+        .filter((row) =>
+          isBillableCreditRates(row, {
+            inputOnly: inputOnlyKeys.has(`${row.provider}:${row.model}`),
+          }),
         )
         .map((row) => `${row.provider}:${row.model}`),
     );

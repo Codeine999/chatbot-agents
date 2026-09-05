@@ -24,6 +24,7 @@ export const AI_PROVIDER_LABELS = {
   GEMINI: 'Google Gemini',
   OPENAI: 'OpenAI',
   ANTHROPIC: 'Anthropic Claude',
+  MAXPLUS: 'MaxPlus AI',
 } as const satisfies Readonly<Record<AiProviderName, string>>;
 
 export const AI_PROVIDER_TEXT_MODELS = {
@@ -51,4 +52,5 @@ export const AI_PROVIDER_TEXT_MODELS = {
     'claude-sonnet-5',
     'claude-haiku-4-5-20251001',
   ],
+  MAXPLUS: ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.5'],
 } as const satisfies Readonly<Record<AiProviderName, readonly string[]>>;

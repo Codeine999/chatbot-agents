@@ -30,7 +30,6 @@ export class AnswerPatternCacheService
   async onModuleInit(): Promise<void> {
     await this.refresh();
     this.timer = setInterval(() => void this.refresh(), CACHE_TTL_MS);
-    // Don't keep the process alive for the cache timer.
     this.timer.unref?.();
   }
 
@@ -38,11 +37,6 @@ export class AnswerPatternCacheService
     if (this.timer) clearInterval(this.timer);
   }
 
-  /**
-   * Current cached entries. Never hits the DB on the request path: if the
-   * TTL has expired (e.g. the interval was starved), a background refresh is
-   * kicked off and the stale snapshot is served meanwhile.
-   */
   getAll(): readonly AnswerPatternCacheEntry[] {
     if (Date.now() - this.loadedAt > CACHE_TTL_MS) void this.refresh();
     return this.entries;

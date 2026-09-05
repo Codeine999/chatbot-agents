@@ -1,11 +1,22 @@
 import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { EmbeddingService } from '../../ai/embedding.service';
+import { EmbeddingService } from '../../ai/embeding/embedding.service';
 import { AnswerPatternCacheService } from '../../chatbot/knowledge/answer-pattern-cache.service';
+import { AnswerPatternVectorRepository } from '../../ai/embeding/answer-pattern-vector.repository';
 import { AdminAnswerPatternService } from './admin-answer-pattern.service';
 import { CreateAdminAnswerPatternDto } from './dto/admin-answer-pattern.dto';
 
-const embedding = { values: [0.1, 0.2, 0.3], model: 'gemini-embedding-2' };
+const embedding = {
+  values: [0.1, 0.2, 0.3],
+  model: 'gemini-embedding-2',
+  usage: {
+    inputTokens: 12,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 0,
+  },
+  usageEstimated: true,
+};
 
 const input = {
   title: 'ราคาค่าบริการ',
@@ -45,11 +56,18 @@ function build() {
     refresh: jest.fn().mockResolvedValue(undefined),
   } as unknown as jest.Mocked<AnswerPatternCacheService>;
 
+  // The repository is real, not a stub: the vector write is raw SQL, and
+  // these tests exist to pin the literal it binds and its ON CONFLICT target.
+  const vectors = new AnswerPatternVectorRepository(
+    prisma as unknown as PrismaService,
+  );
+
   return {
     service: new AdminAnswerPatternService(
       prisma as unknown as PrismaService,
       embeddingService,
       cache,
+      vectors,
     ),
     prisma,
     tx,
@@ -85,7 +103,7 @@ describe('AdminAnswerPatternService.create', () => {
       intentKey: null,
       keywords: [],
       questionExamples: [],
-    } as unknown as CreateAdminAnswerPatternDto);
+    });
     const doc = ctx.embeddingService.embedDocument.mock.calls[0][0];
 
     expect(doc).not.toContain('รายละเอียด:');
@@ -119,7 +137,12 @@ describe('AdminAnswerPatternService.create', () => {
     const sql = ctx.tx.$executeRaw.mock.calls[0][0] as { values: unknown[] };
 
     expect(sql.values).toEqual(
-      expect.arrayContaining(['p1', '[0.1,0.2,0.3]', 'gemini-embedding-2', true]),
+      expect.arrayContaining([
+        'p1',
+        '[0.1,0.2,0.3]',
+        'gemini-embedding-2',
+        true,
+      ]),
     );
   });
 
@@ -157,9 +180,9 @@ describe('AdminAnswerPatternService.update', () => {
     const ctx = build();
     ctx.prisma.answerPattern.findUnique.mockResolvedValue(null);
 
-    await expect(ctx.service.update('missing', { title: 'x' })).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      ctx.service.update('missing', { title: 'x' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(ctx.embeddingService.embedDocument).not.toHaveBeenCalled();
   });
 });

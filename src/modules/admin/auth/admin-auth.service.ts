@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -59,6 +60,11 @@ export class AdminAuthService {
   }
 
   async create(input: CreateAdminDto) {
+
+    if (input.role === 'dev') {
+      throw new BadRequestException('Can not create dev user');
+    }
+    
     const password = await bcrypt.hash(input.password, 12);
     let createdAdminId: string | undefined;
 
@@ -76,6 +82,7 @@ export class AdminAuthService {
         },
         select: ADMIN_PUBLIC_SELECT,
       });
+
       createdAdminId = created.id;
 
       if (created.role === 'admin') {
@@ -88,6 +95,7 @@ export class AdminAuthService {
 
       const { firstname, lastname, ...admin } = created;
       return { ...admin, firstName: firstname, lastName: lastname };
+
     } catch (error) {
       if (createdAdminId) {
         await this.prisma.adminMember

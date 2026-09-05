@@ -6,6 +6,7 @@ import type {
   AuthenticatedAdmin,
 } from '../../../shared/guards/admin-auth.types';
 import { LineAdminService } from '../../line/admin/line-admin.service';
+import type { LineMessageQuota } from '../../line/admin/line-admin.service';
 import { CompanyService } from '../company/company.service';
 
 const UUID_PATTERN =
@@ -33,12 +34,10 @@ export class AdminUsageService {
 
   /**
    * Push-message allowance from the LINE plan itself (not credits).
-   * `null` is returned for plans LINE reports as `type: 'none'` — no cap.
+   * `type: 'none'` means the plan has no cap, so `value` is absent.
    */
-  async getLinePushMessageQuota(): Promise<number | null> {
-    const quota = await this.lineAdminService.getMessageQuota();
-
-    return quota.type === 'limited' ? (quota.value ?? null) : null;
+  getLinePushMessageQuota(): Promise<LineMessageQuota> {
+    return this.lineAdminService.getMessageQuota();
   }
 
   /**

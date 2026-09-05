@@ -11,12 +11,6 @@ import {
 } from '../../ai-provider/types/ai-provider.types';
 import { AiBillingService } from '../usage/billing/ai-billing.service';
 
-/**
- * Injectable entry point for user-facing AI modules, and the single billing
- * choke point for customer-facing traffic: every LINE reply, intent
- * classification and query-planning call is metered here as
- * `UsageKind.LINE_AI_REPLY` against the shared `*` budget scope.
- */
 @Injectable()
 export class UsersAiProviderService {
   constructor(

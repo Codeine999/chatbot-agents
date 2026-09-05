@@ -3,9 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AnswerPattern, Prisma } from '../../../generated/prisma/client';
+import { AnswerPattern } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { EmbeddingService } from '../../ai/embedding.service';
+import { EmbeddingService } from '../../ai/embeding/embedding.service';
+import { AnswerPatternVectorRepository } from '../../ai/embeding/answer-pattern-vector.repository';
+import { buildAnswerPatternDocument } from '../../ai/embeding/answer-pattern-document';
 import { AnswerPatternCacheService } from '../../chatbot/knowledge/answer-pattern-cache.service';
 import {
   CreateAdminAnswerPatternDto,
@@ -18,6 +20,7 @@ export class AdminAnswerPatternService {
     private readonly prisma: PrismaService,
     private readonly embeddingService: EmbeddingService,
     private readonly answerPatternCache: AnswerPatternCacheService,
+    private readonly vectors: AnswerPatternVectorRepository,
   ) {}
 
   list(): Promise<AnswerPattern[]> {
@@ -35,14 +38,18 @@ export class AdminAnswerPatternService {
     return { total, active };
   }
 
-  async create(input: CreateAdminAnswerPatternDto): Promise<AnswerPattern> {
+  async create(
+    input: CreateAdminAnswerPatternDto,
+    adminMemberId?: string,
+  ): Promise<AnswerPattern> {
     const embedding = await this.embeddingService.embedDocument(
-      this.embeddingDocument(input),
+      buildAnswerPatternDocument(input),
+      { adminMemberId },
     );
 
     const pattern = await this.prisma.$transaction(async (tx) => {
       const pattern = await tx.answerPattern.create({ data: input });
-      await this.upsertVector(
+      await this.vectors.upsert(
         tx,
         pattern.id,
         embedding.values,
@@ -59,6 +66,7 @@ export class AdminAnswerPatternService {
   async update(
     id: string,
     input: UpdateAdminAnswerPatternDto,
+    adminMemberId?: string,
   ): Promise<AnswerPattern> {
     const existing = await this.prisma.answerPattern.findUnique({
       where: { id },
@@ -79,7 +87,8 @@ export class AdminAnswerPatternService {
     };
     const merged = { ...existing, ...data };
     const embedding = await this.embeddingService.embedDocument(
-      this.embeddingDocument(merged),
+      buildAnswerPatternDocument(merged),
+      { adminMemberId },
     );
 
     const pattern = await this.prisma.$transaction(async (tx) => {
@@ -87,7 +96,7 @@ export class AdminAnswerPatternService {
         where: { id },
         data,
       });
-      await this.upsertVector(
+      await this.vectors.upsert(
         tx,
         pattern.id,
         embedding.values,
@@ -114,7 +123,7 @@ export class AdminAnswerPatternService {
     return { deleted: true };
   }
 
-  async reindex(): Promise<{
+  async reindex(adminMemberId?: string): Promise<{
     indexed: number;
     failed: Array<{ id: string; reason: string }>;
   }> {
@@ -125,9 +134,10 @@ export class AdminAnswerPatternService {
     for (const pattern of patterns) {
       try {
         const embedding = await this.embeddingService.embedDocument(
-          this.embeddingDocument(pattern),
+          buildAnswerPatternDocument(pattern),
+          { adminMemberId },
         );
-        await this.upsertVector(
+        await this.vectors.upsert(
           this.prisma,
           pattern.id,
           embedding.values,
@@ -141,30 +151,6 @@ export class AdminAnswerPatternService {
     }
 
     return { indexed, failed };
-  }
-
-  private embeddingDocument(input: {
-    title: string;
-    description?: string | null;
-    category?: string | null;
-    intentKey?: string | null;
-    keywords: string[];
-    questionExamples: string[];
-    answer: string;
-  }): string {
-    return [
-      `หัวข้อ: ${input.title}`,
-      input.description ? `รายละเอียด: ${input.description}` : null,
-      input.category ? `หมวดหมู่: ${input.category}` : null,
-      input.intentKey ? `เจตนา: ${input.intentKey}` : null,
-      input.keywords.length ? `คำสำคัญ: ${input.keywords.join(', ')}` : null,
-      input.questionExamples.length
-        ? `ตัวอย่างคำถาม:\n${input.questionExamples.join('\n')}`
-        : null,
-      `คำตอบ: ${input.answer}`,
-    ]
-      .filter(Boolean)
-      .join('\n');
   }
 
   private patchKeywords(
@@ -192,36 +178,5 @@ export class AdminAnswerPatternService {
     }
 
     return keywords;
-  }
-
-  private async upsertVector(
-    db: Prisma.TransactionClient | PrismaService,
-    answerPatternId: string,
-    values: readonly number[],
-    model: string,
-    active: boolean,
-  ): Promise<void> {
-    const vectorLiteral = `[${values.join(',')}]`;
-
-    await db.$executeRaw(Prisma.sql`
-      INSERT INTO "AnswerPatternVector" (
-        "answerPatternId",
-        "embedding",
-        "embeddingModel",
-        "active"
-      )
-      VALUES (
-        ${answerPatternId}::uuid,
-        ${vectorLiteral}::vector,
-        ${model},
-        ${active}
-      )
-      ON CONFLICT ("answerPatternId")
-      DO UPDATE SET
-        "embedding" = EXCLUDED."embedding",
-        "embeddingModel" = EXCLUDED."embeddingModel",
-        "active" = EXCLUDED."active",
-        "updatedAt" = CURRENT_TIMESTAMP
-    `);
   }
 }

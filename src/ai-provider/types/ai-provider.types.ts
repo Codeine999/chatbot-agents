@@ -1,4 +1,9 @@
-export const AI_PROVIDER_NAMES = ['GEMINI', 'OPENAI', 'ANTHROPIC'] as const;
+export const AI_PROVIDER_NAMES = [
+  'GEMINI',
+  'OPENAI',
+  'ANTHROPIC',
+  'MAXPLUS',
+] as const;
 
 export const AI_PROVIDER_SCOPES = ['USER', 'ADMIN'] as const;
 

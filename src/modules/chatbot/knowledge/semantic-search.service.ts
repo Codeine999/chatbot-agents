@@ -1,20 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '../../../generated/prisma/client';
-import { PrismaService } from '../../../prisma/prisma.service';
-import { EmbeddingService } from '../../ai/embedding.service';
+import { AnswerPatternVectorRepository } from '../../ai/embeding/answer-pattern-vector.repository';
+import { EmbeddingService } from '../../ai/embeding/embedding.service';
+import type { EmbeddingUsageContext } from '../../ai/embeding/embedding.service';
 import { MAX_RETRIEVAL_CANDIDATES } from '../constants/knowledge-routing.constants';
 import { KnowledgeItem } from '../types/chat.types';
-
-type SemanticSearchRow = {
-  id: string;
-  title: string;
-  description: string | null;
-  category: string | null;
-  intentKey: string | null;
-  answer: string;
-  priority: number;
-  score: number;
-};
 
 @Injectable()
 export class SemanticSearchService {
@@ -22,36 +11,24 @@ export class SemanticSearchService {
 
   constructor(
     private readonly embeddingService: EmbeddingService,
-    private readonly prisma: PrismaService,
+    private readonly vectors: AnswerPatternVectorRepository,
   ) {}
 
-  async search(input: string, userId?: string): Promise<KnowledgeItem[]> {
-    const embedding = await this.embeddingService.embedQuery(input, userId);
-    const vectorLiteral = `[${embedding.values.join(',')}]`;
+  async search(
+    input: string,
+    context: EmbeddingUsageContext = {},
+  ): Promise<KnowledgeItem[]> {
+    const embedding = await this.embeddingService.embedQuery(input, context);
 
     this.logger.debug(
       `[SemanticSearch] input="${input}" dimension=${embedding.values.length}`,
     );
 
-    const rows = await this.prisma.$queryRaw<SemanticSearchRow[]>(Prisma.sql`
-      SELECT
-        pattern."id",
-        pattern."title",
-        pattern."description",
-        pattern."category",
-        pattern."intentKey",
-        pattern."answer",
-        pattern."priority",
-        (1 - (vector."embedding" <=> ${vectorLiteral}::vector))::float8 AS "score"
-      FROM "AnswerPatternVector" AS vector
-      INNER JOIN "AnswerPattern" AS pattern
-        ON pattern."id" = vector."answerPatternId"
-      WHERE pattern."active" = true
-        AND vector."active" = true
-        AND vector."embeddingModel" = ${embedding.model}
-      ORDER BY vector."embedding" <=> ${vectorLiteral}::vector
-      LIMIT ${MAX_RETRIEVAL_CANDIDATES}
-    `);
+    const rows = await this.vectors.search(
+      embedding.values,
+      embedding.model,
+      MAX_RETRIEVAL_CANDIDATES,
+    );
 
     return rows.map((row) => ({
       source: 'SEMANTIC_CHUNK',

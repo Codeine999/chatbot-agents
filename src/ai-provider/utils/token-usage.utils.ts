@@ -1,6 +1,10 @@
 import { Buffer } from 'node:buffer';
 import { DEFAULT_AI_MAX_OUTPUT_TOKENS } from './ai-provider.constants';
-import { AiGenerateRequest, AiTokenUsage } from '../types/ai-provider.types';
+import {
+  AiGenerateRequest,
+  AiTokenUsage,
+  EMPTY_AI_TOKEN_USAGE,
+} from '../types/ai-provider.types';
 
 const MESSAGE_ENVELOPE_TOKEN_RESERVE = 256;
 
@@ -15,6 +19,9 @@ const MESSAGE_ENVELOPE_TOKEN_RESERVE = 256;
  * for a single photo and bounce it as insufficient credit.
  */
 const IMAGE_TOKEN_RESERVE = 4_000;
+
+/** Rule-of-thumb UTF-8 bytes per token, used only when a provider reports none. */
+const BYTES_PER_EMBEDDING_TOKEN = 4;
 
 /** Provider counters are optional and occasionally absent — never NaN a bill. */
 export function toTokenCount(value: unknown): number {
@@ -78,6 +85,27 @@ export function estimateMaxTokenUsage(
     outputTokens: Math.max(
       0,
       Math.ceil(request.maxOutputTokens ?? DEFAULT_AI_MAX_OUTPUT_TOKENS),
+    ),
+  };
+}
+
+/**
+ * Billable usage for one embedding call, from the text itself.
+ *
+ * The Gemini Developer API returns no token counter for `embedContent`
+ * (`ContentEmbeddingStatistics.tokenCount` is Vertex-only), so an input-only
+ * model has to be metered locally whenever the provider stays silent. Four
+ * UTF-8 bytes per token is the published rule of thumb: it under-counts Thai,
+ * which tokenizes closer to one token per character, but an embedding call is
+ * priced around 0.005 credit, so the absolute error stays far below a single
+ * credit even for a long knowledge-base document.
+ */
+export function estimateEmbeddingTokenUsage(text: string): AiTokenUsage {
+  return {
+    ...EMPTY_AI_TOKEN_USAGE,
+    inputTokens: Math.max(
+      1,
+      Math.ceil(Buffer.byteLength(text, 'utf8') / BYTES_PER_EMBEDDING_TOKEN),
     ),
   };
 }

@@ -2,15 +2,13 @@ import { Body, Controller, Post } from '@nestjs/common';
 import { BanService } from './ban.service';
 import { BanUserDto } from './dto/ban.dto';
 import { AdminGuard } from '../../shared/guards/admin-guard.decorator';
-import { Public } from '../../shared/guards/public.decorator';
 /** Admin-only manual ban management. */
-// @AdminGuard()
+@AdminGuard()
 @Controller('api/abuse/bans')
 export class BanController {
   constructor(private readonly banService: BanService) {}
 
   @Post()
-  @Public()
   async ban(@Body() body: BanUserDto) {
     if (body.durationSec) {
       await this.banService.banTemporarily(

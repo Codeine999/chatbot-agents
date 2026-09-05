@@ -41,6 +41,8 @@ export type RecordAiUsageInput = Readonly<{
   usage: AiTokenUsage;
   cost: AiUsageCost;
   status: 'success' | 'failed';
+  /** Budget scope the call drew on, stored so the log can be read by scope. */
+  scopeKey?: string;
   adminMemberId?: string;
   lineMemberId?: string;
   conversationId?: string;
@@ -353,6 +355,7 @@ export class CreditService {
             costThb: cost.costThb,
             chargedCredit,
             pricingId: cost.pricingId,
+            scopeKey: input.scopeKey,
             adminMemberId: input.adminMemberId,
             lineMemberId: input.lineMemberId,
             conversationId: input.conversationId,

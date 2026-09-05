@@ -57,6 +57,12 @@ model AiUsageEvent {
   pricingId String?         @db.Uuid
   pricing   AiModelPricing? @relation(fields: [pricingId], references: [id])
 
+  /// Budget scope the call drew on, mirroring `CreditBudget.scopeKey`.
+  /// For embeddings this is what separates indexing ("document") from a
+  /// customer question ("query") — the event log cannot tell them apart
+  /// from `kind` alone, and they are billed to different budgets.
+  scopeKey String? @db.VarChar(64)
+
   adminMemberId String?      @db.Uuid
   adminMember   AdminMember? @relation(fields: [adminMemberId], references: [id], onDelete: SetNull)
 
@@ -75,6 +81,7 @@ model AiUsageEvent {
 
   @@index([companyId, createdAt])
   @@index([companyId, kind, createdAt])
+  @@index([companyId, kind, scopeKey, createdAt])
   @@index([adminMemberId, createdAt])
   @@index([provider, model, createdAt])
   @@map("ai_usage_events")

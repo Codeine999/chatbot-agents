@@ -6,7 +6,9 @@ import {
   Param,
   Patch,
   Post,
+  Req,
 } from '@nestjs/common';
+import type { AdminRequest } from '../admin-jwt-auth.guard';
 import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
 import { AdminAnswerPatternService } from './admin-answer-pattern.service';
 import {
@@ -14,10 +16,7 @@ import {
   CreateAdminAnswerPatternDto,
   UpdateAdminAnswerPatternDto,
 } from './dto/admin-answer-pattern.dto';
-import { Public } from 'src/shared/guards/public.decorator';
-
-// @AdminGuard()
-
+@AdminGuard()
 @Controller('/api/admin/answer-patterns')
 export class AdminAnswerPatternController {
   constructor(
@@ -36,24 +35,27 @@ export class AdminAnswerPatternController {
 
   @AdminGuard('dev', 'owner')
   @Post('reindex')
-  reindex() {
-    return this.answerPatternService.reindex();
+  reindex(@Req() request: AdminRequest) {
+    return this.answerPatternService.reindex(request.admin?.id);
   }
 
-  // @AdminGuard('dev', 'owner')
-  @Public()
+  @AdminGuard('dev', 'owner')
   @Post()
-  create(@Body() body: CreateAdminAnswerPatternDto) {
-    return this.answerPatternService.create(body);
+  create(
+    @Req() request: AdminRequest,
+    @Body() body: CreateAdminAnswerPatternDto,
+  ) {
+    return this.answerPatternService.create(body, request.admin?.id);
   }
 
   @AdminGuard('dev', 'owner')
   @Patch(':id')
   update(
+    @Req() request: AdminRequest,
     @Param() params: AdminAnswerPatternIdParamDto,
     @Body() body: UpdateAdminAnswerPatternDto,
   ) {
-    return this.answerPatternService.update(params.id, body);
+    return this.answerPatternService.update(params.id, body, request.admin?.id);
   }
 
   @AdminGuard('dev', 'owner')

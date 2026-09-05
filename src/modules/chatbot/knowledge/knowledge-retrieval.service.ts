@@ -82,7 +82,7 @@ export class KnowledgeRetrievalService {
 
     const firstPass = await this.retrieveCandidatePass(
       originalQuestion,
-      context.userId,
+      context,
       1,
     );
     attempts.push(this.attemptSummary(1, originalQuestion, firstPass));
@@ -155,7 +155,7 @@ export class KnowledgeRetrievalService {
     if (secondPassQueries.length > 0) {
       const passes = await Promise.all(
         secondPassQueries.map(({ query, attempt }) =>
-          this.retrieveCandidatePass(query, context.userId, attempt),
+          this.retrieveCandidatePass(query, context, attempt),
         ),
       );
 
@@ -215,7 +215,7 @@ export class KnowledgeRetrievalService {
 
   private async retrieveCandidatePass(
     query: string,
-    userId: string | undefined,
+    context: RetrievalContext,
     attempt: number,
   ): Promise<CandidatePassResult> {
     if (!normalizeText(query)) {
@@ -275,7 +275,12 @@ export class KnowledgeRetrievalService {
 
     let semanticItems: KnowledgeItem[] = [];
     try {
-      const matches = await this.semanticSearchService.search(query, userId);
+      const matches = await this.semanticSearchService.search(query, {
+        userId: context.userId,
+        lineMemberId: context.lineMemberId,
+        conversationId: context.conversationId,
+        turnId: context.turnId,
+      });
       semanticItems = matches.map((item) =>
         this.annotateAttempt(item, attempt, query),
       );

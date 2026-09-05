@@ -43,9 +43,14 @@ const upsertPricingSchema = z
     cachedInputCostThbPerMillTokens: optionalRate,
     cacheWriteCostThbPerMillTokens: optionalRate,
 
-    /** What the customer's wallet is charged. */
+    /** What the customer's wallet is charged. Input is always billable. */
     inputCreditPerMillTokens: positiveRate,
-    outputCreditPerMillTokens: positiveRate,
+    /**
+     * Zero only for input-only models (embeddings), which return a vector and
+     * never emit a billable output token. `AiPricingService` still refuses a
+     * zero output rate for anything that generates text.
+     */
+    outputCreditPerMillTokens: rate,
     cachedInputCreditPerMillTokens: optionalRate,
     cacheWriteCreditPerMillTokens: optionalRate,
 
