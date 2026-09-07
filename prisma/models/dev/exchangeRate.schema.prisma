@@ -6,5 +6,5 @@ model CreditExchangeRate {
 
   topups CreditTopupHistory[]
 
-  @@map("credit_exchange_rates")
+  @@map("creditExchangeRates")
 }

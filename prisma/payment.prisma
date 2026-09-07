@@ -15,7 +15,7 @@ model UserPayment {
   username    String
   paymentType PaymentType
   status      PaymentStatus @default(pending)
-  payAmount   Decimal @default(0) @db.Decimal(20, 6)
+  payAmount   Decimal       @default(0) @db.Decimal(20, 6)
   approveBy   String?       @db.Uuid
   approvedAt  DateTime?
   member      Member        @relation(fields: [username], references: [username])
@@ -24,4 +24,5 @@ model UserPayment {
   @@index([username])
   @@index([status])
   @@index([approveBy])
+  @@map("payment")
 }
