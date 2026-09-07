@@ -62,3 +62,5 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Uploaded files
 /uploads/*
 !/uploads/**/
+# Local disposable E2E evidence (contains generated fixture IDs).
+/test/artifacts/

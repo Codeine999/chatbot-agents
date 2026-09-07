@@ -1,6 +1,8 @@
 # AI Chatbot — Architecture Review & System Design
 
-> Companion docs: [architecture.html](./architecture.html) (endpoint + ERD + data shapes, open in a browser) · [line-message-e2e-current.md](./line-message-e2e-current.md) (field-level current flow) · [service-flow.md](./service-flow.md) (flow + dependency diagrams) · [erd-database.md](./erd-database.md)
+> **สถานะเอกสาร ณ 2026-09-08:** เนื้อหาด้านล่างเป็น architecture review/roadmap ย้อนหลัง ไม่ใช่ runtime flow ปัจจุบัน รวมถึงส่วนที่เดิมชื่อ Current Project Understanding และข้อความเรื่อง reserve, registration, provider และ handoff ให้ใช้ [E2E ทั้งระบบ](mvp-line-rag-billing-flow.md), [LINE flow ปัจจุบัน](line-message-e2e-current.md) และ [Service dependencies](service-flow.md) ที่ปรับจาก source ล่าสุดแทน ส่วน target design ในไฟล์นี้ยังไม่ควรถือว่า implement แล้ว
+
+> Companion docs: [Current end-to-end flow](./mvp-line-rag-billing-flow.md) · [line-message-e2e-current.md](./line-message-e2e-current.md) (field-level current flow) · [service-flow.md](./service-flow.md) (flow + dependency diagrams) · [erd-database.md](./erd-database.md)
 >
 > Original review: 2026-07-06 · **§1 and §6 refreshed against the code on 2026-08-15.** §5, §7, §8 remain the *target* design and roadmap, annotated with what has since shipped.
 

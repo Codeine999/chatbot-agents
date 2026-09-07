@@ -31,6 +31,24 @@
 $ bun install
 ```
 
+## Database schema
+
+Set `DATABASE_URL` in `.env` before using a command that contacts PostgreSQL.
+
+```bash
+# Generate Prisma Client from the local schema; does not change the database.
+$ bun run gen:db
+
+# Check whether the database has every committed migration.
+$ bun run db:status
+
+# Apply committed migrations to DATABASE_URL.
+$ bun run db:deploy
+
+# Apply migrations, then regenerate Prisma Client for a release.
+$ bun run db:sync
+```
+
 ## Compile and run the project
 
 ```bash
