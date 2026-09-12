@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { ChatbotModule } from '../chatbot/chatbot.module';
 import { CompanyModule } from '../admin/company/company.module';
 import { PipelineModule } from '../pipeline/pipeline.module';
+import { AiProviderModule } from '../ai/ai-provider.module';
 import { LineController, LineConversationController } from './line.controller';
 import { LineDashboardController } from './line-dashboard.controller';
 import {
@@ -18,12 +19,14 @@ import { LineAdminService } from './admin/line-admin.service';
 import { LineAdminController } from './admin/line-admin.controller';
 import { LineSignatureGuard } from './line-signature.guard';
 import { LineWebhookService } from './line-webhook.service';
+import { LineDeliveryService } from './line-delivery.service';
 
 @Module({
   imports: [
     ChatbotModule,
     CompanyModule,
     PipelineModule,
+    AiProviderModule,
     BullModule.registerQueue({
       name: LINE_EVENTS_QUEUE,
       defaultJobOptions: {
@@ -57,6 +60,7 @@ import { LineWebhookService } from './line-webhook.service';
     LineService,
     LineAdminService,
     LineWebhookService,
+    LineDeliveryService,
     LineSignatureGuard,
     LineEventsProcessor,
     LineEventsRetryProcessor,

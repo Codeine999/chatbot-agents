@@ -4,18 +4,18 @@ model AiModelPricing {
   model    String         @db.VarChar(150)
 
   // ต้นทุน Input ที่บริษัทต้องจ่าย เป็นบาท
-  inputCostThbPerMillTokens       Decimal  @default(0) @db.Decimal(20, 6)
+  inputCostThbPerMillTokens  Decimal @default(0) @db.Decimal(20, 6)
   // ต้นทุน Output ที่บริษัทต้องจ่าย เป็นบาท
-  outputCostThbPerMillTokens      Decimal  @default(0) @db.Decimal(20, 6)
+  outputCostThbPerMillTokens Decimal @default(0) @db.Decimal(20, 6)
 
   cachedInputCostThbPerMillTokens Decimal? @db.Decimal(20, 6)
   cacheWriteCostThbPerMillTokens  Decimal? @db.Decimal(20, 6)
 
   // เครดิตลูกค้าที่จะหักจาก Input
-  inputCreditPerMillTokens       Decimal  @default(0) @db.Decimal(20, 6)
+  inputCreditPerMillTokens  Decimal @default(0) @db.Decimal(20, 6)
   // เครดิตลูกค้าที่จะหักจาก Output
-  outputCreditPerMillTokens      Decimal  @default(0) @db.Decimal(20, 6)
-  
+  outputCreditPerMillTokens Decimal @default(0) @db.Decimal(20, 6)
+
   cachedInputCreditPerMillTokens Decimal? @db.Decimal(20, 6)
   cacheWriteCreditPerMillTokens  Decimal? @db.Decimal(20, 6)
 
@@ -34,7 +34,7 @@ model AiModelPricing {
 
   @@unique([provider, model, effectiveFrom])
   @@index([provider, model, effectiveFrom, effectiveTo])
-  @@map("ai_model_pricing")
+  @@map("aiModelPricing")
 }
 
 model AiUsageEvent {
@@ -84,5 +84,5 @@ model AiUsageEvent {
   @@index([companyId, kind, scopeKey, createdAt])
   @@index([adminMemberId, createdAt])
   @@index([provider, model, createdAt])
-  @@map("ai_usage_events")
+  @@map("aiUsageEvents")
 }

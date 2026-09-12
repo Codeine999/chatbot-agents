@@ -1,5 +1,14 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { AdminChatRole } from '../../../generated/prisma/client';
+import { randomUUID } from 'node:crypto';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  AdminChatRole,
+  Prisma,
+} from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AdminAiProviderService } from '../../ai/admin-ai-provider.service';
 import type {
@@ -150,39 +159,35 @@ export class AdminChatService {
 
   async sendMessage(
     adminMemberId: string,
-    input: { roomId?: string; text: string },
+    input: { roomId?: string; clientRequestId?: string; text: string },
   ) {
     const text = input.text.trim();
+    const clientRequestId = input.clientRequestId ?? randomUUID();
+    const request = await this.ensureRequest(
+      adminMemberId,
+      clientRequestId,
+      input.roomId,
+      text,
+    );
+    this.assertSameRequest(request, adminMemberId, input.roomId, text);
 
-    const room = input.roomId
-      ? await this.assertRoomOwner(adminMemberId, input.roomId)
-      : await this.prisma.adminChatRoom.create({
-          data: { adminMemberId, title: this.deriveTitle(text) },
-        });
-
-    const now = new Date();
-    const [userMessage] = await this.prisma.$transaction([
-      this.prisma.adminChatMessage.create({
-        data: {
-          roomId: room.id,
-          role: AdminChatRole.USER,
-          content: text,
-          createdAt: now,
-        },
-        select: {
-          id: true,
-          role: true,
-          content: true,
-          provider: true,
-          model: true,
-          createdAt: true,
-        },
+    const [room, userMessage] = await Promise.all([
+      this.prisma.adminChatRoom.findUniqueOrThrow({
+        where: { id: request.roomId },
       }),
-      this.prisma.adminChatRoom.update({
-        where: { id: room.id },
-        data: { lastMessageAt: now },
+      this.prisma.adminChatMessage.findUniqueOrThrow({
+        where: { id: request.userMessageId },
+        select: this.messageSelect(),
       }),
     ]);
+
+    if (request.assistantMessageId) {
+      const reply = await this.prisma.adminChatMessage.findUniqueOrThrow({
+        where: { id: request.assistantMessageId },
+        select: this.messageSelect(),
+      });
+      return this.sendResult(room, userMessage, reply, clientRequestId);
+    }
 
     const history = await this.loadContext(room.id);
 
@@ -194,7 +199,7 @@ export class AdminChatService {
           systemInstruction: ADMIN_CHAT_SYSTEM_INSTRUCTION,
           messages: history,
         },
-        { idempotencyKey: `admin-chat:${userMessage.id}` },
+        { idempotencyKey: `admin-chat:${request.id}` },
       );
     } catch (error) {
       this.logger.warn(
@@ -205,13 +210,15 @@ export class AdminChatService {
 
     const generatedAt = new Date();
     const assistantCreatedAt =
-      generatedAt.getTime() > now.getTime()
+      generatedAt.getTime() > userMessage.createdAt.getTime()
         ? generatedAt
-        : new Date(now.getTime() + 1);
+        : new Date(userMessage.createdAt.getTime() + 1);
 
-    const [assistantMessage] = await this.prisma.$transaction([
-      this.prisma.adminChatMessage.create({
-        data: {
+    const assistantMessage = await this.prisma.$transaction(async (tx) => {
+      const message = await tx.adminChatMessage.upsert({
+        where: { id: request.id },
+        create: {
+          id: request.id,
           roomId: room.id,
           role: AdminChatRole.ASSISTANT,
           content: reply.text,
@@ -219,27 +226,146 @@ export class AdminChatService {
           model: reply.model,
           createdAt: assistantCreatedAt,
         },
-        select: {
-          id: true,
-          role: true,
-          content: true,
-          provider: true,
-          model: true,
-          createdAt: true,
-        },
-      }),
-      this.prisma.adminChatRoom.update({
-        where: { id: room.id },
-        data: { lastMessageAt: assistantCreatedAt },
-      }),
-    ]);
+        update: {},
+        select: this.messageSelect(),
+      });
+      await Promise.all([
+        tx.adminChatRequest.update({
+          where: { id: request.id },
+          data: {
+            assistantMessageId: message.id,
+            status: 'COMPLETED',
+          },
+        }),
+        tx.adminChatRoom.update({
+          where: { id: room.id },
+          data: { lastMessageAt: assistantCreatedAt },
+        }),
+      ]);
+      return message;
+    });
 
+    return this.sendResult(
+      room,
+      userMessage,
+      assistantMessage,
+      clientRequestId,
+    );
+  }
+
+  private async ensureRequest(
+    adminMemberId: string,
+    clientRequestId: string,
+    roomId: string | undefined,
+    text: string,
+  ) {
+    const existing = await this.prisma.adminChatRequest.findUnique({
+      where: { clientRequestId },
+    });
+    if (existing) return existing;
+
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const raced = await tx.adminChatRequest.findUnique({
+            where: { clientRequestId },
+          });
+          if (raced) return raced;
+
+          const now = new Date();
+          const room = roomId
+            ? await tx.adminChatRoom.findFirst({
+                where: { id: roomId, adminMemberId },
+              })
+            : await tx.adminChatRoom.create({
+                data: { adminMemberId, title: this.deriveTitle(text) },
+              });
+          if (!room) throw new NotFoundException('Chat room not found');
+
+          const userMessage = await tx.adminChatMessage.create({
+            data: {
+              roomId: room.id,
+              role: AdminChatRole.USER,
+              content: text,
+              createdAt: now,
+            },
+          });
+          const request = await tx.adminChatRequest.create({
+            data: {
+              clientRequestId,
+              adminMemberId,
+              roomId: room.id,
+              userMessageId: userMessage.id,
+              text,
+            },
+          });
+          await tx.adminChatRoom.update({
+            where: { id: room.id },
+            data: { lastMessageAt: now },
+          });
+          return request;
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        ['P2002', 'P2034'].includes(error.code)
+      ) {
+        const raced = await this.prisma.adminChatRequest.findUnique({
+          where: { clientRequestId },
+        });
+        if (raced) return raced;
+      }
+      throw error;
+    }
+  }
+
+  private assertSameRequest(
+    request: {
+      adminMemberId: string;
+      roomId: string;
+      text: string;
+    },
+    adminMemberId: string,
+    roomId: string | undefined,
+    text: string,
+  ): void {
+    if (
+      request.adminMemberId !== adminMemberId ||
+      request.text !== text ||
+      (roomId !== undefined && request.roomId !== roomId)
+    ) {
+      throw new ConflictException(
+        'clientRequestId has already been used for a different admin message',
+      );
+    }
+  }
+
+  private sendResult(
+    room: { id: string; title: string },
+    userMessage: unknown,
+    reply: unknown,
+    clientRequestId: string,
+  ) {
     return {
+      clientRequestId,
       roomId: room.id,
       roomTitle: room.title,
       userMessage,
-      reply: assistantMessage,
+      reply,
     };
+  }
+
+  private messageSelect() {
+    return {
+      id: true,
+      role: true,
+      content: true,
+      provider: true,
+      model: true,
+      createdAt: true,
+    } as const;
   }
 
   private async loadContext(roomId: string): Promise<AiProviderMessage[]> {

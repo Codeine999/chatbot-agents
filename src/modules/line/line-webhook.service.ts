@@ -25,6 +25,9 @@ import type {
 import { LineService } from './line-reply.service';
 import { LINE_EVENT_MAX_AGE_MS } from './line-events.queue';
 import { LineAdminService } from './admin/line-admin.service';
+import { LineDeliveryService } from './line-delivery.service';
+import { randomUUID } from 'node:crypto';
+import { UserSessionService } from '../chatbot/user-session.service';
 
 type IncomingLineChatMessage = {
   messageType: LineChatMessageType;
@@ -54,6 +57,8 @@ export class LineWebhookService {
     private readonly chatbotService: ChatbotService,
     private readonly loadContextService: LoadContextService,
     private readonly lineAdminService: LineAdminService,
+    private readonly deliveryService: LineDeliveryService,
+    private readonly sessions: UserSessionService,
   ) {}
 
   /**
@@ -62,7 +67,9 @@ export class LineWebhookService {
    * from here means no reply has been sent yet, so the caller may release
    * the idempotency claim and retry.
    */
-  async processEvent(event: LineWebhookEvent): Promise<void> {
+  async processEvent(event: LineWebhookEvent, claimOwner?: string): Promise<void> {
+    const existingDelivery = await this.prisma.lineDelivery.findUnique({ where: { key: event.webhookEventId } });
+    if (existingDelivery) { await this.deliveryService.deliver(existingDelivery.id); return; }
     const savedIncomingEvent = await this.saveIncomingEvent(event);
 
     if (event.type !== 'message') return;
@@ -132,80 +139,34 @@ export class LineWebhookService {
       });
     }
 
-    // The answer has already been generated and billed at this point, so a
-    // dead reply token or an exhausted reply budget must not silently throw it
-    // away — fall back to a push so the customer still gets what they paid for.
-    const replyTokenExpired =
-      Date.now() - event.timestamp > LINE_EVENT_MAX_AGE_MS;
-
-    const replySent = replyTokenExpired
-      ? false
-      : await this.lineService.replyText(event.replyToken, response.text);
-
-    if (!replySent) {
-      const pushed = await this.pushUndeliveredReply(
-        event.source.userId,
-        response.text,
-        replyTokenExpired ? 'reply token expired' : 'reply budget exhausted',
-        event.webhookEventId,
-      );
-
-      if (!pushed) return;
-    }
-
-    if (savedIncomingEvent) {
-      try {
-        await this.saveSystemReplyMessage(
-          savedIncomingEvent.conversationId,
-          savedIncomingEvent.lineMemberId,
-          response.text,
-        );
-      } catch (error) {
-        // The reply is already sent; retrying the job now would reply twice.
-        this.logger.error(
-          `Failed to save outgoing chat history for conversation ${savedIncomingEvent.conversationId}`,
-          error instanceof Error ? error.stack : String(error),
-        );
-      }
-
-      if (response.contextPolicy === 'INCLUDE') {
-        await this.loadContextService.appendTurn({
-          conversationId: savedIncomingEvent.conversationId,
-          eventId: event.webhookEventId,
-          userText: contextUserText,
-          response,
-          createdAt: event.timestamp || Date.now(),
+    if (!savedIncomingEvent) return;
+    if (response.contextPolicy === 'CLEAR') await this.loadContextService.clear(savedIncomingEvent.conversationId);
+    const delivery = await this.prisma.$transaction(async (tx) => {
+      if (claimOwner) {
+        const owned = await tx.processedLineWebhookEvent.updateMany({
+          where: { webhookEventId: event.webhookEventId, leaseOwner: claimOwner, status: 'PROCESSING' },
+          data: { leaseUntil: new Date(Date.now() + 120_000) },
         });
-      } else if (response.contextPolicy === 'CLEAR') {
-        await this.loadContextService.clear(savedIncomingEvent.conversationId);
+        if (!owned.count) throw new Error('Webhook lease lost');
       }
-    }
-  }
-
-  /**
-   * Last-resort delivery for an answer whose reply token can no longer be
-   * used. Returns false when the push also fails, so the caller skips writing
-   * history for a message the customer never received.
-   */
-  private async pushUndeliveredReply(
-    lineUserId: string,
-    text: string,
-    reason: string,
-    webhookEventId: string,
-  ): Promise<boolean> {
-    try {
-      await this.lineAdminService.pushText(lineUserId, text);
-      this.logger.warn(
-        `Pushed reply for webhookEventId=${webhookEventId} (${reason})`,
-      );
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `Failed to push reply for webhookEventId=${webhookEventId} (${reason})`,
-        error instanceof Error ? error.stack : String(error),
-      );
-      return false;
-    }
+      if (!response.text.trim()) return null;
+      return tx.lineDelivery.upsert({
+        where: { key: event.webhookEventId }, update: {},
+        create: {
+          key: event.webhookEventId, lineUserId: event.source.userId!,
+          conversationId: savedIncomingEvent.conversationId,
+          lineMemberId: savedIncomingEvent.lineMemberId,
+          text: response.text, replyToken: event.replyToken,
+          replyUntil: new Date(event.timestamp + LINE_EVENT_MAX_AGE_MS),
+          context: {
+            conversationId: savedIncomingEvent.conversationId, eventId: event.webhookEventId,
+            userText: contextUserText, response, createdAt: event.timestamp || Date.now(),
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+    });
+    // The DB worker will deliver/retry independently, even if this process stops now.
+    if (delivery) await this.deliveryService.deliver(delivery.id);
   }
 
   async saveIncomingEvent(
@@ -418,40 +379,24 @@ export class LineWebhookService {
       throw new NotFoundException('LINE conversation not found');
     }
 
-    await this.lineAdminService.pushText(
-      conversation.lineMember.lineUserId,
-      body.text,
-    );
-
-    const now = new Date();
-
-    return this.prisma.$transaction(async (tx) => {
-      const message = await tx.lineChatHistory.create({
-        data: {
-          conversationId: conversation.id,
-          lineMemberId: conversation.lineMemberId,
-          sender: LineChatSender.ADMIN,
-          messageType: LineChatMessageType.TEXT,
-          text: body.text,
-          sentStatus: 'sent',
-          sentByAdminId: sentByAdminId ?? null,
-          createdAt: now,
-        },
-      });
-
-      await tx.lineConversation.update({
-        where: {
-          id: conversation.id,
-        },
-        data: {
-          lastMessage: body.text,
-          lastMessageType: LineChatMessageType.TEXT,
-          lastMessageAt: now,
-        },
-      });
-
-      return message;
+    const deliveryKey = `admin:${sentByAdminId}:${conversationId}:${body.clientRequestId ?? randomUUID()}`;
+    await this.prisma.lineConversation.update({ where: { id: conversationId }, data: { status: 'waiting_admin' } });
+    const delivery = await this.prisma.lineDelivery.upsert({
+      where: { key: deliveryKey },
+      update: {},
+      create: {
+        key: deliveryKey,
+        lineUserId: conversation.lineMember.lineUserId,
+        conversationId, lineMemberId: conversation.lineMemberId,
+        adminMemberId: sentByAdminId, text: body.text, method: 'PUSH',
+      },
     });
+    if (delivery.text !== body.text) throw new BadRequestException('clientRequestId was already used for different text');
+    await this.deliveryService.deliver(delivery.id);
+    const message = await this.prisma.lineChatHistory.findUnique({ where: { deliveryId: delivery.id } });
+    if (message) return message;
+    const current = await this.prisma.lineDelivery.findUniqueOrThrow({ where: { id: delivery.id } });
+    return { id: current.id, deliveryId: current.id, text: current.text, sentStatus: current.status.toLowerCase() };
   }
 
   async saveSystemReplyMessage(
@@ -492,38 +437,82 @@ export class LineWebhookService {
     });
   }
 
+  async resumeBot(conversationId: string) {
+    const conversation = await this.prisma.lineConversation.findUniqueOrThrow({ where: { id: conversationId }, include: { lineMember: true } });
+    await this.sessions.clear(conversation.lineMember.lineUserId);
+    await this.loadContextService.clear(conversationId);
+    return { status: 'open' };
+  }
+
+  listDeliveries() {
+    return this.prisma.lineDelivery.findMany({
+      where: { status: { in: ['PENDING', 'SENDING', 'FAILED', 'UNKNOWN'] } },
+      select: { id: true, conversationId: true, status: true, method: true, attempts: true, lastError: true, createdAt: true },
+      orderBy: { createdAt: 'desc' }, take: 100,
+    });
+  }
+
+  listFailedWebhookEvents() {
+    return this.prisma.processedLineWebhookEvent.findMany({
+      where: { status: { in: ['RETRY', 'FAILED'] } },
+      select: { webhookEventId: true, status: true, attempts: true, lastError: true, processedAt: true },
+      orderBy: { processedAt: 'desc' },
+      take: 100,
+    });
+  }
+
   /**
    * Claims a webhook event for processing by inserting its id under a
    * unique constraint. Returns false when the event was already claimed,
    * so a duplicate delivery is skipped and never replied to twice.
    */
-  async claimWebhookEvent(webhookEventId: string): Promise<boolean> {
+  async claimWebhookEvent(event: LineWebhookEvent): Promise<string | null> {
+    const owner = randomUUID();
+    const now = new Date();
     try {
       await this.prisma.processedLineWebhookEvent.create({
-        data: {
-          webhookEventId,
-        },
+        data: { webhookEventId: event.webhookEventId, event: event as unknown as Prisma.InputJsonValue, status: 'RETRY', leaseUntil: now },
       });
-
-      return true;
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        return false;
-      }
-
-      throw error;
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
     }
+    const claimed = await this.prisma.processedLineWebhookEvent.updateMany({
+      where: { webhookEventId: event.webhookEventId, status: { in: ['RETRY', 'PROCESSING'] },
+        leaseUntil: { lte: now }, attempts: { lt: 5 } },
+      data: { status: 'PROCESSING', leaseOwner: owner, leaseUntil: new Date(Date.now() + 120_000), attempts: { increment: 1 } },
+    });
+    return claimed.count ? owner : null;
   }
 
-  async releaseWebhookEvent(webhookEventId: string): Promise<void> {
-    await this.prisma.processedLineWebhookEvent.deleteMany({
-      where: {
-        webhookEventId,
+  async renewWebhookLease(webhookEventId: string, owner: string) {
+    await this.prisma.processedLineWebhookEvent.updateMany({
+      where: { webhookEventId, leaseOwner: owner, status: 'PROCESSING' },
+      data: { leaseUntil: new Date(Date.now() + 120_000) },
+    });
+  }
+
+  async finishWebhookEvent(webhookEventId: string, owner: string, error?: unknown) {
+    await this.prisma.processedLineWebhookEvent.updateMany({
+      where: { webhookEventId, leaseOwner: owner, status: 'PROCESSING' },
+      data: {
+        status: error ? 'RETRY' : 'COMPLETED', leaseOwner: null,
+        leaseUntil: new Date(Date.now() + 10_000),
+        lastError: error ? String(error).slice(0, 1000) : null,
       },
     });
+  }
+
+  async recoverableWebhookEvents(): Promise<LineWebhookEvent[]> {
+    const now = new Date();
+    await this.prisma.processedLineWebhookEvent.updateMany({
+      where: { status: { in: ['PROCESSING', 'RETRY'] }, attempts: { gte: 5 }, leaseUntil: { lte: now } },
+      data: { status: 'FAILED', leaseOwner: null },
+    });
+    const rows = await this.prisma.processedLineWebhookEvent.findMany({
+      where: { status: { in: ['PROCESSING', 'RETRY'] }, attempts: { lt: 5 }, leaseUntil: { lte: now } },
+      orderBy: { processedAt: 'asc' }, take: 20,
+    });
+    return rows.filter(row => row.event).map(row => row.event as unknown as LineWebhookEvent);
   }
 
   private async findOrCreateLineMember(lineUserId: string) {

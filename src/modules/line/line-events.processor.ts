@@ -1,5 +1,5 @@
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job, Queue, UnrecoverableError } from 'bullmq';
 import { isRetryableAiProviderError } from '../../ai-provider/errors/ai-provider-error';
@@ -24,7 +24,27 @@ import { LineWebhookService } from './line-webhook.service';
     duration: 1000,
   },
 })
-export class LineEventsProcessor extends WorkerHost {
+export class LineEventsProcessor extends WorkerHost implements OnModuleInit, OnModuleDestroy {
+  private recoveryTimer?: ReturnType<typeof setInterval>;
+  private recovering = false;
+
+  onModuleInit() {
+    this.recoveryTimer = setInterval(() => void this.recover(), 15_000);
+    this.recoveryTimer.unref();
+  }
+  onModuleDestroy() { if (this.recoveryTimer) clearInterval(this.recoveryTimer); }
+  private async recover() {
+    if (this.recovering) return;
+    this.recovering = true;
+    try {
+      for (const event of await this.lineWebhookService.recoverableWebhookEvents()) {
+        await this.retryQueue.add(LINE_EVENT_JOB, { event }, {
+          jobId: `recover-${event.webhookEventId}-${Math.floor(Date.now() / 15000)}`,
+        });
+      }
+    } catch (error) { this.logger.error(`Webhook recovery: ${String(error)}`); }
+    finally { this.recovering = false; }
+  }
   private readonly logger = new Logger(LineEventsProcessor.name);
   private readonly userProcessingTails = new Map<string, Promise<void>>();
 
@@ -112,16 +132,6 @@ export class LineEventsProcessor extends WorkerHost {
     const { event } = job.data;
     const webhookEventId = event.webhookEventId;
 
-    const eventAgeMs = Date.now() - (event.timestamp || job.timestamp);
-
-    if (eventAgeMs > LINE_EVENT_MAX_AGE_MS) {
-      this.logger.warn(
-        `Dropping LINE event ${webhookEventId}: age ${eventAgeMs}ms 
-         exceeds ${LINE_EVENT_MAX_AGE_MS}ms, reply token is likely expired`,
-      );
-      return;
-    }
-
     const allowed = await this.passesAbuseChecks(
       event,
       isRetry || job.attemptsMade > 0,
@@ -130,7 +140,7 @@ export class LineEventsProcessor extends WorkerHost {
     if (!allowed) return;
 
     const claimed =
-      await this.lineWebhookService.claimWebhookEvent(webhookEventId);
+      await this.lineWebhookService.claimWebhookEvent(event);
 
     if (!claimed) {
       this.logger.log(
@@ -139,11 +149,19 @@ export class LineEventsProcessor extends WorkerHost {
       return;
     }
 
+    const heartbeat = setInterval(() => {
+      void this.lineWebhookService.renewWebhookLease(webhookEventId, claimed)
+        .catch((error: unknown) => this.logger.error(`Webhook lease: ${String(error)}`));
+    }, 30_000);
+    heartbeat.unref();
     try {
-      await this.lineWebhookService.processEvent(event);
+      await this.lineWebhookService.processEvent(event, claimed);
+      await this.lineWebhookService.finishWebhookEvent(webhookEventId, claimed);
     } catch (error) {
-      await this.lineWebhookService.releaseWebhookEvent(webhookEventId);
+      await this.lineWebhookService.finishWebhookEvent(webhookEventId, claimed, error);
       throw error;
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 

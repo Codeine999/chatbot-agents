@@ -1,3 +1,4 @@
+import { rethrowPendingAiUsage } from '../usage/billing/pending-ai-usage.error';
 import { Injectable, Logger } from '@nestjs/common';
 import { UsersAiProviderService } from '../ai/users-ai-provider.service';
 import { AiBudgetService } from '../usage/rate-limit/ai-budget.service';
@@ -80,6 +81,7 @@ export class AiIntentClassifierService {
 
       return { intent, confidence, standaloneQuery };
     } catch (err) {
+      rethrowPendingAiUsage(err);
       this.logger.warn(`AI intent classification failed: ${String(err)}`);
       return { ...AI_CLASSIFIER_FALLBACK, standaloneQuery: input };
     }
@@ -138,6 +140,7 @@ export class AiIntentClassifierService {
             : undefined,
       };
     } catch (error) {
+      rethrowPendingAiUsage(error);
       this.logger.warn(
         `low-confidence BUSINESS/GENERAL classification failed: ${String(error)}`,
       );

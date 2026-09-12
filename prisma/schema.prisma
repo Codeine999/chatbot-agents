@@ -51,8 +51,6 @@ enum AdminChatRole {
   ASSISTANT
 }
 
-
-
 /// One back-office AI chat thread ("room"), private to the admin who owns it.
 model AdminChatRoom {
   id            String      @id @default(uuid()) @db.Uuid
@@ -65,9 +63,10 @@ model AdminChatRoom {
   updatedAt     DateTime @updatedAt
 
   messages AdminChatMessage[]
+  requests AdminChatRequest[]
 
   @@index([adminMemberId, lastMessageAt])
-  @@map("admin_chat_rooms")
+  @@map("adminChatRooms")
 }
 
 model AdminChatMessage {
@@ -84,8 +83,33 @@ model AdminChatMessage {
 
   createdAt DateTime @default(now())
 
+  requestAsUser      AdminChatRequest? @relation("AdminChatRequestUserMessage")
+  requestAsAssistant AdminChatRequest? @relation("AdminChatRequestAssistantMessage")
+
   @@index([roomId, createdAt])
-  @@map("admin_chat_messages")
+  @@map("adminChatMessages")
+}
+
+/// Durable HTTP idempotency and recovery record for an admin AI turn.
+model AdminChatRequest {
+  id                 String            @id @default(uuid()) @db.Uuid
+  clientRequestId    String            @unique @db.Uuid
+  adminMemberId      String            @db.Uuid
+  adminMember        AdminMember       @relation(fields: [adminMemberId], references: [id], onDelete: Cascade)
+  roomId             String            @db.Uuid
+  room               AdminChatRoom     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userMessageId      String            @unique @db.Uuid
+  userMessage        AdminChatMessage  @relation("AdminChatRequestUserMessage", fields: [userMessageId], references: [id], onDelete: Cascade)
+  assistantMessageId String?           @unique @db.Uuid
+  assistantMessage   AdminChatMessage? @relation("AdminChatRequestAssistantMessage", fields: [assistantMessageId], references: [id], onDelete: SetNull)
+  text               String            @db.Text
+  status             String            @default("PENDING") @db.VarChar(20)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([adminMemberId, createdAt])
+  @@index([roomId, createdAt])
+  @@map("adminChatRequests")
 }
 
 // Singleton row — one instance of this app serves one company/LINE OA.
@@ -116,7 +140,7 @@ model LineFollowerSnapshot {
   blockCount      Int?
   createdAt       DateTime @default(now())
 
-  @@map("line_follower_snapshots")
+  @@map("lineFollowerSnapshots")
 }
 
 model AdminNotification {
@@ -139,7 +163,7 @@ model AdminNotification {
 
   @@index([isRead])
   @@index([createdAt])
-  @@map("admin_notifications")
+  @@map("adminNotifications")
 }
 
 model AiSetting {
@@ -150,6 +174,8 @@ model AiSetting {
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @default(now())
+
+  @@map("aiSettings")
 }
 
 model AiProviderSetting {
@@ -160,7 +186,7 @@ model AiProviderSetting {
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
-  @@map("ai_provider_settings")
+  @@map("aiProviderSettings")
 }
 
 model AnswerPattern {
@@ -185,6 +211,8 @@ model AnswerPattern {
   updatedAt DateTime @default(now()) @db.Timestamp(6)
 
   vector AnswerPatternVector?
+
+  @@map("answerPattern")
 }
 
 model LineMember {
@@ -209,6 +237,7 @@ model LineMember {
 
   @@index([memberId])
   @@index([lastActiveAt])
+  @@map("lineMember")
 }
 
 model LineConversation {
@@ -226,6 +255,7 @@ model LineConversation {
 
   @@index([lastMessageAt])
   @@index([status])
+  @@map("lineConversation")
 }
 
 model LineChatHistory {
@@ -244,6 +274,7 @@ model LineChatHistory {
   postbackData        String?
   rawEvent            Json?
   sentStatus          String              @default("received")
+  deliveryId          String?             @unique @db.Uuid
 
   sentByAdminId String?      @db.Uuid
   sentByAdmin   AdminMember? @relation(fields: [sentByAdminId], references: [id], onDelete: SetNull)
@@ -255,6 +286,7 @@ model LineChatHistory {
   @@index([conversationId, createdAt])
   @@index([lineMemberId])
   @@index([sentByAdminId])
+  @@map("lineChatHistory")
 }
 
 model AnswerPatternVector {
@@ -271,12 +303,57 @@ model AnswerPatternVector {
   @@unique([answerPatternId])
   @@index([answerPatternId])
   @@index([active])
+  @@map("answerPatternVector")
 }
 
 model ProcessedLineWebhookEvent {
-  id             String   @id @default(uuid()) @db.Uuid
-  webhookEventId String   @unique
-  processedAt    DateTime @default(now())
+  id             String    @id @default(uuid()) @db.Uuid
+  webhookEventId String    @unique
+  processedAt    DateTime  @default(now())
+  status         String    @default("COMPLETED")
+  event          Json?
+  leaseOwner     String?
+  leaseUntil     DateTime?
+  attempts       Int       @default(0)
+  lastError      String?
 
   @@index([processedAt])
+  @@index([status, leaseUntil])
+  @@map("processedLineWebhookEvent")
+}
+
+// Durable outbound messages. IDs are retained as log references, not deletion blockers.
+model LineDelivery {
+  id             String    @id @default(uuid()) @db.Uuid
+  key            String    @unique
+  lineUserId     String
+  conversationId String    @db.Uuid
+  lineMemberId   String    @db.Uuid
+  adminMemberId  String?   @db.Uuid
+  text           String
+  replyToken     String?
+  replyUntil     DateTime?
+  context        Json?
+  status         String    @default("PENDING")
+  method         String    @default("REPLY")
+  retryKey       String    @default(uuid()) @db.Uuid
+  firstPushAt    DateTime?
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime  @default(now())
+  leaseOwner     String?
+  leaseUntil     DateTime?
+  lastError      String?
+  acceptedAt     DateTime?
+  finalizedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([status, nextAttemptAt])
+  @@map("lineDelivery")
+}
+
+model AdminBootstrap {
+  id        String   @id
+  createdAt DateTime @default(now())
+
+  @@map("adminBootstrap")
 }

@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import type { AiProviderImage } from '../../ai-provider/types/ai-provider.types';
 import { RateLimitService } from '../usage/rate-limit/rate-limit.service';
 import { CompanyService } from '../admin/company/company.service';
+import { LineDeliveryError } from './line-delivery.error';
 
 export type LineProfile = {
   userId: string;
@@ -147,10 +148,17 @@ export class LineService {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('LINE reply error:', errorText);
-      throw new InternalServerErrorException('Failed to reply LINE message');
+      throw new LineDeliveryError(
+        `LINE reply HTTP ${response.status}: ${errorText.slice(0, 500)}`,
+        response.status >= 500 ? 'UNKNOWN' : 'REJECTED',
+        false,
+        response.status === 400 && /invalid reply token/i.test(errorText),
+      );
     }
 
-    await this.companyService.recordOutboundMessage();
+    await this.companyService.recordOutboundMessage().catch((error: unknown) =>
+      this.logger.error(`LINE accepted reply; outbound counter failed: ${String(error)}`),
+    );
     return true;
   }
 

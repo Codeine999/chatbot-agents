@@ -9,6 +9,8 @@ import {
   Query,
   Req,
   UseGuards,
+  ServiceUnavailableException,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
@@ -69,7 +71,7 @@ export class LineController {
           `global ingress limit exceeded: ${ingress.current}/${ingress.limit} 
           events per sec, dropping ${events.length} events`,
         );
-        return { ok: true };
+        throw new ServiceUnavailableException('Webhook ingress is busy; retry later');
       }
     }
 
@@ -92,6 +94,20 @@ export class LineController {
   @AdminGuard()
   listConversations() {
     return this.lineWebhookService.listConversations();
+  }
+
+  @Get('deliveries')
+  @AdminGuard()
+  deliveries() { return this.lineWebhookService.listDeliveries(); }
+
+  @Get('webhooks/failed')
+  @AdminGuard('dev', 'owner')
+  failedWebhooks() { return this.lineWebhookService.listFailedWebhookEvents(); }
+
+  @Post('conversations/:conversationId/resume-bot')
+  @AdminGuard()
+  resumeBot(@Param('conversationId', ParseUUIDPipe) conversationId: string) {
+    return this.lineWebhookService.resumeBot(conversationId);
   }
 
   @Get('conversations/:conversationId/messages')

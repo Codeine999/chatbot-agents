@@ -125,7 +125,12 @@ export class AdminAuthService {
     const password = await bcrypt.hash(input.password, 12);
 
     try {
-      const admin = await this.prisma.adminMember.create({
+      const admin = await this.prisma.$transaction(async (tx) => {
+        await tx.adminBootstrap.create({ data: { id: 'owner' } });
+        if (await tx.adminMember.findFirst({ select: { id: true } })) {
+          throw new ConflictException('Owner setup is already complete');
+        }
+        return tx.adminMember.create({
         data: {
           username: input.username,
           firstname: input.firstName,
@@ -137,6 +142,7 @@ export class AdminAuthService {
           role: 'owner',
         },
         select: ADMIN_PUBLIC_SELECT,
+        });
       });
 
       const { firstname, lastname, ...safeAdmin } = admin;

@@ -69,7 +69,7 @@ export class ReplyTemplateService {
   }
 
   cancelled(): string {
-    return 'ยกเลิกรายการแล้วครับ หากต้องการเริ่มใหม่ พิมพ์ "สมัครสมาชิก" ได้เลยครับ';
+    return 'ยกเลิกรายการแล้วครับ';
   }
 
   askAiChatQuestion(): string {

@@ -1,3 +1,4 @@
+import { rethrowPendingAiUsage } from '../../usage/billing/pending-ai-usage.error';
 import { Injectable, Logger } from '@nestjs/common';
 import { UsersAiProviderService } from '../../ai/users-ai-provider.service';
 import { AiBudgetService } from '../../usage/rate-limit/ai-budget.service';
@@ -228,6 +229,7 @@ export class RetrievalQueryPlannerService {
 
       return plan;
     } catch (error) {
+      rethrowPendingAiUsage(error);
       this.logger.warn(`retrieval query planning failed: ${String(error)}`);
       return {
         ...this.noRetry(

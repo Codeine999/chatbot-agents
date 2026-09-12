@@ -107,7 +107,7 @@ export class EmbeddingService {
     if (!turnId) return undefined;
 
     const fingerprint = createHash('sha256')
-      .update(JSON.stringify([task, this.adapter.model, text]))
+      .update(JSON.stringify([task, text]))
       .digest('hex')
       .slice(0, 32);
 

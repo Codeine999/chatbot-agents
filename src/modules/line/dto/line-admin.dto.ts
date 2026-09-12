@@ -23,5 +23,6 @@ export class GetLineMessagesQueryDto extends createZodDto(
 export class SendLineMessageDto extends createZodDto(
   z.object({
     text: z.string().trim().min(1).max(5000),
+    clientRequestId: z.string().uuid().optional(),
   }),
 ) {}

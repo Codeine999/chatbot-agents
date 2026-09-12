@@ -51,7 +51,7 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
     provider: 'GEMINI',
     model: 'gemini-3.7-flash',
     inputUsdPerMillTokens: 0.75,
-    outputUsdPerMillTokens: 3.75,
+    outputUsdPerMillTokens: 4.5,
     cachedInputUsdPerMillTokens: 0.075,
   },
   {
@@ -82,32 +82,39 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
     outputUsdPerMillTokens: 1.5,
     cachedInputUsdPerMillTokens: 0.025,
   },
-  {
-    provider: 'GEMINI',
-    model: 'gemini-3.1-pro-preview',
-    inputUsdPerMillTokens: 2,
-    outputUsdPerMillTokens: 12,
-    cachedInputUsdPerMillTokens: 0.2,
-    longContext: {
-      thresholdTokens: 200_000,
-      inputMultiplier: 2,
-      outputMultiplier: 1.5,
-      cachedInputMultiplier: 2,
-    },
-  },
-  {
-    provider: 'GEMINI',
-    model: 'gemini-3-flash-preview',
-    inputUsdPerMillTokens: 0.5,
-    outputUsdPerMillTokens: 3,
-    cachedInputUsdPerMillTokens: 0.05,
-  },
+  // {
+  //   provider: 'GEMINI',
+  //   model: 'gemini-3.1-pro-preview',
+  //   inputUsdPerMillTokens: 2,
+  //   outputUsdPerMillTokens: 12,
+  //   cachedInputUsdPerMillTokens: 0.2,
+  //   longContext: {
+  //     thresholdTokens: 200_000,
+  //     inputMultiplier: 2,
+  //     outputMultiplier: 1.5,
+  //     cachedInputMultiplier: 2,
+  //   },
+  // },
+  // {
+  //   provider: 'GEMINI',
+  //   model: 'gemini-3-flash-preview',
+  //   inputUsdPerMillTokens: 0.5,
+  //   outputUsdPerMillTokens: 3,
+  //   cachedInputUsdPerMillTokens: 0.05,
+  // },
   {
     provider: 'GEMINI',
     model: 'gemini-2.5-flash',
     inputUsdPerMillTokens: 0.3,
     outputUsdPerMillTokens: 2.5,
     cachedInputUsdPerMillTokens: 0.03,
+  },
+  {
+    provider: 'GEMINI',
+    model: 'gemini-2.5-flash-lite',
+    inputUsdPerMillTokens: 0.1,
+    outputUsdPerMillTokens: 0.4,
+    cachedInputUsdPerMillTokens: 0.01,
   },
 
   // --- MaxPlus ----------------------------------------------------------
@@ -125,15 +132,15 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
   {
     provider: 'MAXPLUS',
     model: 'gpt-5.6-terra',
-    inputUsdPerMillTokens: 0.25,
-    outputUsdPerMillTokens: 1.5,
+    inputUsdPerMillTokens: 0.2,
+    outputUsdPerMillTokens: 1,
     cachedInputUsdPerMillTokens: 0.025,
   },
   {
     provider: 'MAXPLUS',
     model: 'gpt-5.5',
-    inputUsdPerMillTokens: 0.25,
-    outputUsdPerMillTokens: 1.5,
+    inputUsdPerMillTokens: 0.2,
+    outputUsdPerMillTokens: 0.5,
     cachedInputUsdPerMillTokens: 0.025,
   },
 
@@ -186,14 +193,6 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
 
   // --- Anthropic --------------------------------------------------------
   // Cache write is the 5-minute rate (1.25x input); cache read is 0.1x input.
-  {
-    provider: 'ANTHROPIC',
-    model: 'claude-fable-5',
-    inputUsdPerMillTokens: 10,
-    outputUsdPerMillTokens: 50,
-    cachedInputUsdPerMillTokens: 1,
-    cacheWriteUsdPerMillTokens: 12.5,
-  },
   {
     provider: 'ANTHROPIC',
     model: 'claude-opus-5',

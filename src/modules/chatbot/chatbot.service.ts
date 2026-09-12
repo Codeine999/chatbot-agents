@@ -15,7 +15,7 @@ import {
   StickerChatRequest,
 } from './types/chat.types';
 import { StickerIntentService } from './sticker-intent.service';
-import { ControlMode } from './types/session.types';
+import { ControlMode, ConversationSession } from './types/session.types';
 
 @Injectable()
 export class ChatbotService {
@@ -69,6 +69,10 @@ export class ChatbotService {
     }
 
     const session = await this.userSessionService.get(userId);
+    // Keep CANCEL available so a customer can explicitly leave handoff mode.
+    if (this.isHumanControlled(session) && !['cancel', 'ยกเลิก', 'ออก'].includes(input.toLowerCase())) {
+      return this.response('', 'SYSTEM', 'EXCLUDE');
+    }
 
     const decision = await this.intentRouterService.resolve({
       ...usage,
@@ -195,6 +199,9 @@ export class ChatbotService {
 
   //  Image Handle Message
   async handleImageMessage(request: ImageChatRequest): Promise<ChatResponse> {
+    if (this.isHumanControlled(await this.userSessionService.get(request.userId))) {
+      return this.response('', 'SYSTEM', 'EXCLUDE');
+    }
     return this.aiResponse(
       await this.aiChatService.answerImage(request.image, {
         userId: request.userId,
@@ -211,6 +218,9 @@ export class ChatbotService {
   async handleStickerMessage(
     request: StickerChatRequest,
   ): Promise<ChatResponse> {
+    if (this.isHumanControlled(await this.userSessionService.get(request.userId))) {
+      return this.response('', 'SYSTEM', 'EXCLUDE');
+    }
     const decision = this.stickerIntentService.resolve({
       text: request.text,
       keywords: request.keywords,
@@ -248,6 +258,11 @@ export class ChatbotService {
           'EXCLUDE',
         );
     }
+  }
+
+  private isHumanControlled(session: ConversationSession | undefined): boolean {
+    return session?.status === 'ACTIVE' &&
+      (session.controlMode === 'ADMIN' || session.controlMode === 'PAUSE' || session.requiAdmin === true);
   }
 
   private response(

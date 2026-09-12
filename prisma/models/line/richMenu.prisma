@@ -1,0 +1,60 @@
+enum RichMenuStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// Back-office draft of a LINE rich menu.
+///
+/// A rich menu on LINE is immutable: editing means creating a new one and
+/// swapping it in. This table is the editable source of truth, and
+/// `lineRichMenuId` points at the revision that is currently live on LINE.
+model RichMenuTemplate {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// LINE `name` — internal label, not shown to users. Max 300 chars on LINE.
+  name String @db.VarChar(300)
+  /// LINE `chatBarText` — the label on the tab that opens the menu. Max 14 chars.
+  chatBarText String @db.VarChar(14)
+
+  /// LINE `size`. Only the six sizes LINE accepts are allowed; see `RICH_MENU_SIZES`.
+  width  Int
+  height Int
+
+  /// LINE `selected` — whether the menu is already open when the chat opens.
+  selected Boolean @default(true)
+
+  /// LINE `areas` array (bounds + action per tappable region), shape-validated
+  /// by `richMenuAreasSchema` before it is written here.
+  areas Json
+
+  /// Menu image stored locally under `/uploads/richmenu` and uploaded to LINE on publish.
+  imagePath     String? @db.VarChar(500)
+  imageMimeType String? @db.VarChar(100)
+  imageBytes    Int?
+
+  status RichMenuStatus @default(DRAFT)
+
+  /// `richMenuId` LINE returned for the live revision of this template.
+  lineRichMenuId String? @unique @db.VarChar(100)
+  /// LINE rich menu alias, used by tab-style menus that switch between each other.
+  lineAliasId String? @db.VarChar(100)
+  /// True while this template is the LINE default menu for every user.
+  isDefault Boolean @default(false)
+  /// Content changed after the last publish, so LINE is serving an older revision.
+  needsRepublish Boolean @default(false)
+
+  publishedAt DateTime?
+  /// Why the last publish attempt failed, so the back office can explain a stuck draft.
+  lastPublishError String? @db.Text
+
+  createdByAdminId String?      @db.Uuid
+  createdByAdmin   AdminMember? @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, updatedAt])
+  @@index([createdByAdminId])
+  @@map("richMenuTemplate")
+}

@@ -10,6 +10,10 @@ import { ConfigService } from '@nestjs/config';
 import { getJson } from '../utils';
 import { RateLimitService } from '../../usage/rate-limit/rate-limit.service';
 import { CompanyService } from '../../admin/company/company.service';
+import { AiProviderSettingsService } from '../../ai/ai-provider-settings.service';
+import type { AiProviderRuntimeSetting } from '../../../ai-provider/types/ai-provider.types';
+import { LineDeliveryError } from '../line-delivery.error';
+import { randomUUID } from 'node:crypto';
 
 export type LineProfile = {
   userId: string;
@@ -26,6 +30,10 @@ export type LineBotInfo = {
   pictureUrl?: string;
   chatMode: 'chat' | 'bot';
   markAsReadMode: 'auto' | 'manual';
+};
+
+export type LineBotInfoWithAiProviderSettings = LineBotInfo & {
+  aiProviderSettings: readonly AiProviderRuntimeSetting[];
 };
 
 export type LineFollowerInsight = {
@@ -56,6 +64,7 @@ export class LineAdminService {
     private readonly configService: ConfigService,
     private readonly rateLimitService: RateLimitService,
     private readonly companyService: CompanyService,
+    private readonly aiProviderSettingsService: AiProviderSettingsService,
   ) {
     this.globalReplyLimitPerSec = Number(
       configService.get('LINE_GLOBAL_REPLY_LIMIT_PER_SEC') ?? 30,
@@ -77,13 +86,18 @@ export class LineAdminService {
     );
   }
 
-  async getBotInfo(): Promise<LineBotInfo> {
-    return getJson<LineBotInfo>(
-      '/v2/bot/info',
-      'LINE bot info',
-      this.getAccessToken(),
-      this.httpTimeoutMs,
-    );
+  async getBotInfo(): Promise<LineBotInfoWithAiProviderSettings> {
+    const [botInfo, aiProviderSettings] = await Promise.all([
+      getJson<LineBotInfo>(
+        '/v2/bot/info',
+        'LINE bot info',
+        this.getAccessToken(),
+        this.httpTimeoutMs,
+      ),
+      this.aiProviderSettingsService.getAll(),
+    ]);
+
+    return { ...botInfo, aiProviderSettings };
   }
 
   async getFollowerInsight(date: string): Promise<LineFollowerInsight> {
@@ -114,7 +128,7 @@ export class LineAdminService {
     );
   }
 
-  async pushText(lineUserId: string, text: string): Promise<void> {
+  async pushText(lineUserId: string, text: string, retryKey: string = randomUUID()): Promise<void> {
     const accessToken = this.getAccessToken();
 
     const response = await fetch('https://api.line.me/v2/bot/message/push', {
@@ -122,6 +136,7 @@ export class LineAdminService {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        'X-Line-Retry-Key': retryKey,
       },
       body: JSON.stringify({
         to: lineUserId,
@@ -135,13 +150,20 @@ export class LineAdminService {
       signal: AbortSignal.timeout(this.httpTimeoutMs),
     });
 
+    if (response.status === 409 && response.headers.get('x-line-accepted-request-id')) return;
     if (!response.ok) {
       const errorText = await response.text();
       console.error('LINE push error:', errorText);
-      throw new InternalServerErrorException('Failed to push LINE message');
+      throw new LineDeliveryError(
+        `LINE push HTTP ${response.status}: ${errorText.slice(0, 500)}`,
+        response.status >= 500 ? 'UNKNOWN' : 'REJECTED',
+        response.status >= 500,
+      );
     }
 
-    await this.companyService.recordOutboundMessage();
+    await this.companyService.recordOutboundMessage().catch((error: unknown) =>
+      this.logger.error(`LINE accepted push; outbound counter failed: ${String(error)}`),
+    );
   }
 
   private getAccessToken(): string {

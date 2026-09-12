@@ -1,10 +1,10 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   Injectable,
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { UsageKind } from '../../../generated/prisma/client';
+import { Prisma, UsageKind } from '../../../generated/prisma/client';
 import type {
   AiGenerateRequest,
   AiGenerateResponse,
@@ -14,6 +14,7 @@ import { EMPTY_AI_TOKEN_USAGE } from '../../../ai-provider/types/ai-provider.typ
 import type { AiTokenUsage } from '../../../ai-provider/types/ai-provider.types';
 import type { EmbeddingResult } from '../../../infra/embedding/embedding-adapter.interface';
 import { CreditHold, CreditService } from '../credit-point/credit.service';
+import { PendingAiUsageError } from './pending-ai-usage.error';
 import { AiPricingQuote, AiPricingService } from './ai-pricing.service';
 import {
   AiUsageCost,
@@ -88,6 +89,13 @@ export class AiBillingService {
 
   /** Meters one text generation as `params.kind`. */
   async runBilled(params: BilledGenerationParams): Promise<AiGenerateResponse> {
+    const idempotencyKey = this.idempotencyKey(params);
+    const replay = await this.replay<AiGenerateResponse>(
+      idempotencyKey,
+      params.kind,
+    );
+    if (replay !== undefined) return replay;
+
     const quote = await this.pricingService.createQuote(
       params.provider,
       params.model,
@@ -101,7 +109,7 @@ export class AiBillingService {
       provider: params.provider,
       model: params.model,
       quote,
-      idempotencyKey: this.idempotencyKey(params),
+      idempotencyKey,
       adminMemberId: params.adminMemberId,
       lineMemberId: params.lineMemberId,
       conversationId: params.conversationId,
@@ -122,6 +130,12 @@ export class AiBillingService {
   async runBilledEmbedding(
     params: BilledEmbeddingParams,
   ): Promise<EmbeddingResult> {
+    const replay = await this.replay<EmbeddingResult>(
+      params.idempotencyKey,
+      UsageKind.EMBEDDING,
+    );
+    if (replay !== undefined) return replay;
+
     const quote = await this.pricingService.createEmbeddingQuote(
       params.provider,
       params.model,
@@ -164,15 +178,38 @@ export class AiBillingService {
   }
 
   private async runMetered<T>(call: MeteredCall<T>): Promise<T> {
-    const reservation = await this.creditService.reserveAiCredit(
-      call.kind,
-      call.scopeKey,
-      call.quote.reservedCredit,
-      { requireBudgetLimit: call.requireBudgetLimit },
-    );
+    call = {
+      ...call,
+      idempotencyKey: call.idempotencyKey ?? `usage:${randomUUID()}`,
+    };
+    let reservation: CreditHold;
+    try {
+      reservation = await this.creditService.reserveAiCredit(
+        call.kind,
+        call.scopeKey,
+        call.quote.reservedCredit,
+        {
+          requireBudgetLimit: call.requireBudgetLimit,
+          operationKey: call.idempotencyKey,
+        },
+      );
+    } catch (error) {
+      // Another worker may have settled between the early replay lookup and
+      // the serializable reservation transaction.
+      if (error instanceof PendingAiUsageError) {
+        const replay = await this.replay<T>(call.idempotencyKey, call.kind);
+        if (replay !== undefined) return replay;
+      }
+      throw error;
+    }
 
     const startedAt = Date.now();
     let result: T;
+    const heartbeat = setInterval(() => {
+      void this.creditService.keepReservationAlive(reservation.id)
+        .catch((error: unknown) => this.logger.error(`AI reservation lease: ${String(error)}`));
+    }, 30_000);
+    heartbeat.unref();
 
     try {
       result = await call.call();
@@ -186,6 +223,8 @@ export class AiBillingService {
       });
 
       throw error;
+    } finally {
+      clearInterval(heartbeat);
     }
 
     const latencyMs = Date.now() - startedAt;
@@ -214,6 +253,7 @@ export class AiBillingService {
       providerRequestId: outcome.providerRequestId,
       provider: outcome.provider,
       model: outcome.model,
+      result,
     });
 
     return result;
@@ -247,6 +287,7 @@ export class AiBillingService {
       errorCode?: string;
       provider?: AiProviderName;
       model?: string;
+      result?: T;
     },
   ): Promise<void> {
     try {
@@ -266,29 +307,21 @@ export class AiBillingService {
         providerRequestId: outcome.providerRequestId,
         latencyMs: outcome.latencyMs,
         errorCode: outcome.errorCode,
+        result:
+          outcome.status === 'success' && outcome.result !== undefined
+            ? this.toJson(outcome.result)
+            : undefined,
       });
     } catch (error) {
       this.logger.error(
         `Failed to record ${call.kind} usage for ${call.provider}/${call.model}`,
         error instanceof Error ? error.stack : String(error),
       );
-      await this.releaseAfterBillingFailure(reservation);
-      if (outcome.status === 'success') throw error;
-    }
-  }
-
-  private async releaseAfterBillingFailure(
-    reservation: CreditHold,
-  ): Promise<void> {
-    try {
+      if (outcome.status === 'success') {
+        await this.creditService.markReservationUnknown(reservation.id);
+        throw new PendingAiUsageError();
+      }
       await this.creditService.releaseAiCredit(reservation);
-    } catch (releaseError) {
-      this.logger.error(
-        `Failed to release AI credit reservation ${reservation.id}`,
-        releaseError instanceof Error
-          ? releaseError.stack
-          : String(releaseError),
-      );
     }
   }
 
@@ -336,11 +369,14 @@ export class AiBillingService {
           params.kind,
           params.provider,
           params.model,
+          params.scopeKey ?? LINE_AI_BUDGET_SCOPE_KEY,
+          params.request.temperature,
+          params.request.maxOutputTokens,
           params.request.systemInstruction ?? '',
           params.request.messages.map((message) => [
             message.role,
             message.text,
-            (message.images ?? []).length,
+            (message.images ?? []).map(image => createHash('sha256').update(image.mediaType + image.data).digest('hex')),
           ]),
         ]),
       )
@@ -348,6 +384,22 @@ export class AiBillingService {
       .slice(0, 32);
 
     return `usage:${params.turnId}:${fingerprint}`;
+  }
+
+  private async replay<T>(
+    idempotencyKey: string | undefined,
+    kind: UsageKind,
+  ): Promise<T | undefined> {
+    if (!idempotencyKey) return undefined;
+    const result = await this.creditService.findSettledAiResult(
+      idempotencyKey,
+      kind,
+    );
+    return result === undefined ? undefined : (result as T);
+  }
+
+  private toJson(value: unknown): Prisma.InputJsonValue {
+    return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
   }
 
   private toErrorCode(error: unknown): string {

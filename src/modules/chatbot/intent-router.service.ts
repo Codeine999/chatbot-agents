@@ -82,6 +82,11 @@ export class IntentRouterService {
       });
     }
 
+    if (/^(?:สวัสดี|หวัดดี|ขอบคุณ|โอเค)(?:ครับ|ค่ะ|คะ|นะครับ|นะคะ)?[!. ]*$|^(?:hi|hello|thanks|thank you|ok|okay)[!. ]*$/iu.test(input)) {
+      return this.logDecision({ action: 'CONTINUE_AI_CHAT', intent: 'GENERAL_QUESTION',
+        confidence: 1, source: 'RULE', reason: 'whole-message greeting or acknowledgment' });
+    }
+
     let ruleKnowledgeDecision: RouteDecision | undefined;
 
     if (rule.confidence >= 0.9) {
@@ -108,6 +113,10 @@ export class IntentRouterService {
       recentMessages,
     });
 
+    if (retrieval.fallbackReason === 'CONFLICTING_CANDIDATES') {
+      return { action: 'CONTACT_ADMIN', intent: 'CONTACT_ADMIN', confidence: 1,
+        source: 'DATABASE', businessFallback: true, fallbackReason: 'CONFLICTING_CANDIDATES' };
+    }
     if (retrieval.route !== 'LOW_CONFIDENCE') {
       const decision: RouteDecision = {
         action: 'ANSWER_KNOWLEDGE',

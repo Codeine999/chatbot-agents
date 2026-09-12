@@ -54,6 +54,8 @@ async function bootstrap() {
       const allowedOrigins = [
         'http://localhost:5173',
         'https://chatbot-dashboard-r6ac.vercel.app',
+        'https://chatbot-dashboard-eta-nine.vercel.app',
+        
         'http://localhost:8080'
       ];
 

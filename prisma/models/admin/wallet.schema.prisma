@@ -33,11 +33,12 @@ model CreditWallet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  ledger  CreditLedger[]
-  budgets CreditBudget[]
+  ledger       CreditLedger[]
+  budgets      CreditBudget[]
+  reservations CreditReservation[]
 
   @@unique([id, companyId]) // เผื่อทำ composite FK ตอนขึ้น multi-tenant
-  @@map("credit_wallets")
+  @@map("creditWallets")
 }
 
 model CreditBudget {
@@ -53,11 +54,32 @@ model CreditBudget {
   /// Credit held by provider calls that have not settled yet.
   reservedCredit Decimal  @default(0) @db.Decimal(20, 6)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  reservations CreditReservation[]
 
   @@unique([walletId, kind, scopeKey])
-  @@map("credit_budgets")
+  @@map("creditBudgets")
+}
+
+model CreditReservation {
+  id           String       @id @default(uuid()) @db.Uuid
+  operationKey String       @unique
+  companyId    String       @db.Uuid
+  walletId     String       @db.Uuid
+  wallet       CreditWallet @relation(fields: [walletId], references: [id])
+  budgetId     String       @db.Uuid
+  budget       CreditBudget @relation(fields: [budgetId], references: [id])
+  amountCredit Decimal      @db.Decimal(20, 6)
+  status       String       @default("HELD")
+  /// Provider result persisted atomically with settlement for safe replay.
+  result       Json?
+  expiresAt    DateTime
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([status, expiresAt])
+  @@map("creditReservation")
 }
 
 model CreditLedger {
@@ -81,7 +103,7 @@ model CreditLedger {
 
   @@index([walletId, createdAt])
   @@index([walletId, kind, createdAt])
-  @@map("credit_ledger")
+  @@map("creditLedger")
 }
 
 model CreditTopupHistory {
@@ -120,5 +142,5 @@ model CreditTopupHistory {
   @@index([requestedById, createdAt])
   @@index([exchangeRateId])
   @@index([packagePriceId])
-  @@map("credit_topups")
+  @@map("creditTopups")
 }

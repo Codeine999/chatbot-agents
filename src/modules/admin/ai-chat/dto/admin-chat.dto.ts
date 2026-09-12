@@ -29,6 +29,8 @@ export class SendAdminChatMessageDto extends createZodDto(
   z.object({
     /** Omit to start a new room; the title is derived from the first message. */
     roomId: z.string().uuid().optional(),
+    /** Stable across HTTP retries so one user action is charged once. */
+    clientRequestId: z.string().uuid().optional(),
     text: z.string().trim().min(1).max(20_000),
   }),
 ) {}

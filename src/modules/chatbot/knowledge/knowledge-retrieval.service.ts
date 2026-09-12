@@ -1,3 +1,4 @@
+import { rethrowPendingAiUsage } from '../../usage/billing/pending-ai-usage.error';
 import { Injectable, Logger } from '@nestjs/common';
 import { normalizeText } from '../../../utils/text.utils';
 import {
@@ -235,6 +236,7 @@ export class KnowledgeRetrievalService {
         this.annotateAttempt(this.normalizeKeywordScore(item), attempt, query),
       );
     } catch (error) {
+      rethrowPendingAiUsage(error);
       retrievalFailed = true;
       this.logger.error('cached knowledge retrieval failed', error as Error);
     }
@@ -258,6 +260,7 @@ export class KnowledgeRetrievalService {
       );
       databaseSucceeded = true;
     } catch (error) {
+      rethrowPendingAiUsage(error);
       retrievalFailed = true;
       this.logger.error('database knowledge retrieval failed', error as Error);
     }
@@ -285,6 +288,7 @@ export class KnowledgeRetrievalService {
         this.annotateAttempt(item, attempt, query),
       );
     } catch (error) {
+      rethrowPendingAiUsage(error);
       retrievalFailed = true;
       this.logger.warn(
         `embedding knowledge retrieval failed: ${String(error)}`,

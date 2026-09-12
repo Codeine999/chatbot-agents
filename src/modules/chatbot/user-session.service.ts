@@ -8,6 +8,7 @@ import {
   ConversationStatus,
 } from './types/session.types';
 import { NotificationService } from '../admin/notification/notification.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 export type { ConversationSession } from './types/session.types';
 
@@ -23,6 +24,7 @@ export class UserSessionService {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     configService: ConfigService,
     private readonly notificationService: NotificationService,
+    private readonly prisma: PrismaService,
   ) {
     this.sessionTtlSec = this.positiveInteger(
       configService.get('CHAT_SESSION_TTL_SEC'),
@@ -36,6 +38,13 @@ export class UserSessionService {
    * untrusted state.
    */
   async get(userId: string): Promise<ConversationSession | undefined> {
+    const takeover = await this.prisma.lineConversation.findFirst({
+      where: { status: 'waiting_admin', lineMember: { lineUserId: userId } }, select: { id: true },
+    });
+    if (takeover) return {
+      userId, flow: 'CONTACT_ADMIN', step: 'WAITING_ADMIN', status: 'ACTIVE',
+      controlMode: 'ADMIN', requiAdmin: true, data: {},
+    };
     const key = this.sessionKey(userId);
     const raw = await this.redis.getex(key, 'EX', this.sessionTtlSec);
 
@@ -70,6 +79,11 @@ export class UserSessionService {
     // reply, which BullMQ retries by re-running the whole event) can tell
     // "already flagged" from "just became flagged" and only notify once.
     const previous = session.requiAdmin ? await this.get(userId) : undefined;
+    if (session.requiAdmin || session.controlMode === 'ADMIN') {
+      await this.prisma.lineConversation.updateMany({
+        where: { lineMember: { lineUserId: userId } }, data: { status: 'waiting_admin' },
+      });
+    }
 
     await this.redis.set(
       this.sessionKey(userId),
@@ -92,6 +106,9 @@ export class UserSessionService {
   }
 
   async clear(userId: string): Promise<void> {
+    await this.prisma.lineConversation.updateMany({
+      where: { lineMember: { lineUserId: userId }, status: 'waiting_admin' }, data: { status: 'open' },
+    });
     await this.redis.del(this.sessionKey(userId));
   }
 

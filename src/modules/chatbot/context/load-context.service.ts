@@ -114,16 +114,23 @@ export class LoadContextService {
     const key = this.contextKey(conversationId);
 
     try {
-      const result = await this.redis
-        .multi()
-        .rpush(key, JSON.stringify(turn))
-        .ltrim(key, -MAX_CONTEXT_TURNS, -1)
-        .expire(key, CONTEXT_TTL_SEC)
-        .exec();
-
-      if (!result || result.some(([error]) => error !== null)) {
-        throw new Error('Redis transaction did not complete successfully');
-      }
+      // Delivery repair can replay a turn; keep it once and preserve event order.
+      await this.redis.eval(`
+        local turns = {}
+        local incoming = cjson.decode(ARGV[1])
+        for _, raw in ipairs(redis.call('LRANGE', KEYS[1], 0, -1)) do
+          local ok, item = pcall(cjson.decode, raw)
+          if ok and item.eventId ~= incoming.eventId then table.insert(turns, item) end
+        end
+        table.insert(turns, incoming)
+        table.sort(turns, function(a,b) return a.createdAt < b.createdAt end)
+        redis.call('DEL', KEYS[1])
+        for i = math.max(1, #turns - tonumber(ARGV[2]) + 1), #turns do
+          redis.call('RPUSH', KEYS[1], cjson.encode(turns[i]))
+        end
+        redis.call('EXPIRE', KEYS[1], ARGV[3])
+        return 1
+      `, 1, key, JSON.stringify(turn), MAX_CONTEXT_TURNS, CONTEXT_TTL_SEC);
 
       return true;
     } catch (error) {

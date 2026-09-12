@@ -3,7 +3,7 @@ import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 
 /**
- * Every raw SQL touch of `AnswerPatternVector` in one place.
+ * Every raw SQL touch of `answerPatternVector` in one place.
  *
  * The column is `Unsupported("vector(1536)")`, so Prisma's query builder
  * cannot read or write it and each call site would otherwise hand-roll its
@@ -31,7 +31,7 @@ export class AnswerPatternVectorRepository {
     const vectorLiteral = AnswerPatternVectorRepository.toVectorLiteral(values);
 
     await db.$executeRaw(Prisma.sql`
-      INSERT INTO "AnswerPatternVector" (
+      INSERT INTO "answerPatternVector" (
         "answerPatternId",
         "embedding",
         "embeddingModel",
@@ -69,8 +69,8 @@ export class AnswerPatternVectorRepository {
         pattern."answer",
         pattern."priority",
         (1 - (vector."embedding" <=> ${vectorLiteral}::vector))::float8 AS "score"
-      FROM "AnswerPatternVector" AS vector
-      INNER JOIN "AnswerPattern" AS pattern
+      FROM "answerPatternVector" AS vector
+      INNER JOIN "answerPattern" AS pattern
         ON pattern."id" = vector."answerPatternId"
       WHERE pattern."active" = true
         AND vector."active" = true
@@ -95,8 +95,8 @@ export class AnswerPatternVectorRepository {
         vector."embeddingModel"   AS "embeddingModel",
         vector."active"           AS "vectorActive",
         vector."updatedAt"        AS "vectorUpdatedAt"
-      FROM "AnswerPattern" AS pattern
-      LEFT JOIN "AnswerPatternVector" AS vector
+      FROM "answerPattern" AS pattern
+      LEFT JOIN "answerPatternVector" AS vector
         ON vector."answerPatternId" = pattern."id"
       ORDER BY pattern."priority" DESC, pattern."updatedAt" DESC
     `);

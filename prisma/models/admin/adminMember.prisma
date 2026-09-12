@@ -19,6 +19,8 @@ model AdminMember {
 
   sentLineMessages LineChatHistory[]
 
+  richMenuTemplates RichMenuTemplate[]
+
   requestedCreditTopupHistories CreditTopupHistory[] @relation("CreditTopupRequestedBy")
   approvedCreditTopupHistories  CreditTopupHistory[] @relation("CreditTopupApprovedBy")
   rejectedCreditTopupHistories  CreditTopupHistory[] @relation("CreditTopupRejectedBy")

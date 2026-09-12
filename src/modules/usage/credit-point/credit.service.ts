@@ -14,6 +14,7 @@ import type {
 } from '../../../ai-provider/types/ai-provider.types';
 import { AiUsageCost } from '../billing/ai-usage.types';
 import { InsufficientCreditException } from './insufficient-credit.exception';
+import { PendingAiUsageError } from '../billing/pending-ai-usage.error';
 
 const DEFAULT_MIN_AI_BALANCE_CREDIT = 20;
 const SERIALIZABLE_RETRY_LIMIT = 3;
@@ -51,6 +52,8 @@ export type RecordAiUsageInput = Readonly<{
   errorCode?: string;
   /** Overrides the default `usage:<eventId>` ledger key for retried work. */
   idempotencyKey?: string;
+  /** Successful provider payload, persisted with settlement for safe replay. */
+  result?: Prisma.InputJsonValue;
 }>;
 
 /**
@@ -176,7 +179,7 @@ export class CreditService {
     kind: UsageKind,
     scopeKey: string,
     amountCredit: Prisma.Decimal,
-    options: { requireBudgetLimit?: boolean } = {},
+    options: { requireBudgetLimit?: boolean; operationKey?: string } = {},
   ): Promise<CreditHold> {
     const amount = amountCredit.toDecimalPlaces(6, Prisma.Decimal.ROUND_CEIL);
     if (amount.isNegative()) {
@@ -186,9 +189,13 @@ export class CreditService {
     const companyId = await this.companyService.getCompanyId();
     const wallet = await this.ensureWallet(companyId);
     const budget = await this.ensureBudget(wallet.id, kind, scopeKey);
-    const reservationId = randomUUID();
+    let reservationId: string = randomUUID();
 
     return this.runSerializable(async (tx) => {
+      const existing = options.operationKey
+        ? await tx.creditReservation.findUnique({ where: { operationKey: options.operationKey } })
+        : null;
+      if (existing && existing.status !== 'RELEASED') throw new PendingAiUsageError();
       const [currentWallet, currentBudget] = await Promise.all([
         tx.creditWallet.findUniqueOrThrow({
           where: { id: wallet.id },
@@ -255,6 +262,19 @@ export class CreditService {
         );
       }
 
+      if (existing) {
+        reservationId = existing.id;
+        await tx.creditReservation.update({
+          where: { id: existing.id },
+          data: { status: 'HELD', amountCredit: amount, expiresAt: new Date(Date.now() + 120_000) },
+        });
+      } else {
+        await tx.creditReservation.create({ data: {
+          id: reservationId, operationKey: options.operationKey ?? `usage:${reservationId}`,
+          companyId, walletId: wallet.id, budgetId: budget.id, amountCredit: amount,
+          expiresAt: new Date(Date.now() + 120_000),
+        } });
+      }
       await Promise.all([
         tx.creditWallet.update({
           where: { id: wallet.id },
@@ -277,6 +297,31 @@ export class CreditService {
   }
 
   /**
+   * Returns a provider payload only after its debit and usage row committed.
+   * A settled legacy reservation without a payload remains unresolved instead
+   * of calling the provider again and risking a second external operation.
+   */
+  async findSettledAiResult(
+    operationKey: string,
+    kind: UsageKind,
+  ): Promise<Prisma.JsonValue | undefined> {
+    const reservation = await this.prisma.creditReservation.findUnique({
+      where: { operationKey },
+      select: { status: true, result: true },
+    });
+    if (reservation?.status !== 'SETTLED' || !reservation.result) {
+      return undefined;
+    }
+
+    const stored = reservation.result as Prisma.JsonObject;
+    if (stored.kind !== kind || !Object.hasOwn(stored, 'value')) {
+      throw new PendingAiUsageError();
+    }
+
+    return stored.value;
+  }
+
+  /**
    * Writes the usage event and, for a billable success, the wallet debit,
    * budget usage and ledger entry in one transaction. The wallet and budget
    * are moved with atomic SQL decrement/increment rather than a
@@ -292,6 +337,8 @@ export class CreditService {
 
     try {
       return await this.runSerializable(async (tx) => {
+        const hold = await tx.creditReservation.findUniqueOrThrow({ where: { id: reservation.id } });
+        if (hold.status !== 'HELD') throw new PendingAiUsageError();
         const chargedCredit = billable
           ? cost.chargedCredit
           : new Prisma.Decimal(0);
@@ -398,6 +445,17 @@ export class CreditService {
           });
         }
 
+        await tx.creditReservation.update({
+          where: { id: reservation.id },
+          data: {
+            status: input.status === 'success' ? 'SETTLED' : 'RELEASED',
+            result:
+              input.status === 'success' && input.result !== undefined
+                ? { kind: input.kind, value: input.result }
+                : undefined,
+          },
+        });
+
         return {
           usageEventId,
           chargedCredit,
@@ -424,6 +482,11 @@ export class CreditService {
   /** Releases an aggregate hold after an unexpected billing-path failure. */
   async releaseAiCredit(reservation: CreditHold): Promise<void> {
     await this.runSerializable(async (tx) => {
+      const released = await tx.creditReservation.updateMany({
+        where: { id: reservation.id, status: { in: ['HELD', 'UNKNOWN'] } },
+        data: { status: 'RELEASED' },
+      });
+      if (!released.count) return;
       await Promise.all([
         tx.creditWallet.update({
           where: { id: reservation.walletId },
@@ -435,6 +498,40 @@ export class CreditService {
         }),
       ]);
     });
+  }
+
+  async keepReservationAlive(id: string) {
+    await this.prisma.creditReservation.updateMany({
+      where: { id, status: 'HELD' }, data: { expiresAt: new Date(Date.now() + 120_000) },
+    });
+  }
+
+  async markReservationUnknown(id: string): Promise<void> {
+    await this.prisma.creditReservation.updateMany({
+      where: { id, status: 'HELD' }, data: { status: 'UNKNOWN' },
+    });
+  }
+
+  async listUnresolvedReservations() {
+    const companyId = await this.companyService.getCompanyId();
+    // Expiry is a signal for review, never an automatic refund: the provider
+    // may have completed while the worker died.
+    await this.prisma.creditReservation.updateMany({
+      where: { companyId, status: 'HELD', expiresAt: { lt: new Date() } },
+      data: { status: 'UNKNOWN' },
+    });
+    return this.prisma.creditReservation.findMany({
+      where: { companyId, status: { in: ['HELD', 'UNKNOWN'] } },
+      select: { id: true, operationKey: true, amountCredit: true, status: true, createdAt: true, expiresAt: true },
+      orderBy: { createdAt: 'asc' }, take: 100,
+    });
+  }
+
+  async releaseUnknownReservation(id: string) {
+    const companyId = await this.companyService.getCompanyId();
+    const hold = await this.prisma.creditReservation.findFirstOrThrow({ where: { id, companyId, status: 'UNKNOWN' } });
+    await this.releaseAiCredit(hold);
+    return { released: true };
   }
 
   /** Wallet rows are created lazily so a fresh install is visible at 0 credit. */

@@ -1,3 +1,4 @@
+import { rethrowPendingAiUsage } from '../usage/billing/pending-ai-usage.error';
 import { Injectable, Logger } from '@nestjs/common';
 import { AI_GENERATION_CONFIG } from '../../ai-provider/utils/ai-provider.config';
 import { UsersAiProviderService } from '../ai/users-ai-provider.service';
@@ -148,6 +149,7 @@ export class AiChatService {
 
       return { text: analysis.answer, isFallback: false };
     } catch (error) {
+      rethrowPendingAiUsage(error);
       this.logger.error('AI image analysis failed', error as Error);
       return { text: fallbackMessage, isFallback: true };
     }
@@ -171,6 +173,7 @@ export class AiChatService {
           setting?.fallbackMessage?.trim() || DEFAULT_FALLBACK_MESSAGE,
       };
     } catch (error) {
+      rethrowPendingAiUsage(error);
       this.logger.error(
         'failed to load AiSetting, using defaults',
         error as Error,
@@ -208,6 +211,7 @@ export class AiChatService {
         ? { text, isFallback: false }
         : { text: fallbackMessage, isFallback: true };
     } catch (error) {
+      rethrowPendingAiUsage(error);
       this.logger.error('AI generation failed', error as Error);
       return { text: fallbackMessage, isFallback: true };
     }
@@ -259,6 +263,7 @@ export class AiChatService {
         ? { text, isFallback: false }
         : { text: setting.fallbackMessage, isFallback: true };
     } catch (error) {
+      rethrowPendingAiUsage(error);
       this.logger.error('RAG answer generation failed', error as Error);
       return { text: setting.fallbackMessage, isFallback: true };
     }
