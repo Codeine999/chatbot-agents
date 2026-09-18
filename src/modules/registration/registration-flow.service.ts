@@ -8,7 +8,6 @@ import {
   ConversationSession,
   UserSessionService,
 } from '../chatbot/user-session.service';
-import { ControlMode } from '../chatbot/types/session.types';
 import { ReplyTemplateService } from '../chatbot/reply-template.service';
 import { RegistrationService } from './registration.service';
 import { RegisterParser } from './utils/register.parser';
@@ -30,7 +29,6 @@ export class RegistrationFlowService {
       flow: 'REGISTER',
       step: RegisterStep.WAITING_REGISTER_FORM,
       status: 'ACTIVE',
-      controlMode: ControlMode.AI,
       data: {},
     };
 

@@ -13,7 +13,7 @@ model RichMenuTemplate {
   id String @id @default(uuid()) @db.Uuid
 
   /// LINE `name` — internal label, not shown to users. Max 300 chars on LINE.
-  name String @db.VarChar(300)
+  name        String @db.VarChar(300)
   /// LINE `chatBarText` — the label on the tab that opens the menu. Max 14 chars.
   chatBarText String @db.VarChar(14)
 
@@ -38,15 +38,15 @@ model RichMenuTemplate {
   /// `richMenuId` LINE returned for the live revision of this template.
   lineRichMenuId String? @unique @db.VarChar(100)
   /// LINE rich menu alias, used by tab-style menus that switch between each other.
-  lineAliasId String? @db.VarChar(100)
+  lineAliasId    String? @db.VarChar(100)
   /// True while this template is the LINE default menu for every user.
-  isDefault Boolean @default(false)
+  isDefault      Boolean @default(false)
   /// Content changed after the last publish, so LINE is serving an older revision.
   needsRepublish Boolean @default(false)
 
-  publishedAt DateTime?
+  publishedAt      DateTime?
   /// Why the last publish attempt failed, so the back office can explain a stuck draft.
-  lastPublishError String? @db.Text
+  lastPublishError String?   @db.Text
 
   createdByAdminId String?      @db.Uuid
   createdByAdmin   AdminMember? @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)

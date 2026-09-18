@@ -380,7 +380,6 @@ export class LineWebhookService {
     }
 
     const deliveryKey = `admin:${sentByAdminId}:${conversationId}:${body.clientRequestId ?? randomUUID()}`;
-    await this.prisma.lineConversation.update({ where: { id: conversationId }, data: { status: 'waiting_admin' } });
     const delivery = await this.prisma.lineDelivery.upsert({
       where: { key: deliveryKey },
       update: {},
@@ -439,7 +438,8 @@ export class LineWebhookService {
 
   async resumeBot(conversationId: string) {
     const conversation = await this.prisma.lineConversation.findUniqueOrThrow({ where: { id: conversationId }, include: { lineMember: true } });
-    await this.sessions.clear(conversation.lineMember.lineUserId);
+    await this.sessions.resume(conversation.lineMember.lineUserId);
+    await this.prisma.lineConversation.update({ where: { id: conversationId }, data: { status: 'open' } });
     await this.loadContextService.clear(conversationId);
     return { status: 'open' };
   }

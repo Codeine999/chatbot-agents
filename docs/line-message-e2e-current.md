@@ -70,8 +70,8 @@ Delivery error ส่วนใหญ่ถูกจัดเป็นสถา�
 | processedLineWebhookEvent | event JSON, status, leaseOwner/leaseUntil, attempts, lastError | claim/recovery → worker |
 | SavedIncomingEvent | conversationId, lineMemberId | inbound persistence → chatbot/billing |
 | LineAiUsageContext | userId, lineMemberId, conversationId, turnId | orchestration → embedding/provider/billing |
-| ChatContextMessage | role, text, source, createdAt | Redis load → router/planner/answer |
-| KnowledgeRetrievalResult | route, matchType, items, selectedItems, topScores, scoreGap, attempts, diagnosis, fallbackReason | retrieval → router/answer |
+| ChatContextMessage | role, text, source, createdAt | Redis load → deterministic query resolution/router/answer |
+| KnowledgeRetrievalResult | route, matchType, items, selectedItems, topScores (ranking only), scoreGap, fallbackReason | retrieval → router/answer |
 | AiGenerateResponse | text, provider, model, usage, providerRequestId? | provider/billing replay → caller |
 | EmbeddingResult | values, model, usage, usageEstimated? | embedding adapter/replay → vector query/write |
 | ChatResponse | text, source, contextPolicy | chatbot → durable delivery |
@@ -108,17 +108,19 @@ Generation hash รวม provider/model/request/context ที่ส่งจ�
 
 ## 4. Routing และ output policies
 
+Core text flow อัปเดต 13 กันยายน 2026: [implementation และ call-count tests](core-text-reply-refactor.md)
+
 | เงื่อนไข | ผล |
 | --- | --- |
 | Human-controlled session | ส่ง text ว่าง; inbound ถูกเก็บแต่ไม่สร้าง auto delivery |
-| CANCEL ที่รองรับ | clear session, waiting_admin → open, ตอบ template และ CLEAR context |
+| CANCEL ที่รองรับ | clear เฉพาะ registration; ไม่ปลด admin mute หรือ waiting_admin |
 | Registration ปิด | คืน unavailable; active registration ถูก clear เมื่อพยายามต่อ |
 | Exact conflict | handoff ไม่เลือกคำตอบขัดกันแบบสุ่ม |
-| Unique exact / score≥0.95 และ clear winner | DIRECT stored answer |
-| Context score≥0.6 | RAG generation สูงสุด 3 contexts |
-| Low confidence | BUSINESS/GENERAL classifier |
-| RAG ตอบ INSUFFICIENT_CONTEXT | กลับ classifier |
-| Business / fallback ที่ต้อง staff | requiAdmin + waiting_admin + notification |
+| Safe approved-question exact, scoped, no conflict | DIRECT stored answer / REWRITE one generation |
+| Eligible lexical/vector candidates → RRF ranking | RAG: 1 generation, สูงสุด 3 contexts / 12,000 characters |
+| Low confidence | Classifier only; BUSINESS → static handoff (1 call), GENERAL → answerGeneral (2 calls) |
+| RAG ตอบ INSUFFICIENT_CONTEXT | static handoff; ห้ามกลับ classifier |
+| Business / fallback ที่ต้อง staff | requireAdmin + waiting_admin + notification; AI/RAG ยังทำงาน |
 | Image | โหลด LINE media; billed analysis ตาม image policy; unsafe/invalid → fallback |
 | Sticker | semantic intent/template ที่รองรับ; ไม่บังคับ embedding ทุก sticker |
 | External image | ข้อความไม่รองรับ; ไม่ส่งภาพนี้ไป AI |
@@ -173,9 +175,9 @@ flowchart TD
 
 ## 7. Handoff → admin reply → resume
 
-Customer ขอ staff หรือ business fallback → session ADMIN/requiAdmin + DB waiting_admin → create adminNotifications → emit socket /admin → frontend เปิด conversation จาก metadata.conversationId
+Customer ขอ staff หรือ business fallback → DB waiting_admin / requireAdmin=true → create adminNotifications → emit ADMIN_NOTIFICATION socket /admin → frontend เปิด conversation จาก metadata.conversationId; ยังไม่ mute และไม่ทับ registration
 
-Admin ส่งข้อความด้วย clientRequestId → durable PUSH → accepted ADMIN history หรือ pending delivery response บอตหยุดระหว่าง waiting_admin จากนั้น POST /api/line/conversations/:conversationId/resume-bot clear session และ context เพื่อให้บอตตอบต่อ
+Admin ส่งข้อความด้วย clientRequestId → durable PUSH → ก่อนส่งจริงตั้ง Redis chat:control:<lineUserId>=ADMIN, TTL AUTO_MUTE_WHEN_REPLY (default 10m) → accepted ADMIN history หรือ pending delivery response. Push attempt ใหม่ตั้ง TTL ใหม่เต็มระยะ ไม่บวกสะสม. Key หมดอายุจะกลับ AI; POST /api/line/conversations/:conversationId/resume-bot ปลด mute ก่อนเวลา, เปิด conversation และ clear context โดยไม่ลบ registration. Automatic PUSH ไม่ตั้ง mute; queued automatic replies ถูกระงับเมื่อพบ mute.
 
 Notification read state กับ conversation unread/history เป็นคนละข้อมูล อย่าถือว่า mark notification read คือ delivery accepted หรือ customer read receipt
 

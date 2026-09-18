@@ -51,6 +51,12 @@ enum AdminChatRole {
   ASSISTANT
 }
 
+/// DIRECT sends the stored answer as-is; REWRITE lets the model rephrase it.
+enum AnswerPatternRenderMode {
+  DIRECT  @map("direct")
+  REWRITE @map("rewrite")
+}
+
 /// One back-office AI chat thread ("room"), private to the admin who owns it.
 model AdminChatRoom {
   id            String      @id @default(uuid()) @db.Uuid
@@ -201,8 +207,9 @@ model AnswerPattern {
   keywords         String[] @default([])
   questionExamples String[] @default([])
 
-  answer   String @db.Text
-  language String @default("th") @db.VarChar(10)
+  answer     String                  @db.Text
+  language   String                  @default("th") @db.VarChar(10)
+  renderMode AnswerPatternRenderMode @default(DIRECT)
 
   priority Int     @default(0)
   active   Boolean @default(true)
@@ -213,6 +220,36 @@ model AnswerPattern {
   vector AnswerPatternVector?
 
   @@map("answerPattern")
+}
+
+model MicroKnowledge {
+  id       String  @id @default(uuid()) @db.Uuid
+  tenantId String? @db.Uuid
+
+  title       String  @db.VarChar(255)
+  description String? @db.Text
+  category    String? @db.VarChar(100)
+  intentKey   String? @db.VarChar(100)
+
+  /// Which product/entity and which topic this single fact is about.
+  entityKey String? @db.VarChar(50)
+  topicKey  String? @db.VarChar(50)
+
+  keywords         String[] @default([])
+  questionExamples String[] @default([])
+
+  answer   String @db.Text
+  language String @default("th") @db.VarChar(10)
+
+  priority Int     @default(0)
+  active   Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @default(now()) @db.Timestamp(6)
+
+  vector MicroKnowledgeVector?
+
+  @@map("microKnowledge")
 }
 
 model LineMember {
@@ -304,6 +341,23 @@ model AnswerPatternVector {
   @@index([answerPatternId])
   @@index([active])
   @@map("answerPatternVector")
+}
+
+model MicroKnowledgeVector {
+  id               String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  microKnowledgeId String                      @db.Uuid
+  embedding        Unsupported("vector(1536)")
+  embeddingModel   String?                     @db.VarChar(100)
+  active           Boolean                     @default(true)
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @default(now())
+
+  microKnowledge MicroKnowledge @relation(fields: [microKnowledgeId], references: [id], onDelete: Cascade)
+
+  @@unique([microKnowledgeId])
+  @@index([microKnowledgeId])
+  @@index([active])
+  @@map("microKnowledgeVector")
 }
 
 model ProcessedLineWebhookEvent {

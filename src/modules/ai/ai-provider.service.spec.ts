@@ -7,7 +7,6 @@ import { RetryableAiProviderException } from '../../ai-provider/errors/ai-provid
 import type { AiGenerateResponse } from '../../ai-provider/types/ai-provider.types';
 import { AnthropicAiProvider } from '../../ai-provider/providers/anthropic-ai.provider';
 import { GeminiAiProvider } from '../../ai-provider/providers/gemini-ai.provider';
-import { OpenAiProvider } from '../../ai-provider/providers/openai-ai.provider';
 import { AiProviderSettingsService } from './ai-provider-settings.service';
 import { AiProviderService } from './ai-provider.service';
 
@@ -45,9 +44,7 @@ function createService(
 
   return new AiProviderService(
     {} as AiProviderSettingsService,
-    stub('GEMINI'),
-    stub('OPENAI') as unknown as OpenAiProvider,
-    anthropic,
+    [stub('GEMINI'), stub('OPENAI'), anthropic],
     configService,
   );
 }

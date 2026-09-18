@@ -2,6 +2,7 @@ import { Body, Controller, ForbiddenException, Post } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RegistrationService } from './registration.service';
 import { RegisterDto } from './dto/register.dto';
+import { isRegistrationEnabled } from './registration-feature';
 
 @Controller('registration')
 export class RegistrationController {
@@ -12,7 +13,7 @@ export class RegistrationController {
 
   @Post('register')
   async register(@Body() body: RegisterDto) {
-    if (this.configService.get<string>('CAN_REGISTER') === 'false') {
+    if (!isRegistrationEnabled(this.configService)) {
       throw new ForbiddenException('Registration is currently disabled');
     }
 

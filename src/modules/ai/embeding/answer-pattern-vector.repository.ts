@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
+import type { KnowledgeScope } from '../../chatbot/knowledge/knowledge-scope';
 
 /**
  * Every raw SQL touch of `answerPatternVector` in one place.
@@ -56,6 +57,7 @@ export class AnswerPatternVectorRepository {
     values: readonly number[],
     model: string,
     limit: number,
+    scope?: KnowledgeScope,
   ): Promise<SemanticSearchRow[]> {
     const vectorLiteral = AnswerPatternVectorRepository.toVectorLiteral(values);
 
@@ -68,6 +70,10 @@ export class AnswerPatternVectorRepository {
         pattern."intentKey",
         pattern."answer",
         pattern."priority",
+        pattern."renderMode"::text AS "renderMode",
+        pattern."tenantId",
+        pattern."language",
+        pattern."questionExamples",
         (1 - (vector."embedding" <=> ${vectorLiteral}::vector))::float8 AS "score"
       FROM "answerPatternVector" AS vector
       INNER JOIN "answerPattern" AS pattern
@@ -75,6 +81,7 @@ export class AnswerPatternVectorRepository {
       WHERE pattern."active" = true
         AND vector."active" = true
         AND vector."embeddingModel" = ${model}
+        ${scope ? Prisma.sql`AND pattern."tenantId" IS NOT DISTINCT FROM ${scope.tenantId}::uuid AND pattern."language" = ${scope.language}` : Prisma.empty}
       ORDER BY vector."embedding" <=> ${vectorLiteral}::vector
       LIMIT ${limit}
     `);
@@ -112,6 +119,10 @@ export type SemanticSearchRow = {
   answer: string;
   priority: number;
   score: number;
+  renderMode: 'direct' | 'rewrite';
+  tenantId: string | null;
+  language: string;
+  questionExamples: string[];
 };
 
 export type VectorCoverageRow = {

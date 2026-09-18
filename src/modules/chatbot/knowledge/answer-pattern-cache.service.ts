@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import type { AnswerPattern } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
+import { knowledgeScope, KnowledgeScope } from './knowledge-scope';
 
 /** Full records let a cache hit continue without another answer lookup. */
 export type AnswerPatternCacheEntry = AnswerPattern;
@@ -25,7 +27,14 @@ export class AnswerPatternCacheService
   private refreshing: Promise<void> | null = null;
   private timer: NodeJS.Timeout | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly scope: KnowledgeScope;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    config: ConfigService,
+  ) {
+    this.scope = knowledgeScope(config);
+  }
 
   async onModuleInit(): Promise<void> {
     await this.refresh();
@@ -38,7 +47,10 @@ export class AnswerPatternCacheService
   }
 
   getAll(): readonly AnswerPatternCacheEntry[] {
-    if (Date.now() - this.loadedAt > CACHE_TTL_MS) void this.refresh();
+    if (Date.now() - this.loadedAt > CACHE_TTL_MS) {
+      void this.refresh();
+      return []; // Expired answers cannot take the zero-DB direct path.
+    }
     return this.entries;
   }
 
@@ -54,7 +66,7 @@ export class AnswerPatternCacheService
     const started = Date.now();
     try {
       const rows = await this.prisma.answerPattern.findMany({
-        where: { active: true },
+        where: { active: true, ...this.scope },
         orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
         take: MAX_CACHED_PATTERNS,
       });

@@ -11,11 +11,11 @@ import {
   ChatResponse,
   ChatResponseSource,
   ImageChatRequest,
-  RouteDecision,
   StickerChatRequest,
 } from './types/chat.types';
 import { StickerIntentService } from './sticker-intent.service';
-import { ControlMode, ConversationSession } from './types/session.types';
+import { logBlock, logSafeText } from '../../utils/text.utils';
+import { isRegistrationEnabled } from '../registration/registration-feature';
 
 @Injectable()
 export class ChatbotService {
@@ -48,6 +48,13 @@ export class ChatbotService {
     const input = text.trim();
     const usage = { userId, lineMemberId, conversationId, turnId };
 
+    if (await this.userSessionService.isMuted(userId)) {
+      return this.response('', 'SYSTEM', 'EXCLUDE');
+    }
+
+    const session = await this.userSessionService.get(userId);
+    this.logger.warn(`user session ${session}'`);
+
     if (!input) {
       return this.response(
         this.replyTemplateService.defaultMessage(),
@@ -68,10 +75,29 @@ export class ChatbotService {
       );
     }
 
-    const session = await this.userSessionService.get(userId);
-    // Keep CANCEL available so a customer can explicitly leave handoff mode.
-    if (this.isHumanControlled(session) && !['cancel', 'ยกเลิก', 'ออก'].includes(input.toLowerCase())) {
-      return this.response('', 'SYSTEM', 'EXCLUDE');
+    this.logger.debug(
+      logBlock('Inbound', [
+        `user=${userId}`,
+        `conversation=${conversationId ?? '-'}`,
+        `turn=${turnId ?? '-'}`,
+        `length=${input.length}`,
+        `history=${recentMessages.length}`,
+        `text=${JSON.stringify(logSafeText(input))}`,
+      ]),
+    );
+
+    if (
+      session?.status === 'ACTIVE' &&
+      session.flow === 'REGISTER' &&
+      !this.canRegister() &&
+      !['cancel', 'ยกเลิก', 'ออก'].includes(input.toLowerCase())
+    ) {
+      await this.userSessionService.clear(userId);
+      return this.response(
+        this.replyTemplateService.registerUnavailable(),
+        'REGISTRATION',
+        'CLEAR',
+      );
     }
 
     const decision = await this.intentRouterService.resolve({
@@ -82,14 +108,20 @@ export class ChatbotService {
     });
 
     this.logger.debug(
-      `route action=${decision.action} intent=${decision.intent} ` +
-        `source=${decision.source} confidence=${decision.confidence} ` +
-        `reason="${decision.reason ?? ''}"`,
+      logBlock('Route', [
+        `action=${decision.action}`,
+        `intent=${decision.intent}`,
+        `source=${decision.source}`,
+        `confidence=${decision.confidence}`,
+        `reason=${JSON.stringify(decision.reason ?? '')}`,
+      ]),
     );
 
     switch (decision.action) {
       case 'CANCEL_SESSION':
-        await this.userSessionService.clear(userId);
+        if (session?.flow === 'REGISTER' && session.status === 'ACTIVE') {
+          await this.userSessionService.clear(userId);
+        }
         return this.response(
           this.replyTemplateService.cancelled(),
           'RULE',
@@ -129,15 +161,15 @@ export class ChatbotService {
         );
 
       case 'START_AI_CHAT':
-        await this.userSessionService.set(userId, {
-          userId,
-          flow: 'GENERAL_QUESTION',
-          step: 'WAITING_QUESTION',
-          status: 'ACTIVE',
-          controlMode: ControlMode.AI,
-          data: {},
-        });
-
+        if (session?.flow !== 'REGISTER' || session.status !== 'ACTIVE') {
+          await this.userSessionService.set(userId, {
+            userId,
+            flow: 'GENERAL_QUESTION',
+            step: 'WAITING_QUESTION',
+            status: 'ACTIVE',
+            data: {},
+          });
+        }
         return this.response(
           this.replyTemplateService.askAiChatQuestion(),
           'RULE',
@@ -154,12 +186,20 @@ export class ChatbotService {
         );
 
       case 'GENERAL_QUESTION':
-        return this.answerGeneralDecision(decision);
+        return this.aiResponse(
+          await this.aiChatService.answerGeneral(input, {
+            ...usage,
+            recentMessages,
+          }),
+          'AI',
+        );
 
-      case 'FALLBACK': {
-        const fallback = await this.aiChatService.answerFallback();
-        return this.response(fallback.text, 'SYSTEM', 'EXCLUDE');
-      }
+      case 'CLARIFY':
+        return this.response(
+          'หมายถึงเรื่องไหนหรือสินค้ารุ่นไหนครับ ช่วยระบุเพิ่มเติมนิดหนึ่งได้ไหมครับ',
+          'RULE',
+          'INCLUDE',
+        );
 
       case 'ANSWER_KNOWLEDGE': {
         const result = await this.aiChatService.answerKnowledge(input, {
@@ -173,20 +213,17 @@ export class ChatbotService {
           return this.aiResponse(result, 'KNOWLEDGE');
         }
 
-        const lowConfidenceDecision =
-          await this.intentRouterService.resolveLowConfidence({
-            ...usage,
-            input,
-            recentMessages,
-            retrieval: decision.retrieval,
-            fallbackReason: 'INSUFFICIENT_CONTEXT',
-          });
-
-        return this.executeLowConfidenceDecision(lowConfidenceDecision, userId);
+        // RAG already spent its generation call. Never re-enter classification.
+        return this.contactAdminResponse(userId, true);
       }
 
       case 'CONTACT_ADMIN':
         return this.contactAdminResponse(userId, decision.businessFallback);
+
+      case 'FALLBACK': {
+        const fallback = await this.aiChatService.answerFallback();
+        return this.response(fallback.text, 'SYSTEM', 'EXCLUDE');
+      }
 
       default:
         return this.response(
@@ -199,7 +236,7 @@ export class ChatbotService {
 
   //  Image Handle Message
   async handleImageMessage(request: ImageChatRequest): Promise<ChatResponse> {
-    if (this.isHumanControlled(await this.userSessionService.get(request.userId))) {
+    if (await this.userSessionService.isMuted(request.userId)) {
       return this.response('', 'SYSTEM', 'EXCLUDE');
     }
     return this.aiResponse(
@@ -218,7 +255,7 @@ export class ChatbotService {
   async handleStickerMessage(
     request: StickerChatRequest,
   ): Promise<ChatResponse> {
-    if (this.isHumanControlled(await this.userSessionService.get(request.userId))) {
+    if (await this.userSessionService.isMuted(request.userId)) {
       return this.response('', 'SYSTEM', 'EXCLUDE');
     }
     const decision = this.stickerIntentService.resolve({
@@ -260,11 +297,6 @@ export class ChatbotService {
     }
   }
 
-  private isHumanControlled(session: ConversationSession | undefined): boolean {
-    return session?.status === 'ACTIVE' &&
-      (session.controlMode === 'ADMIN' || session.controlMode === 'PAUSE' || session.requiAdmin === true);
-  }
-
   private response(
     text: string,
     source: ChatResponseSource,
@@ -284,50 +316,11 @@ export class ChatbotService {
     );
   }
 
-  private async answerGeneralDecision(
-    decision: RouteDecision,
-  ): Promise<ChatResponse> {
-    if (decision.generatedResponse?.trim()) {
-      return this.response(decision.generatedResponse.trim(), 'AI', 'INCLUDE');
-    }
-
-    const fallback = await this.aiChatService.answerFallback();
-    return this.response(fallback.text, 'SYSTEM', 'EXCLUDE');
-  }
-
-  private async executeLowConfidenceDecision(
-    decision: RouteDecision,
-    userId: string,
-  ): Promise<ChatResponse> {
-    if (decision.action === 'GENERAL_QUESTION') {
-      return this.answerGeneralDecision(decision);
-    }
-
-    if (decision.action === 'CONTACT_ADMIN') {
-      return this.contactAdminResponse(userId, decision.businessFallback);
-    }
-
-    const fallback = await this.aiChatService.answerFallback();
-    return this.response(fallback.text, 'SYSTEM', 'EXCLUDE');
-  }
-
   private async contactAdminResponse(
     userId: string,
     businessFallback = false,
   ): Promise<ChatResponse> {
-    const contactAdminSession = {
-      userId,
-      flow: 'CONTACT_ADMIN' as const,
-      step: 'WAITING_ADMIN',
-      status: 'ACTIVE' as const,
-      controlMode: ControlMode.ADMIN,
-      requiAdmin: true,
-      data: {},
-    };
-
-    // UserSessionService.set() notifies admins automatically when
-    // requiAdmin is true — no separate notify call needed here.
-    await this.userSessionService.set(userId, contactAdminSession);
+    await this.userSessionService.requestAdmin(userId);
 
     if (businessFallback) {
       const fallback = await this.aiChatService.answerFallback();
@@ -342,6 +335,6 @@ export class ChatbotService {
   }
 
   private canRegister(): boolean {
-    return this.configService.get<string>('CAN_REGISTER') !== 'false';
+    return isRegistrationEnabled(this.configService);
   }
 }

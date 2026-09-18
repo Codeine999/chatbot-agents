@@ -1,1 +1,0 @@
-export const AI_CONFIDENCE_THRESHOLD = 0.6;

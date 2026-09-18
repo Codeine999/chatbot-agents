@@ -16,6 +16,7 @@ export type ChatAction =
   | 'ANSWER_KNOWLEDGE'
   | 'GENERAL_QUESTION'
   | 'FALLBACK'
+  | 'CLARIFY'
   | 'CONTACT_ADMIN'
   | 'DEFAULT';
 
@@ -34,18 +35,12 @@ export type IntentResult = {
   reason?: string;
 };
 
-export type AiIntentAnalysis = {
-  intent: ChatIntent;
-  confidence: number;
-  standaloneQuery?: string;
-};
-
 export type LowConfidenceClassification = 'BUSINESS' | 'GENERAL';
 
 export type LowConfidenceAnalysis = Readonly<{
   classification: LowConfidenceClassification;
   confidence: number;
-  response?: string;
+  reason?: string;
 }>;
 
 export type KnowledgeMatchType =
@@ -57,28 +52,6 @@ export type KnowledgeMatchType =
 
 export type KnowledgeRoute = 'DIRECT' | 'RAG' | 'LOW_CONFIDENCE';
 
-export type KnowledgeRetrievalDiagnosis =
-  | 'NONE'
-  | 'MISSING_USER_INFORMATION'
-  | 'MISSING_KNOWLEDGE_EVIDENCE'
-  | 'AMBIGUOUS_RESULTS'
-  | 'CONFLICTING_CANDIDATES'
-  | 'COMPLEX_QUERY'
-  | 'RETRIEVAL_ERROR';
-
-export type KnowledgeRewriteStrategy =
-  | 'NONE'
-  | 'REWRITE'
-  | 'EXPAND'
-  | 'DECOMPOSE';
-
-export type KnowledgeRetrievalAttempt = Readonly<{
-  attempt: number;
-  query: string;
-  candidateCount: number;
-  retrievalFailed: boolean;
-}>;
-
 export type KnowledgeRetrievalResult = Readonly<{
   route: KnowledgeRoute;
   matchType: KnowledgeMatchType;
@@ -87,11 +60,6 @@ export type KnowledgeRetrievalResult = Readonly<{
   topScores: readonly number[];
   scoreGap: number | null;
   fallbackReason?: string;
-  attemptCount?: number;
-  attempts?: readonly KnowledgeRetrievalAttempt[];
-  diagnosis?: KnowledgeRetrievalDiagnosis;
-  rewriteStrategy?: KnowledgeRewriteStrategy;
-  plannerUsedLlm?: boolean;
 }>;
 
 export type RouteDecision = {
@@ -102,7 +70,6 @@ export type RouteDecision = {
   reason?: string;
   resolvedQuery?: string;
   retrieval?: KnowledgeRetrievalResult;
-  generatedResponse?: string;
   businessFallback?: boolean;
   fallbackReason?: string;
 };
@@ -177,13 +144,15 @@ export type AiAnswerResult = Readonly<{
 }>;
 
 export type KnowledgeItem = {
-  source: 'ANSWER_PATTERN' | 'SEMANTIC_CHUNK';
+  source: 'ANSWER_PATTERN' | 'MICRO_KNOWLEDGE';
   id: string;
   title?: string;
   category?: string | null;
   content: string;
   answer?: string;
+  /** Ranking signal, never a calibrated answer-confidence probability. */
   score: number;
+  renderMode?: 'DIRECT' | 'REWRITE';
   metadata?: Record<string, unknown>;
 };
 

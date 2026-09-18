@@ -23,13 +23,13 @@ flowchart TD
     IR --> IC["AiIntentClassifierService"]
     KR --> KW["AnswerPatternService / Cache"]
     KR --> SEM["SemanticSearchService"]
-    KR --> PL["RetrievalQueryPlannerService"]
+    KR --> PL["resolveRetrievalQuery (pure function, no I/O)"]
     SEM --> EMB["EmbeddingService"]
     SEM --> V["AnswerPatternVectorRepository"]
+    SEM --> MV["MicroKnowledgeVectorRepository"]
     CB --> AC["AiChatService"]
     AC --> UP["UsersAiProviderService"]
     IC --> UP
-    PL --> UP
     ADM["AdminChatService"] --> AP["AdminAiProviderService"]
     UP --> BILL["AiBillingService"]
     AP --> BILL
@@ -62,10 +62,10 @@ Billing รับ callback ของ provider caller จึงทำ reserve ก
 | LineWebhookService | reuse delivery, save inbound, orchestrate response, manual send/resume | member/conversation/history/delivery |
 | LineDeliveryService | claim/send/retry/finalize | lineDelivery และ unique outbound deliveryId |
 | ChatbotService | session gate, rule action, registration, image/sticker, ChatResponse policy | response ต่อ caller |
-| UserSessionService | session และ human handoff | Redis + DB waiting_admin |
+| UserSessionService | workflow, requestAdmin และ timed mute แยกกัน | Redis workflow/control + DB waiting_admin (request เท่านั้น) |
 | LoadContextService | delivered conversation context/redaction | Redis 3 turns/TTL30m |
-| KnowledgeRetrievalService | hybrid pool/ranking/planner/route | retrieval result; ไม่ส่ง LINE |
-| SemanticSearchService | query embedding + pgvector candidates | answerPatternVector/answerPattern |
+| KnowledgeRetrievalService | deterministic retrieval / RRF / route (0 generation) | retrieval result; ไม่ส่ง LINE |
+| SemanticSearchService | one query embedding shared by two vector searches | AnswerPattern + MicroKnowledge |
 | AdminAnswerPatternService | document build/embed/write/cache refresh | pattern + vector transaction หลัง billing |
 | UsersAiProviderService | USER provider setting → LINE_AI_REPLY | actor/thread context |
 | AdminAiProviderService | ADMIN setting, enabled/catalog/budget requirement | ADMIN_AI_QUERY, scope admin ID |
@@ -84,13 +84,13 @@ Billing รับ callback ของ provider caller จึงทำ reserve ก
 | --- | --- | --- |
 | Login | AuthController → bcrypt → JWT | Bearer token + safe admin |
 | LINE exact | webhook → worker → chatbot → cache/DB DIRECT → delivery | ไม่มี generation; keyword directไม่เสีย embedding |
-| LINE semantic DIRECT | retrieval → billed query embedding → vector search → delivery | เสีย EMBEDDING เท่านั้น |
-| LINE RAG | retrieval → อาจ planner/search เพิ่ม → billed answer → delivery | หลาย usage events ต่อคำตอบ |
-| Low confidence | retrieval → classifier → general response / admin | classification call มี bill หาก success |
+| LINE semantic knowledge | one embedding → AnswerPattern + MicroKnowledge → RAG → delivery | ไม่มี cosine DIRECT |
+| LINE RAG | deterministic retrieval → billed answer → delivery | generation ≤1; sentinel handoff ไม่ classifier ซ้ำ |
+| Low confidence | retrieval → classifier → BUSINESS handoff / GENERAL answerGeneral | BUSINESS 1 generation; GENERAL 2 |
 | LINE image | media download → chatbot policy → billed image analysis → delivery | safe answer / fallback ตาม policy |
 | Registration | flag + parser/validator/session → RegistrationService | member credentials; CLEAR context |
 | Admin chat | request identity → history → Admin provider/billing → assistant transaction | HTTP reply หรือ replay |
-| Manual LINE | admin inbox API → waiting_admin → delivery PUSH | history หรือ pending status |
+| Manual LINE | admin inbox API → delivery → Redis ADMIN TTL → PUSH | TTL default 10m; reset ต่อ attempt; resume-bot ปลด mute ได้ |
 | Knowledge write | document embed/bill → pattern+vector write → cache refresh | indexed article |
 | Top-up | quote → PENDING → dev confirm transaction | wallet/TOPUP ledger เพิ่มเมื่อ approve |
 | Notification | handoff → DB row → socket; frontend GET/mark read | staff เปิด conversation |

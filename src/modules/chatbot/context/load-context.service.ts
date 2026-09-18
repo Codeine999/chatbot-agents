@@ -6,6 +6,7 @@ import {
   ChatResponse,
   ChatResponseSource,
 } from '../types/chat.types';
+import { redactPii } from '../../../utils/text.utils';
 
 const CONTEXT_KEY_PREFIX = 'chat:context:';
 const CONTEXT_TTL_SEC = 30 * 60;
@@ -162,19 +163,7 @@ export class LoadContextService {
   }
 
   private prepareText(value: string): string {
-    const redacted = value
-      .replace(
-        /((?:รหัสผ่าน|password|passcode)\s*[:=]?\s*)\S+/giu,
-        '$1[REDACTED_PASSWORD]',
-      )
-      .replace(
-        /((?:เลขบัญชี|บัญชีธนาคาร|bank\s*account|account\s*number)\s*[:=]?\s*)\d(?:[\d -]{7,18}\d)?/giu,
-        '$1[REDACTED_ACCOUNT]',
-      )
-      .replace(/(?:\+66|0)(?:[\s-]?\d){8,9}/g, '[REDACTED_PHONE]')
-      .trim();
-
-    return Array.from(redacted)
+    return Array.from(redactPii(value))
       .slice(0, MAX_STORED_MESSAGE_CHARACTERS)
       .join('');
   }

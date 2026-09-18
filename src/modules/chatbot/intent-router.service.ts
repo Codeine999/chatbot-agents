@@ -10,7 +10,11 @@ import {
   RouteDecision,
 } from './types/chat.types';
 import { fromRule } from './intent/intent.utils';
+import { logBlock, logSafeText } from '../../utils/text.utils';
 import type { LineAiUsageContext } from '../usage/billing/ai-usage.types';
+
+/** Enough of the ranking curve to see a tie; [Retrieval] holds the full list. */
+const MAX_LOGGED_SCORES = 5;
 
 @Injectable()
 export class IntentRouterService {
@@ -40,25 +44,36 @@ export class IntentRouterService {
     } = params;
 
     this.logger.debug(
-      `session flow=
-      ${session?.flow ?? 'none'} 
-      step=${session?.step ?? 'none'} 
-      status=${session?.status ?? 'none'}`,
+      logBlock('Session', [
+        `flow=${session?.flow ?? 'none'}`,
+        `step=${session?.step ?? 'none'}`,
+        `status=${session?.status ?? 'none'}`,
+      ]),
     );
 
     //detect from rule base first
     const rule = this.ruleIntentService.detect(input);
-    this.logger.debug(`rule = ${JSON.stringify(rule, null, 2)}`);
+    this.logger.debug(
+      logBlock('Rule', [
+        `intent=${rule.intent}`,
+        `confidence=${rule.confidence}`,
+        `source=${rule.source}`,
+        `reason=${JSON.stringify(rule.reason ?? '')}`,
+      ]),
+    );
 
     if (rule.intent === 'CANCEL') {
-      return this.logDecision({
+      return this.logDecision(input, {
         action: 'CANCEL_SESSION',
         intent: 'CANCEL',
         confidence: 1,
         source: 'RULE',
-        reason: 'cancel keyword clears session (top priority)',
+        reason:
+          'cancel keyword exits registration only; never releases admin mute',
       });
     }
+
+    let ruleKnowledgeDecision: RouteDecision | undefined;
 
     if (session?.status === 'ACTIVE' && session.flow === 'REGISTER') {
       if (
@@ -66,39 +81,45 @@ export class IntentRouterService {
         rule.intent !== 'UNKNOWN' &&
         rule.intent !== 'REGISTER'
       ) {
-        return this.logDecision({
+        const interruption: RouteDecision = {
           ...fromRule(rule),
           source: 'SESSION',
           reason: `active REGISTER session interrupted by ${rule.intent}`,
-        });
+        };
+        if (interruption.action !== 'ANSWER_KNOWLEDGE')
+          return this.logDecision(input, interruption);
+        ruleKnowledgeDecision = interruption;
       }
 
-      return this.logDecision({
-        action: 'CONTINUE_REGISTER',
-        intent: 'REGISTER',
+      if (!ruleKnowledgeDecision)
+        return this.logDecision(input, {
+          action: 'CONTINUE_REGISTER',
+          intent: 'REGISTER',
+          confidence: 1,
+          source: 'SESSION',
+          reason: 'active REGISTER session continues current flow',
+        });
+    }
+
+    if (
+      /^(?:สวัสดี|หวัดดี|ขอบคุณ|โอเค)(?:ครับ|ค่ะ|คะ|นะครับ|นะคะ)?[!. ]*$|^(?:hi|hello|thanks|thank you|ok|okay)[!. ]*$/iu.test(
+        input,
+      )
+    ) {
+      return this.logDecision(input, {
+        action: 'CONTINUE_AI_CHAT',
+        intent: 'GENERAL_QUESTION',
         confidence: 1,
-        source: 'SESSION',
-        reason: 'active REGISTER session continues current flow',
+        source: 'RULE',
+        reason: 'whole-message greeting or acknowledgment',
       });
     }
 
-    if (/^(?:สวัสดี|หวัดดี|ขอบคุณ|โอเค)(?:ครับ|ค่ะ|คะ|นะครับ|นะคะ)?[!. ]*$|^(?:hi|hello|thanks|thank you|ok|okay)[!. ]*$/iu.test(input)) {
-      return this.logDecision({ action: 'CONTINUE_AI_CHAT', intent: 'GENERAL_QUESTION',
-        confidence: 1, source: 'RULE', reason: 'whole-message greeting or acknowledgment' });
-    }
-
-    let ruleKnowledgeDecision: RouteDecision | undefined;
-
-    if (rule.confidence >= 0.9) {
+    if (!ruleKnowledgeDecision && rule.confidence >= 0.9) {
       const decision = fromRule(rule);
 
-      this.logger.debug(`[fromRule] rule = ${JSON.stringify(rule, null, 2)}`);
-      this.logger.debug(
-        `[fromRule] decision = ${JSON.stringify(decision, null, 2)}`,
-      );
-
       if (decision.action !== 'ANSWER_KNOWLEDGE') {
-        return this.logDecision(decision);
+        return this.logDecision(input, decision);
       }
 
       ruleKnowledgeDecision = decision;
@@ -113,22 +134,41 @@ export class IntentRouterService {
       recentMessages,
     });
 
-    if (retrieval.fallbackReason === 'CONFLICTING_CANDIDATES') {
-      return { action: 'CONTACT_ADMIN', intent: 'CONTACT_ADMIN', confidence: 1,
-        source: 'DATABASE', businessFallback: true, fallbackReason: 'CONFLICTING_CANDIDATES' };
+    if (retrieval.fallbackReason === 'MISSING_USER_INFORMATION') {
+      return this.logDecision(input, {
+        action: 'CLARIFY',
+        intent: 'ANSWER_KNOWLEDGE',
+        confidence: 0,
+        source: 'DATABASE',
+        fallbackReason: retrieval.fallbackReason,
+      });
+    }
+    if (
+      retrieval.fallbackReason === 'CONFLICTING_CANDIDATES' ||
+      retrieval.fallbackReason === 'RETRIEVAL_ERROR'
+    ) {
+      return {
+        action: 'CONTACT_ADMIN',
+        intent: 'CONTACT_ADMIN',
+        confidence: 1,
+        source: 'DATABASE',
+        businessFallback: true,
+        fallbackReason: retrieval.fallbackReason,
+      };
     }
     if (retrieval.route !== 'LOW_CONFIDENCE') {
       const decision: RouteDecision = {
         action: 'ANSWER_KNOWLEDGE',
         intent: ruleKnowledgeDecision?.intent ?? 'ANSWER_KNOWLEDGE',
-        confidence: retrieval.topScores[0] ?? 0,
+        // Retrieval rank is diagnostic, not intent confidence.
+        confidence: ruleKnowledgeDecision?.confidence ?? 0,
         source:
           ruleKnowledgeDecision?.source ?? this.retrievalSource(retrieval),
         reason: `knowledge retrieval selected ${retrieval.route}`,
         resolvedQuery: input,
         retrieval,
       };
-      return this.logDecision(decision, retrieval);
+      return this.logDecision(input, decision, retrieval);
     }
 
     return this.resolveLowConfidence({
@@ -175,13 +215,13 @@ export class IntentRouterService {
 
     if (analysis.classification === 'GENERAL') {
       return this.logDecision(
+        input,
         {
           action: 'GENERAL_QUESTION',
           intent: 'GENERAL_QUESTION',
           confidence: analysis.confidence,
           source: 'AI',
           reason: 'low-confidence retrieval classified as GENERAL',
-          generatedResponse: analysis.response,
           fallbackReason,
         },
         retrieval,
@@ -190,6 +230,7 @@ export class IntentRouterService {
     }
 
     return this.logDecision(
+      input,
       {
         action: 'CONTACT_ADMIN',
         intent: 'CONTACT_ADMIN',
@@ -218,27 +259,44 @@ export class IntentRouterService {
   }
 
   private logDecision(
+    input: string,
     decision: RouteDecision,
     retrieval?: KnowledgeRetrievalResult,
     routeOverride?: string,
   ): RouteDecision {
+    // Per-candidate scores are already on the [Retrieval] line; keep this one
+    // to the decision itself so a flow reads as one line per stage.
+    const evidence =
+      retrieval?.selectedItems.map((item) => `${item.source}:${item.id}`) ?? [];
+    const scores = (retrieval?.topScores ?? [])
+      .slice(0, MAX_LOGGED_SCORES)
+      .map((score) => score.toFixed(5));
+    const hiddenScores = (retrieval?.topScores.length ?? 0) - scores.length;
+    const route = routeOverride ?? retrieval?.route;
     this.logger.debug(
-      `[Routing] ${JSON.stringify({
-        route: routeOverride ?? retrieval?.route ?? decision.action,
-        matchType: retrieval?.matchType ?? 'NONE',
-        topScores: retrieval?.topScores ?? [],
-        scoreGap: retrieval?.scoreGap ?? null,
-        attemptCount: retrieval?.attemptCount ?? 0,
-        diagnosis: retrieval?.diagnosis ?? 'NONE',
-        rewriteStrategy: retrieval?.rewriteStrategy ?? 'NONE',
-        plannerUsedLlm: retrieval?.plannerUsedLlm ?? false,
-        selectedKnowledgeIds:
-          retrieval?.selectedItems.map((item) => item.id) ?? [],
-        intent: decision.intent,
-        confidence: decision.confidence,
-        fallbackReason:
-          decision.fallbackReason ?? retrieval?.fallbackReason ?? null,
-      })}`,
+      logBlock('Routing', [
+        `query=${JSON.stringify(logSafeText(input))}`,
+        `action=${decision.action}`,
+        `intent=${decision.intent}`,
+        `source=${decision.source}`,
+        `confidence=${decision.confidence}`,
+        // Rule/session gates answer before any search runs. Saying so beats
+        // printing candidates=0, which reads as "searched and found nothing".
+        retrieval ? null : 'retrieval=skipped (decided before search)',
+        route ? `route=${route}` : null,
+        retrieval ? `match=${retrieval.matchType}` : null,
+        retrieval ? `candidates=${retrieval.items.length}` : null,
+        retrieval ? `selected=${evidence.length}` : null,
+        scores.length
+          ? `topScores=[${scores.join(', ')}${hiddenScores > 0 ? `, +${hiddenScores}` : ''}]`
+          : null,
+        scores.length
+          ? `scoreGap=${retrieval?.scoreGap?.toFixed(5) ?? '-'}`
+          : null,
+        evidence.length ? `evidence=${evidence.join('\n            ')}` : null,
+        `fallback=${decision.fallbackReason ?? retrieval?.fallbackReason ?? '-'}`,
+        `reason=${JSON.stringify(decision.reason ?? '')}`,
+      ]),
     );
     return decision;
   }

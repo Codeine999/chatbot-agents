@@ -1,854 +1,443 @@
-import { rethrowPendingAiUsage } from '../../usage/billing/pending-ai-usage.error';
 import { Injectable, Logger } from '@nestjs/common';
-import { normalizeText } from '../../../utils/text.utils';
+import { ConfigService } from '@nestjs/config';
+import { z } from 'zod';
+import { rethrowPendingAiUsage } from '../../usage/billing/pending-ai-usage.error';
 import {
-  CLEAR_WINNER_GAP,
-  DIRECT_IMMEDIALY,
-  KEYWORD_SCORE_NORMALIZER,
+  logBlock,
+  logSafeText,
+  normalizeText,
+} from '../../../utils/text.utils';
+import {
   MAX_RAG_CONTEXTS,
-  MAX_RETRIEVAL_ATTEMPTS,
   MAX_RETRIEVAL_CANDIDATES,
-  MIN_CONTEXT_SCORE,
+  RRF_RANK_CONSTANT,
+  DEFAULT_VECTOR_CANDIDATE_MIN_SIMILARITY,
+  DEFAULT_LEXICAL_CANDIDATE_MIN_SCORE,
+  MAX_RAG_EVIDENCE_CHARACTERS,
 } from '../constants/knowledge-routing.constants';
 import {
   ChatContextMessage,
   KnowledgeItem,
   KnowledgeMatchType,
-  KnowledgeRetrievalAttempt,
-  KnowledgeRetrievalDiagnosis,
   KnowledgeRetrievalResult,
-  KnowledgeRewriteStrategy,
 } from '../types/chat.types';
 import { AnswerPatternCacheService } from './answer-pattern-cache.service';
 import { AnswerPatternService } from './answer-pattern.service';
-import {
-  RetrievalDiagnosis,
-  RetrievalQueryPlan,
-  RetrievalQueryPlannerService,
-} from './retrieval-query-planner.service';
+import { MicroKnowledgeService } from './micro-knowledge.service';
 import { SemanticSearchService } from './semantic-search.service';
+import { resolveRetrievalQuery } from './retrieval-query-planner.service';
+import { knowledgeScope, KnowledgeScope } from './knowledge-scope';
 import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
 
+/** Enough rows to explain the winner without burying the flow. */
+const MAX_LOGGED_CANDIDATES = 5;
+
 type RetrievalContext = LineAiUsageContext &
-  Readonly<{
-    recentMessages?: readonly ChatContextMessage[];
-  }>;
-
-type CandidatePassResult = Readonly<{
-  items: readonly KnowledgeItem[];
-  retrievalFailed: boolean;
-  directFastPath: boolean;
-}>;
-
-const ENGLISH_FOLLOW_UP_PATTERN =
-  /(?:^|\s)(?:(?:it|this|that|these|those)(?:\s+one)?|same\s+as\s+before|same\s+one|as\s+before)(?=\s|$)/u;
-
-const THAI_FOLLOW_UP_MARKERS = [
-  'อันนี้',
-  'อันนั้น',
-  'ตัวนี้',
-  'ตัวนั้น',
-  'เมื่อกี้',
-  'อันเดิม',
-  'เหมือนเดิม',
-  'เหมือนก่อน',
-] as const;
+  Readonly<{ recentMessages?: readonly ChatContextMessage[] }>;
 
 @Injectable()
 export class KnowledgeRetrievalService {
   private readonly logger = new Logger(KnowledgeRetrievalService.name);
+  private readonly scope: KnowledgeScope;
+  private readonly vectorNoiseFloor: number;
+  private readonly lexicalNoiseFloor: number;
 
   constructor(
-    private readonly answerPatternService: AnswerPatternService,
-    private readonly answerPatternCacheService: AnswerPatternCacheService,
-    private readonly semanticSearchService: SemanticSearchService,
-    private readonly retrievalQueryPlannerService: RetrievalQueryPlannerService,
-  ) {}
+    private readonly patterns: AnswerPatternService,
+    private readonly cache: AnswerPatternCacheService,
+    private readonly semantic: SemanticSearchService,
+    private readonly micro: MicroKnowledgeService,
+    config: ConfigService,
+  ) {
+    this.scope = knowledgeScope(config);
+    // Candidate/noise thresholds only. Never compare these against RRF scores.
+    this.vectorNoiseFloor = z.coerce
+      .number()
+      .min(-1)
+      .max(1)
+      .parse(
+        config.get('KNOWLEDGE_VECTOR_CANDIDATE_MIN_SIMILARITY') ??
+          DEFAULT_VECTOR_CANDIDATE_MIN_SIMILARITY,
+      );
+    this.lexicalNoiseFloor = z.coerce
+      .number()
+      .nonnegative()
+      .parse(
+        config.get('KNOWLEDGE_LEXICAL_CANDIDATE_MIN_SCORE') ??
+          DEFAULT_LEXICAL_CANDIDATE_MIN_SCORE,
+      );
+  }
 
-  /**
-   * Retrieve once for obvious exact/clear winners. All other paths form a
-   * broad hybrid pool and may run one bounded agentic second pass before
-   * returning at most three contexts ordered by retrieval score.
-   */
+  /** Single deterministic pass: cache -> DB -> ONE embedding -> both sources. */
   async retrieve(
     message: string,
     context: RetrievalContext = {},
   ): Promise<KnowledgeRetrievalResult> {
-    const originalQuestion = message.trim();
-    const attemptedQueryKeys = new Set<string>();
-    const attemptedQueries: string[] = [];
-    const attempts: KnowledgeRetrievalAttempt[] = [];
-
-    this.rememberQuery(originalQuestion, attemptedQueryKeys, attemptedQueries);
-
-    const firstPass = await this.retrieveCandidatePass(
-      originalQuestion,
-      context,
-      1,
-    );
-    attempts.push(this.attemptSummary(1, originalQuestion, firstPass));
-
-    let candidates = [...firstPass.items];
-    let retrievalFailed = firstPass.retrievalFailed;
-    let decision = this.decide(candidates);
-    const requiresQueryAnalysis =
-      this.looksLikeFollowUp(originalQuestion) ||
-      this.looksComplex(originalQuestion);
-    if (decision.route === 'LOW_CONFIDENCE' && retrievalFailed) {
-      decision = { ...decision, fallbackReason: 'RETRIEVAL_ERROR' };
-    }
-
-    // Preserve the existing zero-LLM path for a unique exact match or a clear,
-    // very-high-confidence winner from cache/DB.
-    if (
-      firstPass.directFastPath &&
-      decision.route === 'DIRECT' &&
-      !requiresQueryAnalysis
-    ) {
-      return this.finish(decision, {
-        attempts,
-        diagnosis: 'NONE',
-        rewriteStrategy: 'NONE',
-        plannerUsedLlm: false,
-      });
-    }
-
-    let plan: RetrievalQueryPlan | undefined;
-    const diagnosisHint = this.diagnosisHint(
-      originalQuestion,
-      context.recentMessages ?? [],
-      decision,
-      candidates,
-    );
-
-    if (this.shouldPlanSecondPass(originalQuestion, decision, candidates)) {
-      plan = await this.retrievalQueryPlannerService.plan({
-        originalQuery: originalQuestion,
-        userId: context.userId,
-        lineMemberId: context.lineMemberId,
-        conversationId: context.conversationId,
-        turnId: context.turnId,
-        recentMessages: context.recentMessages ?? [],
-        candidates,
-        attemptedQueries,
-        fallbackReason: decision.fallbackReason,
-        scoreGap: decision.scoreGap,
-        diagnosisHint,
-        allowLlm: diagnosisHint !== 'RETRIEVAL_ERROR',
-      });
-    }
-
-    const secondPassQueries = this.acceptPlannedQueries(
-      plan,
-      attemptedQueryKeys,
-      attemptedQueries,
-      MAX_RETRIEVAL_ATTEMPTS - attempts.length,
-    );
-
-    if (
-      secondPassQueries.length === 0 &&
-      (plan?.diagnosis === 'MISSING_USER_INFORMATION' ||
-        plan?.diagnosis === 'CONFLICTING_CANDIDATES')
-    ) {
-      decision = this.forceLowConfidence(decision, plan.diagnosis);
-    }
-
-    if (secondPassQueries.length > 0) {
-      const passes = await Promise.all(
-        secondPassQueries.map(({ query, attempt }) =>
-          this.retrieveCandidatePass(query, context, attempt),
-        ),
-      );
-
-      for (let index = 0; index < passes.length; index += 1) {
-        const pass = passes[index];
-        const planned = secondPassQueries[index];
-        if (!pass || !planned) continue;
-
-        attempts.push(
-          this.attemptSummary(planned.attempt, planned.query, pass),
-        );
-        retrievalFailed ||= pass.retrievalFailed;
-        candidates = this.mergeAndRank(candidates, pass.items);
-      }
-
-      // A query generated from a previously-low/ambiguous request is evidence
-      // for grounded generation, not permission to return a rewritten answer
-      // verbatim. This preserves low-confidence -> rewrite -> LLM answering.
-      decision = this.decide(candidates, {
-        allowDirect: false,
-      });
-
-      if (
-        plan?.diagnosis === 'CONFLICTING_CANDIDATES' &&
-        this.hasConflictingCandidates(candidates)
-      ) {
-        decision = this.forceLowConfidence(decision, 'CONFLICTING_CANDIDATES');
-      }
-    }
-
-    if (decision.route === 'LOW_CONFIDENCE' && retrievalFailed) {
-      decision = { ...decision, fallbackReason: 'RETRIEVAL_ERROR' };
-    }
-
-    const result = this.finish(decision, {
-      attempts,
-      diagnosis: plan?.diagnosis ?? 'NONE',
-      rewriteStrategy: plan?.strategy ?? 'NONE',
-      plannerUsedLlm: plan?.usedLlm ?? false,
-    });
-
-    this.logger.debug(
-      `[KnowledgeRetrieval] ${JSON.stringify({
-        route: result.route,
-        attemptCount: result.attemptCount,
-        candidateCount: result.items.length,
-        selectedKnowledgeIds: result.selectedItems.map((item) => item.id),
-        diagnosis: result.diagnosis,
-        rewriteStrategy: result.rewriteStrategy,
-        plannerUsedLlm: result.plannerUsedLlm,
-        fallbackReason: result.fallbackReason ?? null,
-      })}`,
-    );
-
+    const result = await this.runRetrieval(message, context);
+    this.logRetrieval(message, result);
     return result;
   }
 
-  private async retrieveCandidatePass(
-    query: string,
-    context: RetrievalContext,
-    attempt: number,
-  ): Promise<CandidatePassResult> {
-    if (!normalizeText(query)) {
-      return { items: [], retrievalFailed: false, directFastPath: false };
-    }
-
-    let retrievalFailed = false;
-    let cacheItems: KnowledgeItem[] = [];
-
-    try {
-      const matches = this.answerPatternService.findMatchesFromPatterns(
-        query,
-        this.answerPatternCacheService.getAll(),
-        'CACHE',
-      );
-      cacheItems = matches.map((item) =>
-        this.annotateAttempt(this.normalizeKeywordScore(item), attempt, query),
-      );
-    } catch (error) {
-      rethrowPendingAiUsage(error);
-      retrievalFailed = true;
-      this.logger.error('cached knowledge retrieval failed', error as Error);
-    }
-
-    const cacheDecision = this.decide(cacheItems);
-    if (cacheDecision.route === 'DIRECT') {
-      return {
-        items: cacheDecision.items,
-        retrievalFailed,
-        directFastPath: true,
-      };
-    }
-
-    let databaseItems: KnowledgeItem[] = [];
-    let databaseSucceeded = false;
-
-    try {
-      const matches = await this.answerPatternService.findMatches(query);
-      databaseItems = matches.map((item) =>
-        this.annotateAttempt(this.normalizeKeywordScore(item), attempt, query),
-      );
-      databaseSucceeded = true;
-    } catch (error) {
-      rethrowPendingAiUsage(error);
-      retrievalFailed = true;
-      this.logger.error('database knowledge retrieval failed', error as Error);
-    }
-
-    // A successful DB lookup is authoritative over a possibly stale cache.
-    const keywordItems = databaseSucceeded ? databaseItems : cacheItems;
-    const databaseDecision = this.decide(keywordItems);
-    if (databaseDecision.route === 'DIRECT') {
-      return {
-        items: databaseDecision.items,
-        retrievalFailed,
-        directFastPath: true,
-      };
-    }
-
-    let semanticItems: KnowledgeItem[] = [];
-    try {
-      const matches = await this.semanticSearchService.search(query, {
-        userId: context.userId,
-        lineMemberId: context.lineMemberId,
-        conversationId: context.conversationId,
-        turnId: context.turnId,
-      });
-      semanticItems = matches.map((item) =>
-        this.annotateAttempt(item, attempt, query),
-      );
-    } catch (error) {
-      rethrowPendingAiUsage(error);
-      retrievalFailed = true;
-      this.logger.warn(
-        `embedding knowledge retrieval failed: ${String(error)}`,
-      );
-    }
-
-    return {
-      items: this.mergeAndRank(keywordItems, semanticItems),
-      retrievalFailed,
-      directFastPath: false,
-    };
-  }
-
-  private normalizeKeywordScore(item: KnowledgeItem): KnowledgeItem {
-    const parsedRawScore = Number(item.metadata?.rawScore ?? item.score);
-    const rawScore = Number.isFinite(parsedRawScore) ? parsedRawScore : 0;
-    const score = this.roundScore(
-      Math.min(Math.max(rawScore / KEYWORD_SCORE_NORMALIZER, 0), 1),
+  private async runRetrieval(
+    message: string,
+    context: RetrievalContext = {},
+  ): Promise<KnowledgeRetrievalResult> {
+    const resolved = resolveRetrievalQuery(
+      message.trim(),
+      context.recentMessages ?? [],
     );
+    if (resolved.missingReference)
+      return this.result([], [], 'LOW_CONFIDENCE', 'MISSING_USER_INFORMATION');
+    const query = resolved.query;
+    if (query !== message.trim())
+      this.logger.debug(
+        logBlock('Retrieval', [
+          'follow-up rewritten',
+          `query=${JSON.stringify(logSafeText(query))}`,
+        ]),
+      );
+    if (!normalizeText(query))
+      return this.result([], [], 'LOW_CONFIDENCE', 'NO_SEARCH_RESULTS');
 
-    return {
-      ...item,
-      score,
-      metadata: {
-        ...item.metadata,
-        rawScore,
-        matchTypes: this.matchTypes(item),
-      },
+    let failed = false;
+    const read = async (
+      label: string,
+      call: () => Promise<KnowledgeItem[]> | KnowledgeItem[],
+    ) => {
+      try {
+        return (await call()).filter((item) => this.eligible(item));
+      } catch (error) {
+        rethrowPendingAiUsage(error);
+        failed = true;
+        this.logger.warn(`${label} knowledge retrieval failed`);
+        return [];
+      }
     };
+
+    const cached = await read('cache', () =>
+      this.patterns.findMatchesFromPatterns(
+        query,
+        this.cache.getAll(),
+        'CACHE',
+      ),
+    );
+    // A follow-up is not the customer's verbatim approved question.
+    const directAllowed = query === message.trim();
+    const fastCached = directAllowed ? this.directResult(cached) : undefined;
+    if (fastCached) return fastCached;
+
+    failed = false; // A successful DB fallback recovers a cache read failure.
+    const database = await read('database', () =>
+      this.patterns.findMatches(query),
+    );
+    // DB is authoritative; never resurrect a stale cache candidate after a miss.
+    const fastDatabase = directAllowed
+      ? this.directResult(database)
+      : undefined;
+    if (fastDatabase) return fastDatabase;
+
+    const [micro, semantic] = await Promise.all([
+      read('micro lexical', () => this.micro.findMatches(query)),
+      read('semantic', () => this.semantic.search(query, context)),
+    ]);
+    const lexical = [...database, ...micro].filter(
+      (item) => this.raw(item, 'rawScore') >= this.lexicalNoiseFloor,
+    );
+    const vectors = semantic.filter(
+      (item) => this.raw(item, 'vectorSimilarity') >= this.vectorNoiseFloor,
+    );
+    const merged = this.rank(lexical, vectors);
+    const ranked = merged.slice(0, MAX_RETRIEVAL_CANDIDATES);
+    if (this.conflicts(merged))
+      return this.result(
+        ranked,
+        [],
+        'LOW_CONFIDENCE',
+        'CONFLICTING_CANDIDATES',
+      );
+    // A missing source can hide an exception/conflict. Do not answer from a
+    // partial pool while one of the required reads failed.
+    if (failed)
+      return this.result(ranked, [], 'LOW_CONFIDENCE', 'RETRIEVAL_ERROR');
+
+    const selected = this.selectContexts(ranked);
+    return this.result(
+      ranked,
+      selected,
+      selected.length ? 'RAG' : 'LOW_CONFIDENCE',
+      selected.length ? undefined : 'NO_USABLE_EVIDENCE',
+    );
   }
 
-  private annotateAttempt(
-    item: KnowledgeItem,
-    attempt: number,
-    query: string,
-  ): KnowledgeItem {
-    return {
-      ...item,
-      score: this.normalizeScore(item.score),
-      metadata: {
-        ...item.metadata,
-        retrievalAttempts: this.uniqueNumbers(
-          this.metadataNumbers(item, 'retrievalAttempts'),
-          [attempt],
-        ),
-        retrievalQueries: this.uniqueStrings(
-          this.metadataStrings(item, 'retrievalQueries'),
-          [query],
-        ),
-      },
-    };
+  private directResult(
+    items: KnowledgeItem[],
+  ): KnowledgeRetrievalResult | undefined {
+    if (this.conflicts(items)) {
+      return this.result(items, [], 'LOW_CONFIDENCE', 'CONFLICTING_CANDIDATES');
+    }
+    const exact = items.filter(
+      (item) =>
+        item.source === 'ANSWER_PATTERN' && item.metadata?.safeDirect === true,
+    );
+    if (!exact.length) return undefined;
+    // Multiple complete presets with identical content are equivalent; select
+    // deterministically. A REWRITE preset still needs one grounded generation.
+    const winner = exact[0];
+    return this.result(
+      items,
+      [winner],
+      winner.renderMode === 'REWRITE' ? 'RAG' : 'DIRECT',
+    );
   }
 
-  private mergeAndRank(
-    ...candidateGroups: readonly (readonly KnowledgeItem[])[]
+  private eligible(item: KnowledgeItem): boolean {
+    return (
+      item.metadata?.active === true &&
+      item.metadata?.tenantId === this.scope.tenantId &&
+      item.metadata?.language === this.scope.language &&
+      Boolean(item.answer?.trim()) &&
+      Number.isFinite(item.score)
+    );
+  }
+
+  /** Two ranking lists with comparable values *within* each list. */
+  private rank(
+    lexical: KnowledgeItem[],
+    vectors: KnowledgeItem[],
   ): KnowledgeItem[] {
-    const byKey = new Map<string, KnowledgeItem>();
-    const idToKey = new Map<string, string>();
-    const fingerprintToKey = new Map<string, string>();
-
-    for (const rawItem of candidateGroups.flat()) {
-      const item = { ...rawItem, score: this.normalizeScore(rawItem.score) };
-      const fingerprint = this.candidateFingerprint(item);
-      const key =
-        idToKey.get(item.id) ??
-        (fingerprint ? fingerprintToKey.get(fingerprint) : undefined) ??
-        `id:${item.id}`;
-      const existing = byKey.get(key);
-
-      if (!existing) {
-        byKey.set(key, {
+    const lists = [
+      [...lexical].sort(
+        (a, b) =>
+          this.raw(b, 'rawScore') - this.raw(a, 'rawScore') ||
+          this.tieBreak(a, b),
+      ),
+      [...vectors].sort(
+        (a, b) =>
+          this.raw(b, 'vectorSimilarity') - this.raw(a, 'vectorSimilarity') ||
+          this.tieBreak(a, b),
+      ),
+    ];
+    const merged = new Map<string, KnowledgeItem>();
+    for (const [channel, list] of lists.entries()) {
+      const seen = new Set<string>();
+      for (const [index, item] of list.entries()) {
+        const key = this.key(item);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const previous = merged.get(key);
+        merged.set(key, {
           ...item,
+          score: (previous?.score ?? 0) + 1 / (RRF_RANK_CONSTANT + index + 1),
           metadata: {
+            ...previous?.metadata,
             ...item.metadata,
-            matchTypes: this.matchTypes(item),
+            exactMatch:
+              previous?.metadata?.exactMatch === true ||
+              item.metadata?.exactMatch === true,
+            matchTypes: [
+              ...new Set([
+                ...((previous?.metadata?.matchTypes as string[]) ?? []),
+                channel === 0 ? 'KEYWORD' : 'EMBEDDING',
+              ]),
+            ],
           },
         });
-        idToKey.set(item.id, key);
-        if (fingerprint) fingerprintToKey.set(fingerprint, key);
-        continue;
       }
-
-      const preferred = item.score > existing.score ? item : existing;
-      const secondary = preferred === item ? existing : item;
-      const matchTypes = this.uniqueStrings(
-        this.matchTypes(existing),
-        this.matchTypes(item),
-      );
-      const rawScore = Math.max(
-        this.metadataFiniteNumber(existing, 'rawScore') ?? 0,
-        this.metadataFiniteNumber(item, 'rawScore') ?? 0,
-      );
-      const duplicateKnowledgeIds = this.uniqueStrings(
-        this.metadataStrings(existing, 'duplicateKnowledgeIds'),
-        this.metadataStrings(item, 'duplicateKnowledgeIds'),
-        existing.id === item.id ? [] : [existing.id, item.id],
-      );
-
-      byKey.set(key, {
-        ...preferred,
-        score: this.normalizeScore(Math.max(existing.score, item.score)),
-        answer: preferred.answer ?? existing.answer ?? item.answer,
-        metadata: {
-          ...secondary.metadata,
-          ...preferred.metadata,
-          ...(rawScore > 0 ? { rawScore } : {}),
-          ...(duplicateKnowledgeIds.length > 0
-            ? { duplicateKnowledgeIds }
-            : {}),
-          exactMatch:
-            existing.metadata?.exactMatch === true ||
-            item.metadata?.exactMatch === true,
-          matchTypes,
-          retrievalAttempts: this.uniqueNumbers(
-            this.metadataNumbers(existing, 'retrievalAttempts'),
-            this.metadataNumbers(item, 'retrievalAttempts'),
-          ),
-          retrievalQueries: this.uniqueStrings(
-            this.metadataStrings(existing, 'retrievalQueries'),
-            this.metadataStrings(item, 'retrievalQueries'),
-          ),
-        },
-      });
-      idToKey.set(existing.id, key);
-      idToKey.set(item.id, key);
-      if (fingerprint) fingerprintToKey.set(fingerprint, key);
     }
-
-    return Array.from(byKey.values())
-      .sort((left, right) => this.compareCandidates(left, right))
-      .slice(0, MAX_RETRIEVAL_CANDIDATES);
+    return [...merged.values()].sort(
+      (a, b) => b.score - a.score || this.tieBreak(a, b),
+    );
   }
 
-  private decide(
+  private selectContexts(items: KnowledgeItem[]): KnowledgeItem[] {
+    const selected: KnowledgeItem[] = [];
+    let characters = 0;
+    for (const item of items) {
+      const length =
+        (item.title?.length ?? 0) +
+        (item.content?.length ?? 0) +
+        (item.answer?.length ?? 0);
+      // Keep facts whole: truncating could remove an exception or negation.
+      if (characters + length > MAX_RAG_EVIDENCE_CHARACTERS) continue;
+      selected.push(item);
+      characters += length;
+      if (selected.length === MAX_RAG_CONTEXTS) break;
+    }
+    return selected;
+  }
+
+  private conflicts(items: readonly KnowledgeItem[]): boolean {
+    if (items.some((item) => item.metadata?.conflicting === true)) return true;
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const a = items[i];
+        const b = items[j];
+        if (this.key(a) === this.key(b)) continue;
+        const left = normalizeText(a.answer ?? '');
+        const right = normalizeText(b.answer ?? '');
+        if (left === right) continue;
+        // Different conditional cases are not competing unconditional facts.
+        // Leave their interpretation to grounded answering (or its sentinel).
+        const conditional =
+          /ถ้า|เมื่อ|กรณี|สำหรับ|ซื้อ|ตั้งแต่|มากกว่า|น้อยกว่า|\b(?:if|when|for|over|under)\b/u;
+        if (conditional.test(left) || conditional.test(right)) continue;
+        // A narrow, same-assertion polarity check, not "same category + close score".
+        const pa = this.assertion(left);
+        const pb = this.assertion(right);
+        const entityA = a.metadata?.entityKey;
+        const entityB = b.metadata?.entityKey;
+        const sameSubject =
+          entityA && entityB
+            ? Boolean(entityA && entityA === entityB)
+            : Boolean(
+                a.title &&
+                normalizeText(a.title) === normalizeText(b.title ?? ''),
+              );
+        const topicA = a.metadata?.topicKey;
+        const topicB = b.metadata?.topicKey;
+        const sameFactScope =
+          sameSubject && !(topicA && topicB && topicA !== topicB);
+        if (
+          sameFactScope &&
+          pa &&
+          pb &&
+          pa.fact === pb.fact &&
+          pa.negative !== pb.negative
+        )
+          return true;
+        // Same explicitly keyed fact and identical wording except its numeric
+        // value is an unresolved business conflict, not a score tie-break.
+        const sameTopic =
+          (topicA && topicA === topicB) ||
+          this.sharedQuestion(a, b) ||
+          (a.title && normalizeText(a.title) === normalizeText(b.title ?? ''));
+        const numericTemplate = (text: string) =>
+          text.replace(/\d+(?:[.,]\d+)*/gu, '#');
+        if (
+          sameFactScope &&
+          sameTopic &&
+          /\d/u.test(left) &&
+          /\d/u.test(right) &&
+          numericTemplate(left) === numericTemplate(right)
+        )
+          return true;
+      }
+    }
+    return false;
+  }
+
+  private assertion(text: string): { fact: string; negative: boolean } {
+    // Normalize only explicit negations with an otherwise identical assertion.
+    // Different wording/conditions are not enough to infer a contradiction.
+    const replacements: readonly (readonly [RegExp, string])[] = [
+      [/ไม่ได้/gu, 'ได้'],
+      [/ไม่รองรับ/gu, 'รองรับ'],
+      [/ไม่อนุญาต/gu, 'อนุญาต'],
+      [/ไม่สามารถ/gu, 'สามารถ'],
+      [/ห้ามซัก/gu, 'ซักได้'],
+      [/\b(?:cannot|can not)\b/gu, 'can'],
+      [/\bmust not be washed\b/gu, 'can be washed'],
+      [/\bis not\b/gu, 'is'],
+      [/\bare not\b/gu, 'are'],
+      [/\bnot supported\b/gu, 'supported'],
+    ];
+    let fact = text;
+    for (const [pattern, positive] of replacements)
+      fact = fact.replace(pattern, positive);
+    return { fact, negative: fact !== text };
+  }
+
+  private sharedQuestion(a: KnowledgeItem, b: KnowledgeItem): boolean {
+    const questions = (item: KnowledgeItem) =>
+      Array.isArray(item.metadata?.questionExamples)
+        ? (item.metadata.questionExamples as string[])
+            .map(normalizeText)
+            .filter(Boolean)
+        : [];
+    const left = new Set(questions(a));
+    return questions(b).some((question) => left.has(question));
+  }
+
+  private key(item: KnowledgeItem): string {
+    return `${item.source}:${item.id}`;
+  }
+  private raw(item: KnowledgeItem, key: string): number {
+    const value = item.metadata?.[key];
+    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  }
+  private tieBreak(a: KnowledgeItem, b: KnowledgeItem): number {
+    return (
+      this.raw(b, 'priority') - this.raw(a, 'priority') ||
+      this.key(a).localeCompare(this.key(b))
+    );
+  }
+  /** One summary line plus one line per candidate; "*" marks the items that
+   * were actually handed to the model. */
+  private logRetrieval(
+    message: string,
+    result: KnowledgeRetrievalResult,
+  ): void {
+    const selected = new Set(
+      result.selectedItems.map((item) => this.key(item)),
+    );
+    const header = [
+      `query=${JSON.stringify(logSafeText(message))}`,
+      `route=${result.route}`,
+      `match=${result.matchType}`,
+      `candidates=${result.items.length}`,
+      `selected=${result.selectedItems.length}`,
+      `fallback=${result.fallbackReason ?? '-'}`,
+    ];
+    const shown = result.items.slice(0, MAX_LOGGED_CANDIDATES);
+    const candidates = shown.flatMap((item, index) => {
+      const mark = selected.has(this.key(item)) ? '*' : ' ';
+      return [
+        `  ${mark}#${index + 1} ${item.source}:${item.id}`,
+        // RRF after rank(); the raw matcher score on the direct path.
+        `       score=${item.score.toFixed(5)}`,
+        `       lexical=${this.raw(item, 'rawScore')}`,
+        `       vector=${this.raw(item, 'vectorSimilarity').toFixed(4)}`,
+        `       priority=${this.raw(item, 'priority')}`,
+        `       via=${((item.metadata?.matchTypes as string[]) ?? []).join('+') || 'NONE'}`,
+        `       title=${JSON.stringify(item.title ?? '')}`,
+      ];
+    });
+    const hidden = result.items.length - shown.length;
+    this.logger.debug(
+      logBlock('Retrieval', [
+        ...header,
+        candidates.length ? 'candidates:' : null,
+        ...candidates,
+        hidden > 0 ? `  … +${hidden} lower-ranked candidate(s)` : null,
+      ]),
+    );
+  }
+
+  private result(
     items: readonly KnowledgeItem[],
-    options: Readonly<{
-      allowDirect?: boolean;
-    }> = {},
+    selectedItems: readonly KnowledgeItem[],
+    route: KnowledgeRetrievalResult['route'],
+    fallbackReason?: string,
   ): KnowledgeRetrievalResult {
-    const ranked = [...items]
-      .sort((left, right) => this.compareCandidates(left, right))
-      .slice(0, MAX_RETRIEVAL_CANDIDATES);
-    const [top, second] = ranked;
-    const scoreGap =
-      top && second ? this.roundScore(top.score - second.score) : null;
-    const topScores = ranked.map((item) => this.roundScore(item.score));
-
-    if (!top) {
-      return {
-        route: 'LOW_CONFIDENCE',
-        matchType: 'NONE',
-        items: ranked,
-        selectedItems: [],
-        topScores,
-        scoreGap,
-        fallbackReason: 'NO_SEARCH_RESULTS',
-      };
-    }
-
-    const exactMatch = this.isExact(top);
-    const clearWinner = !second || (scoreGap ?? 0) >= CLEAR_WINNER_GAP;
-    const allowDirect = options.allowDirect !== false;
-
-    if (
-      allowDirect &&
-      (exactMatch || (top.score >= DIRECT_IMMEDIALY && clearWinner))
-    ) {
-      return {
-        route: 'DIRECT',
-        matchType: this.matchType(top),
-        items: ranked,
-        selectedItems: [top],
-        topScores,
-        scoreGap,
-      };
-    }
-
-    const topEligible = ranked.find((item) => item.score >= MIN_CONTEXT_SCORE);
-    if (topEligible) {
-      return {
-        route: 'RAG',
-        matchType: this.matchType(topEligible),
-        items: ranked,
-        selectedItems: this.selectRagContexts(ranked),
-        topScores,
-        scoreGap,
-      };
-    }
-
+    const top = selectedItems[0] ?? items[0];
+    const types = top?.metadata?.matchTypes as string[] | undefined;
+    const matchType: KnowledgeMatchType = top?.metadata?.safeDirect
+      ? 'EXACT'
+      : types?.includes('KEYWORD') && types.includes('EMBEDDING')
+        ? 'HYBRID'
+        : types?.includes('EMBEDDING')
+          ? 'EMBEDDING'
+          : top
+            ? 'KEYWORD'
+            : 'NONE';
     return {
-      route: 'LOW_CONFIDENCE',
-      matchType: this.matchType(top),
-      items: ranked,
-      selectedItems: [],
-      topScores,
-      scoreGap,
-      fallbackReason: 'BELOW_MIN_CONTEXT_SCORE',
-    };
-  }
-
-  private forceLowConfidence(
-    decision: KnowledgeRetrievalResult,
-    fallbackReason: string,
-  ): KnowledgeRetrievalResult {
-    return {
-      ...decision,
-      route: 'LOW_CONFIDENCE',
-      selectedItems: [],
+      route,
+      items,
+      selectedItems,
+      matchType,
       fallbackReason,
+      topScores: items.map((item) => item.score),
+      scoreGap: items.length > 1 ? items[0].score - items[1].score : null,
     };
-  }
-
-  private selectRagContexts(items: readonly KnowledgeItem[]): KnowledgeItem[] {
-    return items
-      .filter((item) => item.score >= MIN_CONTEXT_SCORE)
-      .slice(0, MAX_RAG_CONTEXTS);
-  }
-
-  private shouldPlanSecondPass(
-    originalQuestion: string,
-    decision: KnowledgeRetrievalResult,
-    items: readonly KnowledgeItem[],
-  ): boolean {
-    if (items.length === 0 && this.looksObviouslyGeneral(originalQuestion)) {
-      return false;
-    }
-    if (
-      this.looksLikeFollowUp(originalQuestion) ||
-      this.looksComplex(originalQuestion)
-    ) {
-      return true;
-    }
-    if (decision.route === 'DIRECT') return false;
-
-    return (
-      decision.route === 'LOW_CONFIDENCE' ||
-      this.isAmbiguous(decision) ||
-      this.hasConflictingCandidates(items)
-    );
-  }
-
-  private diagnosisHint(
-    originalQuestion: string,
-    recentMessages: readonly ChatContextMessage[],
-    decision: KnowledgeRetrievalResult,
-    items: readonly KnowledgeItem[],
-  ): RetrievalDiagnosis {
-    if (decision.fallbackReason === 'RETRIEVAL_ERROR') {
-      return 'RETRIEVAL_ERROR';
-    }
-    if (this.hasConflictingCandidates(items)) {
-      return 'CONFLICTING_CANDIDATES';
-    }
-    if (this.looksComplex(originalQuestion)) return 'COMPLEX_QUERY';
-    if (this.looksLikeFollowUp(originalQuestion)) {
-      return recentMessages.some((message) => message.role === 'user')
-        ? 'AMBIGUOUS_RESULTS'
-        : 'MISSING_USER_INFORMATION';
-    }
-    if (this.isAmbiguous(decision)) return 'AMBIGUOUS_RESULTS';
-    return 'MISSING_KNOWLEDGE_EVIDENCE';
-  }
-
-  private isAmbiguous(decision: KnowledgeRetrievalResult): boolean {
-    return (
-      decision.items.length > 1 &&
-      decision.scoreGap !== null &&
-      decision.scoreGap < CLEAR_WINNER_GAP
-    );
-  }
-
-  private hasConflictingExactCandidates(
-    items: readonly KnowledgeItem[],
-  ): boolean {
-    const exactItems = items.filter((item) => this.isExact(item));
-    if (exactItems.length < 2) return false;
-
-    const answers = new Set(
-      exactItems
-        .map((item) => normalizeText(item.answer ?? item.content))
-        .filter(Boolean),
-    );
-    return answers.size > 1;
-  }
-
-  private hasConflictingCandidates(items: readonly KnowledgeItem[]): boolean {
-    if (
-      items.some(
-        (item) =>
-          item.metadata?.conflicting === true ||
-          item.metadata?.conflict === true,
-      )
-    ) {
-      return true;
-    }
-    if (this.hasConflictingExactCandidates(items)) return true;
-
-    const [first, second] = [...items].sort(
-      (left, right) => right.score - left.score,
-    );
-    if (!first || !second) return false;
-    if (Math.abs(first.score - second.score) > CLEAR_WINNER_GAP) return false;
-
-    const firstAnswer = normalizeText(first.answer ?? first.content);
-    const secondAnswer = normalizeText(second.answer ?? second.content);
-    if (!firstAnswer || !secondAnswer || firstAnswer === secondAnswer) {
-      return false;
-    }
-
-    const firstIntent = this.metadataText(first, 'intentKey');
-    const secondIntent = this.metadataText(second, 'intentKey');
-    if (firstIntent && firstIntent === secondIntent) return true;
-
-    const firstCategory = normalizeText(first.category ?? '');
-    const secondCategory = normalizeText(second.category ?? '');
-    return Boolean(firstCategory && firstCategory === secondCategory);
-  }
-
-  private looksLikeFollowUp(message: string): boolean {
-    const normalized = normalizeText(message);
-    if (!normalized) return false;
-
-    return (
-      normalized.startsWith('แล้ว') ||
-      THAI_FOLLOW_UP_MARKERS.some((marker) => normalized.includes(marker)) ||
-      ENGLISH_FOLLOW_UP_PATTERN.test(normalized)
-    );
-  }
-
-  private looksComplex(message: string): boolean {
-    const normalized = normalizeText(message);
-    const questionMarks = message.match(/[?？]/gu)?.length ?? 0;
-
-    return (
-      questionMarks > 1 ||
-      /(?:^|\s)(?:and|also|plus)(?=\s|$)/u.test(normalized) ||
-      normalized.includes(' และ ') ||
-      normalized.includes(' รวมทั้ง ') ||
-      /[\p{L}\p{M}]{2,}และ[\p{L}\p{M}]{2,}/u.test(normalized)
-    );
-  }
-
-  private looksObviouslyGeneral(message: string): boolean {
-    const normalized = normalizeText(message);
-    if (!normalized) return true;
-
-    const businessMarkers = [
-      'ราคา',
-      'ค่าจัดส่ง',
-      'จัดส่ง',
-      'สินค้า',
-      'บริการ',
-      'แพ็กเกจ',
-      'สมัคร',
-      'ชำระ',
-      'บัญชี',
-      'นโยบาย',
-      'price',
-      'shipping',
-      'delivery',
-      'product',
-      'service',
-      'package',
-      'register',
-      'payment',
-      'account',
-      'policy',
-    ];
-    if (businessMarkers.some((marker) => normalized.includes(marker))) {
-      return false;
-    }
-
-    const thaiMarkers = [
-      'สวัสดี',
-      'หวัดดี',
-      'ขอบคุณ',
-      'เป็นไง',
-      'ทำอะไรอยู่',
-      'คุณคือใคร',
-    ];
-    if (thaiMarkers.some((marker) => normalized.includes(marker))) return true;
-
-    return /(?:^|\s)(?:hi|hello|thanks|thank\s+you|how\s+are\s+you|who\s+are\s+you)(?=\s|$)/u.test(
-      normalized,
-    );
-  }
-
-  private acceptPlannedQueries(
-    plan: RetrievalQueryPlan | undefined,
-    attemptedQueryKeys: Set<string>,
-    attemptedQueries: string[],
-    remainingAttempts: number,
-  ): Array<{ query: string; attempt: number }> {
-    if (!plan?.shouldRetry || remainingAttempts <= 0) return [];
-
-    const accepted: Array<{ query: string; attempt: number }> = [];
-    for (const rawQuery of plan.queries) {
-      if (accepted.length >= remainingAttempts) break;
-
-      const query = rawQuery.trim();
-      if (!this.rememberQuery(query, attemptedQueryKeys, attemptedQueries)) {
-        continue;
-      }
-
-      accepted.push({ query, attempt: 2 + accepted.length });
-    }
-
-    return accepted;
-  }
-
-  private rememberQuery(
-    query: string,
-    attemptedQueryKeys: Set<string>,
-    attemptedQueries: string[],
-  ): boolean {
-    const key = normalizeText(query);
-    if (!key || attemptedQueryKeys.has(key)) return false;
-
-    attemptedQueryKeys.add(key);
-    attemptedQueries.push(query);
-    return true;
-  }
-
-  private attemptSummary(
-    attempt: number,
-    query: string,
-    pass: CandidatePassResult,
-  ): KnowledgeRetrievalAttempt {
-    return {
-      attempt,
-      query,
-      candidateCount: pass.items.length,
-      retrievalFailed: pass.retrievalFailed,
-    };
-  }
-
-  private finish(
-    decision: KnowledgeRetrievalResult,
-    diagnostics: Readonly<{
-      attempts: readonly KnowledgeRetrievalAttempt[];
-      diagnosis: KnowledgeRetrievalDiagnosis;
-      rewriteStrategy: KnowledgeRewriteStrategy;
-      plannerUsedLlm: boolean;
-    }>,
-  ): KnowledgeRetrievalResult {
-    return {
-      ...decision,
-      attemptCount: diagnostics.attempts.length,
-      attempts: diagnostics.attempts,
-      diagnosis: diagnostics.diagnosis,
-      rewriteStrategy: diagnostics.rewriteStrategy,
-      plannerUsedLlm: diagnostics.plannerUsedLlm,
-    };
-  }
-
-  private matchType(item: KnowledgeItem): KnowledgeMatchType {
-    const types = this.matchTypes(item);
-    if (this.isExact(item)) return 'EXACT';
-    if (types.includes('KEYWORD') && types.includes('EMBEDDING')) {
-      return 'HYBRID';
-    }
-    if (types.includes('EMBEDDING')) return 'EMBEDDING';
-    if (types.includes('KEYWORD')) return 'KEYWORD';
-    return 'NONE';
-  }
-
-  private isExact(item: KnowledgeItem): boolean {
-    return (
-      item.metadata?.exactMatch === true ||
-      this.matchTypes(item).includes('EXACT')
-    );
-  }
-
-  private matchTypes(item: KnowledgeItem): string[] {
-    const value = item.metadata?.matchTypes;
-    if (Array.isArray(value)) {
-      return value.filter(
-        (entry): entry is string => typeof entry === 'string',
-      );
-    }
-
-    return item.source === 'SEMANTIC_CHUNK' ? ['EMBEDDING'] : ['KEYWORD'];
-  }
-
-  private candidateFingerprint(item: KnowledgeItem): string | null {
-    const parts = [item.title ?? '', item.content, item.answer ?? ''].map(
-      (value) => normalizeText(value),
-    );
-    return parts.some(Boolean) ? parts.join('\u0000') : null;
-  }
-
-  private metadataStrings(item: KnowledgeItem, key: string): string[] {
-    const value = item.metadata?.[key];
-    if (!Array.isArray(value)) return [];
-    return value.filter((entry): entry is string => typeof entry === 'string');
-  }
-
-  private metadataText(item: KnowledgeItem, key: string): string | null {
-    const value = item.metadata?.[key];
-    return typeof value === 'string' && value.trim()
-      ? normalizeText(value)
-      : null;
-  }
-
-  private metadataNumbers(item: KnowledgeItem, key: string): number[] {
-    const value = item.metadata?.[key];
-    if (!Array.isArray(value)) return [];
-    return value.filter(
-      (entry): entry is number =>
-        typeof entry === 'number' && Number.isFinite(entry),
-    );
-  }
-
-  private metadataFiniteNumber(
-    item: KnowledgeItem,
-    key: string,
-  ): number | null {
-    const value = Number(item.metadata?.[key]);
-    return Number.isFinite(value) ? value : null;
-  }
-
-  private uniqueStrings(...groups: readonly string[][]): string[] {
-    return Array.from(new Set(groups.flat()));
-  }
-
-  private uniqueNumbers(...groups: readonly number[][]): number[] {
-    return Array.from(new Set(groups.flat())).sort(
-      (left, right) => left - right,
-    );
-  }
-
-  private priority(item: KnowledgeItem): number {
-    const value = Number(item.metadata?.priority ?? 0);
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  private compareCandidates(left: KnowledgeItem, right: KnowledgeItem): number {
-    const leftExact = this.isExact(left);
-    const rightExact = this.isExact(right);
-
-    if (leftExact !== rightExact) {
-      return Number(rightExact) - Number(leftExact);
-    }
-
-    if (leftExact) {
-      // Stable Array.sort preserves retrieval order when exact priorities tie.
-      return this.priority(right) - this.priority(left);
-    }
-
-    return (
-      right.score - left.score || this.priority(right) - this.priority(left)
-    );
-  }
-
-  private roundScore(value: number): number {
-    return Number(value.toFixed(4));
-  }
-
-  private normalizeScore(value: number): number {
-    const finiteValue = Number.isFinite(value) ? value : 0;
-    return this.roundScore(Math.min(Math.max(finiteValue, 0), 1));
   }
 }

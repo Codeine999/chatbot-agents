@@ -1,9 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { AnswerPattern } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { KnowledgeItem } from '../types/chat.types';
-import { normalizeText } from '../../../utils/text.utils';
+import {
+  logBlock,
+  logSafeText,
+  normalizeText,
+} from '../../../utils/text.utils';
 import { MAX_RETRIEVAL_CANDIDATES } from '../constants/knowledge-routing.constants';
+import {
+  inKnowledgeScope,
+  knowledgeScope,
+  KnowledgeScope,
+} from './knowledge-scope';
 
 /**
  * Score weights for direct (non-embedding) answer_patterns matching.
@@ -31,11 +41,8 @@ const WEIGHT = {
   DESCRIPTION: 0.5,
   /** Extra per additional matched keyword beyond the first. */
   KEYWORD_MULTI_BONUS: 0.5,
-  /** Bonus at priority >= PRIORITY_CAP; scales linearly below that. */
-  PRIORITY_MAX_BONUS: 0.5,
 } as const;
 
-const PRIORITY_CAP = 100;
 /** Matches scoring below this are considered noise and dropped. */
 const MIN_MATCH_SCORE = 2;
 const MAX_PATTERNS_SCANNED = 500;
@@ -43,12 +50,33 @@ const MAX_PATTERNS_SCANNED = 500;
 const MIN_CONTAINS_LENGTH = 2;
 
 export type AnswerPatternRetrievalLayer = 'CACHE' | 'DATABASE';
+export type KnowledgeRecord = Omit<AnswerPattern, 'renderMode'> & {
+  renderMode?: 'DIRECT' | 'REWRITE';
+  entityKey?: string | null;
+  topicKey?: string | null;
+};
+const BROAD_DIRECT_QUERIES = new Set([
+  'ราคา',
+  'สินค้า',
+  'บริการ',
+  'price',
+  'pricing',
+  'product',
+  'products',
+]);
 
 @Injectable()
 export class AnswerPatternService {
   private readonly logger = new Logger(AnswerPatternService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly scope: KnowledgeScope;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    config: ConfigService,
+  ) {
+    this.scope = knowledgeScope(config);
+  }
 
   /**
    * Direct DB search over answer_patterns — no embedding involved.
@@ -60,7 +88,7 @@ export class AnswerPatternService {
     if (!normalized) return [];
 
     const patterns = await this.prisma.answerPattern.findMany({
-      where: { active: true },
+      where: { active: true, ...this.scope },
       take: MAX_PATTERNS_SCANNED,
       orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
     });
@@ -75,8 +103,9 @@ export class AnswerPatternService {
    */
   findMatchesFromPatterns(
     message: string,
-    patterns: readonly AnswerPattern[],
+    patterns: readonly KnowledgeRecord[],
     retrievalLayer: AnswerPatternRetrievalLayer = 'CACHE',
+    source: KnowledgeItem['source'] = 'ANSWER_PATTERN',
   ): KnowledgeItem[] {
     const normalized = normalizeText(message);
     if (!normalized) return [];
@@ -84,7 +113,10 @@ export class AnswerPatternService {
     const tokens = this.tokenize(normalized);
 
     const scored = patterns
-      .filter((pattern) => pattern.active)
+      .filter(
+        (pattern) =>
+          inKnowledgeScope(pattern, this.scope) && pattern.answer.trim(),
+      )
       .map((pattern) => ({
         pattern,
         score: this.scoreAnswerPattern(pattern, normalized, tokens),
@@ -100,24 +132,55 @@ export class AnswerPatternService {
         if (a.exact) return b.pattern.priority - a.pattern.priority;
 
         return b.score - a.score || b.pattern.priority - a.pattern.priority;
-      })
-      .slice(0, MAX_RETRIEVAL_CANDIDATES);
+      });
+
+    // Check the complete scanned exact set before the candidate limit hides a
+    // competing preset. A capped 500-row snapshot cannot prove uniqueness.
+    const ambiguousExact =
+      source === 'ANSWER_PATTERN' &&
+      new Set(
+        scored
+          .filter((item) => item.exact)
+          .map((item) => normalizeText(item.pattern.answer)),
+      ).size > 1;
 
     this.logger.debug(
-      `[AnswerPattern:${retrievalLayer}] "${normalized}" -> ${scored.length} match(es)` +
-        (scored.length
-          ? ` top="${scored[0].pattern.title}" score=${scored[0].score}`
-          : ''),
+      logBlock(`Knowledge:${source}:${retrievalLayer}`, [
+        `query=${JSON.stringify(logSafeText(normalized))}`,
+        `scanned=${patterns.length}`,
+        `matches=${scored.length}`,
+        scored.length ? `top=${JSON.stringify(scored[0].pattern.title)}` : null,
+        scored.length ? `score=${scored[0].score}` : null,
+      ]),
     );
 
-    return scored.map(({ pattern, score, exact }) =>
-      this.toKnowledgeItem(pattern, score, exact, retrievalLayer),
-    );
+    return scored
+      .slice(0, MAX_RETRIEVAL_CANDIDATES)
+      .map(({ pattern, score, exact }) => {
+        const item = this.toKnowledgeItem(
+          pattern,
+          score,
+          exact,
+          retrievalLayer,
+          source,
+        );
+        return {
+          ...item,
+          metadata: {
+            ...item.metadata,
+            safeDirect:
+              item.metadata?.safeDirect === true &&
+              patterns.length < MAX_PATTERNS_SCANNED &&
+              !ambiguousExact,
+            ambiguousExact: exact && ambiguousExact,
+          },
+        };
+      });
   }
 
-  private isExactMatch(pattern: AnswerPattern, normalized: string): boolean {
+  private isExactMatch(pattern: KnowledgeRecord, normalized: string): boolean {
     return (
-      pattern.keywords.some((value) => normalizeText(value) === normalized) ||
+      !BROAD_DIRECT_QUERIES.has(normalized) &&
       pattern.questionExamples.some(
         (value) => normalizeText(value) === normalized,
       )
@@ -133,7 +196,7 @@ export class AnswerPatternService {
   }
 
   private scoreAnswerPattern(
-    pattern: AnswerPattern,
+    pattern: KnowledgeRecord,
     normalized: string,
     tokens: string[],
   ): number {
@@ -172,13 +235,6 @@ export class AnswerPatternService {
         tokens.some((token) => this.contains(description, token)))
     ) {
       score += WEIGHT.DESCRIPTION;
-    }
-
-    // Priority is a capped relevance bonus. A real text signal is required,
-    // although this bonus can still push a weak signal over MIN_MATCH_SCORE.
-    if (score > 0) {
-      const priority = Math.min(Math.max(pattern.priority, 0), PRIORITY_CAP);
-      score += (priority / PRIORITY_CAP) * WEIGHT.PRIORITY_MAX_BONUS;
     }
 
     return score;
@@ -269,24 +325,33 @@ export class AnswerPatternService {
   }
 
   private toKnowledgeItem(
-    pattern: AnswerPattern,
+    pattern: KnowledgeRecord,
     score: number,
     exactMatch: boolean,
     retrievalLayer: AnswerPatternRetrievalLayer,
+    source: KnowledgeItem['source'],
   ): KnowledgeItem {
     return {
-      source: 'ANSWER_PATTERN',
+      source,
       id: pattern.id,
       title: pattern.title,
       category: pattern.category,
       content: pattern.description ?? pattern.title,
       answer: pattern.answer,
       score,
+      renderMode: pattern.renderMode,
       metadata: {
+        tenantId: pattern.tenantId,
+        language: pattern.language,
+        active: pattern.active,
+        entityKey: pattern.entityKey,
+        topicKey: pattern.topicKey,
+        questionExamples: pattern.questionExamples,
         priority: pattern.priority,
         intentKey: pattern.intentKey,
         rawScore: score,
         exactMatch,
+        safeDirect: source === 'ANSWER_PATTERN' && exactMatch,
         matchTypes: [exactMatch ? 'EXACT' : 'KEYWORD'],
         retrievalLayer,
       },

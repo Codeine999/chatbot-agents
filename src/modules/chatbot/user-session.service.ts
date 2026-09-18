@@ -19,6 +19,7 @@ const DEFAULT_SESSION_TTL_SEC = 30 * 60;
 export class UserSessionService {
   private readonly logger = new Logger(UserSessionService.name);
   private readonly sessionTtlSec: number;
+  private readonly muteTtlSec: number;
 
   constructor(
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
@@ -30,21 +31,22 @@ export class UserSessionService {
       configService.get('CHAT_SESSION_TTL_SEC'),
       DEFAULT_SESSION_TTL_SEC,
     );
+    const duration = String(configService.get('AUTO_MUTE_WHEN_REPLY') ?? '10m');
+    const match = /^(\d+)(s|m)?$/.exec(duration.trim());
+    if (!match || Number(match[1]) < 1) {
+      throw new Error(
+        'AUTO_MUTE_WHEN_REPLY must be positive seconds or a duration such as 10m',
+      );
+    }
+    this.muteTtlSec = Number(match[1]) * (match[2] === 'm' ? 60 : 1);
   }
 
   /**
-   * Read a session and atomically refresh its expiry (sliding TTL).
+   * Read the workflow session and atomically refresh its expiry (sliding TTL).
    * Corrupt or mismatched values are deleted instead of entering a flow with
    * untrusted state.
    */
   async get(userId: string): Promise<ConversationSession | undefined> {
-    const takeover = await this.prisma.lineConversation.findFirst({
-      where: { status: 'waiting_admin', lineMember: { lineUserId: userId } }, select: { id: true },
-    });
-    if (takeover) return {
-      userId, flow: 'CONTACT_ADMIN', step: 'WAITING_ADMIN', status: 'ACTIVE',
-      controlMode: 'ADMIN', requiAdmin: true, data: {},
-    };
     const key = this.sessionKey(userId);
     const raw = await this.redis.getex(key, 'EX', this.sessionTtlSec);
 
@@ -57,7 +59,7 @@ export class UserSessionService {
         throw new Error('invalid session shape or user mismatch');
       }
 
-      return parsed;
+      return this.toWorkflow(parsed);
     } catch (error) {
       this.logger.warn(
         `removing invalid chat session for user=${userId}: ${String(error)}`,
@@ -75,28 +77,45 @@ export class UserSessionService {
       throw new Error('Cannot store a chat session under a different user');
     }
 
-    // Read before overwrite so a retried set() (e.g. after a failed LINE
-    // reply, which BullMQ retries by re-running the whole event) can tell
-    // "already flagged" from "just became flagged" and only notify once.
-    const previous = session.requiAdmin ? await this.get(userId) : undefined;
-    if (session.requiAdmin || session.controlMode === 'ADMIN') {
-      await this.prisma.lineConversation.updateMany({
-        where: { lineMember: { lineUserId: userId } }, data: { status: 'waiting_admin' },
-      });
-    }
-
     await this.redis.set(
       this.sessionKey(userId),
-      JSON.stringify(session),
+      JSON.stringify(this.toWorkflow(session)),
       'EX',
       this.sessionTtlSec,
     );
+  }
 
-    if (session.requiAdmin && !previous?.requiAdmin) {
-      // Best-effort: the session write already succeeded, so a notification
-      // failure must not surface as a chat-flow error.
+  async isMuted(userId: string): Promise<boolean> {
+    const mode = await this.redis.get(this.muteKey(userId));
+    return mode === 'ADMIN' || mode === 'PAUSE';
+  }
+
+  /** SET EX resets the full TTL on every push; it never accumulates. */
+  async mute(userId: string, mode: 'ADMIN' | 'PAUSE' = 'ADMIN'): Promise<void> {
+    await this.redis.set(this.muteKey(userId), mode, 'EX', this.muteTtlSec);
+  }
+
+  async resume(userId: string): Promise<void> {
+    await this.redis.del(this.muteKey(userId));
+  }
+
+  async requestAdmin(userId: string): Promise<void> {
+    const changed = await this.prisma.lineConversation.updateMany({
+      where: {
+        lineMember: { lineUserId: userId },
+        status: { not: 'waiting_admin' },
+      },
+      data: { status: 'waiting_admin' },
+    });
+    if (changed.count > 0) {
       try {
-        await this.notificationService.notifyAdminRequired(session);
+        const workflow = await this.get(userId);
+        await this.notificationService.notifyAdminRequired({
+          userId,
+          flow: workflow?.flow ?? 'CONTACT_ADMIN',
+          step: workflow?.step ?? 'WAITING_ADMIN',
+          status: workflow?.status ?? 'ACTIVE',
+        });
       } catch (error) {
         this.logger.warn(
           `failed to notify admins for user=${userId}: ${String(error)}`,
@@ -106,14 +125,23 @@ export class UserSessionService {
   }
 
   async clear(userId: string): Promise<void> {
-    await this.prisma.lineConversation.updateMany({
-      where: { lineMember: { lineUserId: userId }, status: 'waiting_admin' }, data: { status: 'open' },
-    });
     await this.redis.del(this.sessionKey(userId));
+  }
+
+  private muteKey(userId: string): string {
+    return `chat:control:${userId}`;
   }
 
   private sessionKey(userId: string): string {
     return `${SESSION_KEY_PREFIX}${userId}`;
+  }
+
+  /** Drops legacy fields (controlMode, requiAdmin) left in older Redis values. */
+  private toWorkflow<TData>(
+    session: ConversationSession<TData>,
+  ): ConversationSession<TData> {
+    const { userId, flow, step, status, data } = session;
+    return { userId, flow, step, status, data };
   }
 
   private positiveInteger(value: unknown, fallback: number): number {
@@ -143,8 +171,6 @@ export class UserSessionService {
       flows.includes(session.flow as ConversationFlow) &&
       typeof session.step === 'string' &&
       statuses.includes(session.status as ConversationStatus) &&
-      (session.requiAdmin === undefined ||
-        typeof session.requiAdmin === 'boolean') &&
       session.data !== null &&
       typeof session.data === 'object' &&
       !Array.isArray(session.data)

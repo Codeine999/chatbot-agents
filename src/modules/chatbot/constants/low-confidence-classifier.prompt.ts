@@ -30,12 +30,12 @@ GENERAL:
 The message is a greeting, casual conversation, general knowledge, or something that does not require company-specific information.
 
 Rules:
-- If BUSINESS, do not answer using general model knowledge and set response to an empty string.
-- If GENERAL, write a concise, natural Thai response in the response field.
+- Classify only. Never produce a customer-facing answer for either classification.
+- Mixed general/business questions are BUSINESS.
 - When uncertain about a potentially business-related question, prefer BUSINESS.
 - Do not invent company information.
 
 Return JSON only:
-{"classification":"BUSINESS|GENERAL","confidence":0.0,"response":"..."}
+{"classification":"BUSINESS|GENERAL","confidence":0.0,"reason":"short classification reason"}
 `.trim();
 }

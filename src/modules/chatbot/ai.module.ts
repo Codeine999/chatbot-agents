@@ -7,7 +7,8 @@ import { AnswerPatternService } from './knowledge/answer-pattern.service';
 import { AnswerPatternCacheService } from './knowledge/answer-pattern-cache.service';
 import { SemanticSearchService } from './knowledge/semantic-search.service';
 import { KnowledgeRetrievalService } from './knowledge/knowledge-retrieval.service';
-import { RetrievalQueryPlannerService } from './knowledge/retrieval-query-planner.service';
+import { MicroKnowledgeService } from './knowledge/micro-knowledge.service';
+import { MicroKnowledgeVectorRepository } from '../ai/embeding/micro-knowledge-vector.repository';
 
 @Module({
   imports: [PrismaModule, AiProviderModule],
@@ -17,7 +18,8 @@ import { RetrievalQueryPlannerService } from './knowledge/retrieval-query-planne
     AnswerPatternService,
     AnswerPatternCacheService,
     SemanticSearchService,
-    RetrievalQueryPlannerService,
+    MicroKnowledgeService,
+    MicroKnowledgeVectorRepository,
     KnowledgeRetrievalService,
   ],
   exports: [

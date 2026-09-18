@@ -54,8 +54,8 @@ export class LineController {
   @HttpCode(200)
   @UseGuards(LineSignatureGuard)
   async handleWebhook(@Body() body: LineWebhookBody) {
-    const events = (body.events ?? []).filter(
-      (event) => Boolean(event.webhookEventId),
+    const events = (body.events ?? []).filter((event) =>
+      Boolean(event.webhookEventId),
     );
 
     if (events.length > 0) {
@@ -71,7 +71,9 @@ export class LineController {
           `global ingress limit exceeded: ${ingress.current}/${ingress.limit} 
           events per sec, dropping ${events.length} events`,
         );
-        throw new ServiceUnavailableException('Webhook ingress is busy; retry later');
+        throw new ServiceUnavailableException(
+          'Webhook ingress is busy; retry later',
+        );
       }
     }
 
@@ -98,11 +100,15 @@ export class LineController {
 
   @Get('deliveries')
   @AdminGuard()
-  deliveries() { return this.lineWebhookService.listDeliveries(); }
+  deliveries() {
+    return this.lineWebhookService.listDeliveries();
+  }
 
   @Get('webhooks/failed')
   @AdminGuard('dev', 'owner')
-  failedWebhooks() { return this.lineWebhookService.listFailedWebhookEvents(); }
+  failedWebhooks() {
+    return this.lineWebhookService.listFailedWebhookEvents();
+  }
 
   @Post('conversations/:conversationId/resume-bot')
   @AdminGuard()
@@ -126,7 +132,7 @@ export class LineController {
   @AdminGuard()
   sendAdminMessage(
     @Req() request: AdminRequest,
-    @Param('conversationId') conversationId: string,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
     @Body() body: SendLineMessageDto,
   ) {
     return this.lineWebhookService.sendAdminMessage(
@@ -161,7 +167,7 @@ export class LineConversationController {
   @Post(':conversationId/messages')
   sendAdminMessage(
     @Req() request: AdminRequest,
-    @Param('conversationId') conversationId: string,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
     @Body() body: SendLineMessageDto,
   ) {
     return this.lineWebhookService.sendAdminMessage(

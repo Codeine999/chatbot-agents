@@ -22,16 +22,16 @@ export class NotificationService {
     private readonly notificationGateway: NotificationGateway,
   ) {}
 
-
   async notifyAdminRequired(
     session: Pick<ConversationSession, 'userId' | 'flow' | 'step' | 'status'>,
   ): Promise<void> {
+    const { userId } = session;
     this.logger.debug(
-      `notify admin: userId=${session.userId} flow=${session.flow} step=${session.step}`,
+      `notify admin: userId=${userId} flow=${session.flow} step=${session.step}`,
     );
 
     const conversation = await this.prisma.lineConversation.findFirst({
-      where: { lineMember: { lineUserId: session.userId } },
+      where: { lineMember: { lineUserId: userId } },
       select: {
         id: true,
         lastMessage: true,
@@ -41,7 +41,7 @@ export class NotificationService {
 
     if (!conversation) {
       this.logger.warn(
-        `no LINE conversation for userId=${session.userId} — notification will not be clickable`,
+        `no LINE conversation for userId=${userId} — notification will not be clickable`,
       );
     }
 
@@ -57,10 +57,10 @@ export class NotificationService {
 
     const row = await this.prisma.adminNotification.create({
       data: {
-        type: session.flow,
-        title: 'Customer needs admin attention',
-        message: `User ${session.userId} is waiting at step "${session.step}"`,
-        userId: session.userId,
+        type: 'CONTACT_ADMIN',
+        title: 'มีลูกค้าต้องการคำตอบจากแอดมินในขณะนี้',
+        message: `${metadata.displayName ?? userId} กำลังรอคำตอบจากแอดมิน`,
+        userId,
         metadata,
       },
     });

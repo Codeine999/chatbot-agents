@@ -17,7 +17,7 @@
 | Delivery ACCEPTED | ระบบบันทึกว่า LINE API รับการส่งแล้ว | ผู้ใช้เปิดอ่าน |
 | Delivery finalizedAt | ขั้นบันทึก local history/context ทำงานจบ | Redis context ครบแน่นอน: appendTurn อาจคืน false |
 
-หนึ่งข้อความอาจไม่มี AI call หรือมี embedding, planner, classifier และ generation หลาย calls แต่ละ call มีการคิดเครดิตของตนเอง การส่ง LINE push ยังไม่เรียก credit billing แม้ enum มี LINE_PUSH_MESSAGE
+ข้อความ text ปกติมี 0–1 logical generation; เฉพาะ LOW_CONFIDENCE → GENERAL มี 2 calls ส่วน embedding แยกอีกสูงสุดหนึ่ง query call แต่ละ call มีการคิดเครดิตของตนเอง การส่ง LINE push ยังไม่เรียก credit billing แม้ enum มี LINE_PUSH_MESSAGE
 
 ## 2. แผนภาพรวม end to end
 
@@ -111,12 +111,12 @@ lineMessageId unique กัน inbound ซ้ำและกัน unreadCount �
 | Input / session | Flow ปัจจุบัน |
 | --- | --- |
 | Text ว่าง / ยาวเกิน | template ระบบ; ไม่มี AI call |
-| Human controlled: ADMIN / PAUSE / requiAdmin | text/image/sticker หยุดตอบ; text ยกเลิกที่รองรับยังผ่านได้ |
-| CANCEL | clear session และ waiting_admin → open; ChatResponse ใช้ CLEAR |
-| REGISTER active | ต่อ registration เว้นแต่ถูก interrupt ด้วย rule ที่รองรับ; ตรวจ CAN_REGISTER |
-| เริ่ม REGISTER | CAN_REGISTER=false คืนข้อความปิดรับสมัคร; ไม่เริ่ม flow |
+| Human controlled: ADMIN / PAUSE | text/image/sticker หยุดก่อนเข้า AI/RAG รวม cancel; requireAdmin อย่างเดียวไม่ mute |
+| CANCEL | clear เฉพาะ active registration; ไม่ปลด mute และไม่ปิดคำขอแอดมิน |
+| REGISTER active | ต่อ registration เว้นแต่ถูก interrupt ด้วย rule ที่รองรับ; ค่า `CAN_REGISTER` ที่ไม่ใช่ `true` จะ clear session และคืนข้อความปิดรับสมัครก่อน routing |
+| เริ่ม REGISTER | เปิดเฉพาะ `CAN_REGISTER=true`; ค่าอื่นคืนข้อความปิดรับสมัครและไม่เริ่ม flow |
 | Registration สำเร็จ | ตรวจข้อมูล/ข้อมูลซ้ำ สร้าง member พร้อม bcrypt hash และคืน credentials; ไม่เก็บ turn นี้ใน AI context |
-| POST /registration/register | Zod RegisterDto → ถ้า CAN_REGISTER=false คืน 403 → RegistrationService |
+| POST /registration/register | Zod RegisterDto → เปิดเฉพาะ `CAN_REGISTER=true`; ค่าอื่นคืน 403 → RegistrationService |
 | Image จาก external content provider | ส่งข้อความไม่รองรับ |
 | Image จาก LINE | download → human-control/image policy → billed image analysis; SAFE_GENERAL จึงใช้ answer มิฉะนั้น fallback |
 | Sticker | StickerIntentService/template และเส้นทางที่ service รองรับ; ไม่ถือว่าทุก sticker ต้องเรียก AI |
@@ -124,41 +124,45 @@ lineMessageId unique กัน inbound ซ้ำและกัน unreadCount �
 
 Public registration เมื่อเปิด feature ยังไม่มี authentication/signature guard ของ LINE; feature gate ไม่ใช่การยืนยันตัวตน
 
-UserSessionService ตรวจ waiting_admin ใน PostgreSQL ก่อนใช้ Redis ทำให้ handoff อยู่ต่อได้แม้ Redis session หมดอายุ การขอ admin เก็บสถานะแล้วเรียก notification เมื่อเปลี่ยนเข้าสู่ requiAdmin; notification error ถูก catch จึงต้องตรวจทั้ง waiting queue และ notification
+UserSessionService ใช้ waiting_admin ใน PostgreSQL เป็น requireAdmin และเก็บ mute แยกที่ Redis `chat:control:<lineUserId>`; requestAdmin ไม่ทับ registration และไม่ mute. ก่อนส่ง admin PUSH ทุก attempt ตั้ง TTL ใหม่ตาม `AUTO_MUTE_WHEN_REPLY` (default `10m`, ตัวเลขเปล่าเป็นวินาที). GET/ข้อความลูกค้าไม่ต่อ TTL. Key หมดอายุจะอ่าน controlMode เป็น AI โดยไม่ต้อง cron. Resume endpoint ลบ mute และเปิดสถานะ conversation พร้อม clear AI context แต่รักษา registration. Notification ส่งเมื่อเปลี่ยนเป็น waiting_admin; notification failure เป็น best-effort ต้องตรวจ waiting queue ด้วย.
 
 ## 6. Text → hybrid RAG → final answer
 
+อัปเดต core text runtime: 13 กันยายน 2026 ตาม [รายงาน implementation](core-text-reply-refactor.md)
+
 ```mermaid
 flowchart TD
-    R["Rule / session routing"] --> K["Cache keyword"]
-    K --> FAST{"DIRECT ชัดเจน?"}
-    FAST -->|ใช่| D["DIRECT: answer ที่เก็บไว้"]
-    FAST -->|ไม่| DB["Database keyword: ผลสำเร็จมีอำนาจเหนือ cache"]
-    DB --> EXACT{"Exact ขัดกัน?"}
-    EXACT -->|ใช่| HAND["CONTACT_ADMIN"]
-    EXACT -->|ไม่และยังไม่ direct| S["Billed query embedding + pgvector search"]
-    S --> MERGE["Merge / deduplicate / rank"]
-    MERGE --> PLAN["อาจ plan ค้นเพิ่ม: รวมไม่เกิน 3 attempts"]
-    PLAN --> ROUTE{"Retrieval route"}
-    ROUTE -->|DIRECT| D
-    ROUTE -->|RAG| GEN["Generate จากไม่เกิน 3 contexts"]
-    ROUTE -->|LOW_CONFIDENCE| C["Classifier: BUSINESS / GENERAL"]
-    GEN -->|INSUFFICIENT_CONTEXT| C
-    C -->|BUSINESS หรือ conflict| HAND
-    C -->|GENERAL| G["ใช้ response ที่ไม่ว่าง มิฉะนั้น fallback"]
-    DB -->|DIRECT| D
+    H["handleTextMessage: validate + human-control gate"] --> R["IntentRouter.resolve: rules / session"]
+    R -->|rule/template| T["ChatResponse: 0 LLM"]
+    R -->|greeting/ack| G["answerGeneral: 1 LLM"]
+    R -->|knowledge| K["AnswerPattern cache → scoped DB lexical"]
+    K -->|safe approved-question match| P{"renderMode"}
+    P -->|DIRECT| T
+    P -->|REWRITE| A["answerKnowledge: max 1 LLM"]
+    K -->|not safe direct| S["1 query embedding → AnswerPatternVector + MicroKnowledgeVector"]
+    S --> M["merge lexical + vector ranks → RRF → bounded evidence"]
+    M -->|conflict / retrieval error| HAND["static/configured CONTACT_ADMIN"]
+    M -->|useful evidence: RAG| A
+    M -->|no usable evidence| C["classifyLowConfidence: LLM #1, classification only"]
+    C -->|BUSINESS / invalid result| HAND
+    C -->|GENERAL| G2["answerGeneral: LLM #2"]
+    A -->|INSUFFICIENT_CONTEXT| HAND
+    A -->|answer or deterministic fallback| OUT["final ChatResponse"]
+    G --> OUT
+    G2 --> OUT
+    HAND --> OUT
 ```
 
-- KnowledgeRetrievalService ตรวจ exact answers ที่ขัดกันก่อนเลือก DIRECT; conflict route ไป handoff
-- DIRECT: exact หรือ top score ≥0.95 และ gap ≥0.1 (มี candidate เดียวถือว่าชัด)
-- RAG: contexts score ≥0.6 จำนวนไม่เกิน 3; keyword raw score หาร 5 แล้ว clamp 0–1
-- Cosine/keyword score เป็นคะแนนจัดอันดับ ไม่ใช่เปอร์เซ็นต์ความถูกต้อง
-- Semantic SQL ใช้ answerPatternVector JOIN answerPattern กรอง pattern/vector active และ embeddingModel ตรงกับ query model
-- Planner ทำ follow-up rewrite จาก history ได้โดยไม่ใช้ LLM หรือใช้ billed generation วางแผน; query เพิ่มไม่ซ้ำและรวม original ไม่เกิน 3 attempts
-- หลัง second pass ไม่อนุญาต DIRECT จาก query ที่ rewrite; ใช้ grounded generation หรือ fallback ตามหลักฐาน
-- AiChatService คืน stored answer ของ DIRECT โดยไม่ generate; semantic DIRECT ยังเสีย query embedding credit
-- GENERAL จาก classifier ใช้ response ที่ classifier สร้าง ไม่เรียก generation ซ้ำอัตโนมัติ ถ้าไม่มี generatedResponse จะ fallback
-- PendingAiUsageError ถูก rethrow ผ่าน retrieval/planner/classifier/answer services; error ทั่วไปหลายจุดถูก catch แล้ว fallback จึงไม่ใช่ทุก provider error จะไป retry queue
+- Retrieval ไม่มี generative LLM, planner หรือ second-pass search; unresolved model reference คืน static clarification
+- Fast preset ต้องตรง questionExample ทั้งข้อความและไม่เป็น broad query, เป็น unique/equivalent answer ไม่ขัดกัน และ snapshot ไม่ชน scan cap; keyword/cosine อย่างเดียวไม่ DIRECT
+- REWRITE preset ใช้ grounded generation หนึ่งครั้ง ส่วน DIRECT ส่ง stored answer
+- Query vector เดียวค้นสองตาราง กรอง tenant scope, language, active และ embeddingModel
+- Lexical raw ≥ configured floor (default 3) / cosine ≥ configured noise floor (default 0.6) เป็น candidate eligibility ไม่ใช่ answer confidence
+- รวมสองอันดับด้วย RRF k=60; pool 20, selected contexts 3, เนื้อหารวมไม่เกิน 12,000 ตัวอักษร ไม่ตัดกลาง fact
+- RAG ไม่ย้อนกลับ classifier ไม่ว่าตอบ sentinel/ล้มเหลว; sentinel ส่ง durable handoff ส่วน provider error ใช้ configured fallback เดิม
+- LOW → BUSINESS ใช้ classifier ครั้งเดียว; LOW → GENERAL ใช้ classifier และ answerGeneral รวมสองครั้ง เป็นเส้นทางเดียวที่มีสอง logical generations
+- PendingAiUsageError ยังคง rethrow; provider/network retries และ billing เดิมไม่เปลี่ยน
+- Scope จาก trusted deployment config KNOWLEDGE_TENANT_ID (ไม่ตั้ง = null standalone เท่านั้น), KNOWLEDGE_LANGUAGE (default th); ไม่อ่าน tenant จากข้อความลูกค้า
 
 Source: [retrieval](../src/modules/chatbot/knowledge/knowledge-retrieval.service.ts), [router](../src/modules/chatbot/intent-router.service.ts), [answer](../src/modules/chatbot/aichat.service.ts)
 

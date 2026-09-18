@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { IntentResult, ChatIntent } from './types/chat.types';
+import { IntentResult } from './types/chat.types';
 
 @Injectable()
 export class RuleIntentService {
@@ -30,6 +30,15 @@ export class RuleIntentService {
         confidence: 1,
         source: 'RULE',
         reason: 'menu register',
+      };
+    }
+
+    if (input === '3') {
+      return {
+        intent: 'CONTACT_ADMIN',
+        confidence: 1,
+        source: 'RULE',
+        reason: 'menu contact admin',
       };
     }
 

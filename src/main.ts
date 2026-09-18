@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { ADMIN_PROFILE_IMAGE_MAX_BYTES } from './modules/admin/constants/admin-upload.constants';
-
+import { AppLogger } from './infra/logging/app-logger';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -26,6 +26,7 @@ async function bootstrap() {
       // and MIME boundaries so Fastify does not reject them at its 1MB default.
       bodyLimit: ADMIN_PROFILE_IMAGE_MAX_BYTES + 1024 * 1024,
     }),
+    { logger: new AppLogger({ timestamp: true }) },
   );
 
   await app.register(fastifyRawBody, {
@@ -55,6 +56,7 @@ async function bootstrap() {
         'http://localhost:5173',
         'https://chatbot-dashboard-r6ac.vercel.app',
         'https://chatbot-dashboard-eta-nine.vercel.app',
+
         
         'http://localhost:8080'
       ];
