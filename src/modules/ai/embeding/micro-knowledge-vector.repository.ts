@@ -33,6 +33,37 @@ export class MicroKnowledgeVectorRepository {
       LIMIT ${limit}
     `);
   }
+
+  async upsert(
+    db: Prisma.TransactionClient | PrismaService,
+    microKnowledgeId: string,
+    values: readonly number[],
+    model: string,
+    active: boolean,
+  ): Promise<void> {
+    const vectorLiteral = AnswerPatternVectorRepository.toVectorLiteral(values);
+
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO "microKnowledgeVector" (
+        "microKnowledgeId",
+        "embedding",
+        "embeddingModel",
+        "active"
+      )
+      VALUES (
+        ${microKnowledgeId}::uuid,
+        ${vectorLiteral}::vector,
+        ${model},
+        ${active}
+      )
+      ON CONFLICT ("microKnowledgeId")
+      DO UPDATE SET
+        "embedding" = EXCLUDED."embedding",
+        "embeddingModel" = EXCLUDED."embeddingModel",
+        "active" = EXCLUDED."active",
+        "updatedAt" = CURRENT_TIMESTAMP
+    `);
+  }
 }
 
 export type MicroKnowledgeSearchRow = Omit<SemanticSearchRow, 'renderMode'> & {

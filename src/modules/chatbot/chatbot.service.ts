@@ -68,6 +68,7 @@ export class ChatbotService {
         `message from ${userId} too long for AI: 
         ${input.length} > ${this.aiMaxMessageLength}`,
       );
+      
       return this.response(
         this.replyTemplateService.messageTooLong(),
         'SYSTEM',
@@ -196,7 +197,7 @@ export class ChatbotService {
 
       case 'CLARIFY':
         return this.response(
-          'หมายถึงเรื่องไหนหรือสินค้ารุ่นไหนครับ ช่วยระบุเพิ่มเติมนิดหนึ่งได้ไหมครับ',
+          'ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยครับ',
           'RULE',
           'INCLUDE',
         );

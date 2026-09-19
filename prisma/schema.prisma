@@ -174,13 +174,19 @@ model AdminNotification {
 
 model AiSetting {
   id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String?  @db.Uuid
   systemPrompt    String   @db.Text
-  tone            String?  @db.VarChar(100)
+  ownerPrompt     String?  @db.Text
+  tone            String?  @db.Text
+  skills          Json     @default("[]")
+  responseStyle   Json     @default("{\"targetLength\":\"adaptive\",\"emojiLevel\":\"light\"}")
+  promptVersion   Int      @default(1)
   fallbackMessage String?  @db.Text
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
-  updatedAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
 
+  @@index([tenantId, active, updatedAt])
   @@map("aiSettings")
 }
 

@@ -177,17 +177,16 @@ export class KnowledgeRetrievalService {
     }
     const exact = items.filter(
       (item) =>
-        item.source === 'ANSWER_PATTERN' && item.metadata?.safeDirect === true,
+        item.source === 'ANSWER_PATTERN' &&
+        item.metadata?.safeDirect === true &&
+        item.renderMode !== 'REWRITE',
     );
     if (!exact.length) return undefined;
-    // Multiple complete presets with identical content are equivalent; select
-    // deterministically. A REWRITE preset still needs one grounded generation.
+    // Multiple complete DIRECT presets with identical content are equivalent;
+    // select deterministically. REWRITE must continue through unified
+    // retrieval so relevant MicroKnowledge can also ground the model call.
     const winner = exact[0];
-    return this.result(
-      items,
-      [winner],
-      winner.renderMode === 'REWRITE' ? 'RAG' : 'DIRECT',
-    );
+    return this.result(items, [winner], 'DIRECT');
   }
 
   private eligible(item: KnowledgeItem): boolean {

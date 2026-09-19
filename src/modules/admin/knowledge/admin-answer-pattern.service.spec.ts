@@ -3,7 +3,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { EmbeddingService } from '../../ai/embeding/embedding.service';
 import { AnswerPatternCacheService } from '../../chatbot/knowledge/answer-pattern-cache.service';
 import { AnswerPatternVectorRepository } from '../../ai/embeding/answer-pattern-vector.repository';
-import { AdminAnswerPatternService } from './admin-answer-pattern.service';
+import { AdminAnswerPatternService } from './admin-knowledge-pattern.service';
 import { CreateAdminAnswerPatternDto } from './dto/admin-answer-pattern.dto';
 
 const embedding = {

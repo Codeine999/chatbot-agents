@@ -6,10 +6,12 @@ import { LoadContextService } from '../chatbot/context/load-context.service';
 import { UserSessionService } from '../chatbot/user-session.service';
 
 describe('delivery control gate', () => {
-  function setup(adminMemberId: string | null = 'admin') {
+  function setup(adminMemberId: string | null = 'admin', pushSucceeds = false) {
     const events: string[] = [];
     const row = {
       id: 'delivery',
+      conversationId: 'conversation',
+      lineMemberId: 'member',
       status: 'PENDING',
       method: 'PUSH',
       adminMemberId,
@@ -22,8 +24,19 @@ describe('delivery control gate', () => {
       lineDelivery: {
         findUniqueOrThrow: jest.fn().mockResolvedValue(row),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        update: jest.fn().mockResolvedValue({}),
       },
+      lineConversation: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      lineChatHistory: {
+        upsert: jest.fn().mockResolvedValue({}),
+      },
+      $transaction: jest.fn(),
     };
+    prisma.$transaction.mockImplementation(
+      (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma),
+    );
     const mute = jest.fn(() => {
       events.push('mute');
       return Promise.resolve();
@@ -31,7 +44,9 @@ describe('delivery control gate', () => {
     const isMuted = jest.fn().mockResolvedValue(false);
     const pushText = jest.fn(() => {
       events.push('push');
-      return Promise.reject(new Error('mock unavailable'));
+      return pushSucceeds
+        ? Promise.resolve()
+        : Promise.reject(new Error('mock unavailable'));
     });
     const service = new LineDeliveryService(
       prisma as unknown as PrismaService,
@@ -56,6 +71,26 @@ describe('delivery control gate', () => {
     ctx.mute.mockRejectedValueOnce(new Error('Redis unavailable'));
     await ctx.service.deliver('delivery');
     expect(ctx.pushText).not.toHaveBeenCalled();
+  });
+
+  it('opens waiting_admin only after LINE accepts the admin push', async () => {
+    const ctx = setup('admin', true);
+
+    await ctx.service.deliver('delivery');
+
+    expect(ctx.events).toEqual(['mute', 'push']);
+    expect(ctx.prisma.lineConversation.updateMany).toHaveBeenCalledWith({
+      where: { id: 'conversation', status: 'waiting_admin' },
+      data: { status: 'open' },
+    });
+  });
+
+  it('keeps waiting_admin when the admin push is not accepted', async () => {
+    const ctx = setup();
+
+    await ctx.service.deliver('delivery');
+
+    expect(ctx.prisma.lineConversation.updateMany).not.toHaveBeenCalled();
   });
 
   it('suppresses queued automatic responses during mute', async () => {

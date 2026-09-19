@@ -140,7 +140,16 @@ function build(
     aiSetting: {
       findFirst: jest.fn().mockResolvedValue({
         systemPrompt: 'ตอบอย่างเป็นธรรมชาติ',
+        ownerPrompt: 'คุณเป็นแอดมินของร้านหมอน',
         tone: 'สุภาพ อบอุ่น',
+        skills: [
+          {
+            name: 'customer-sales',
+            prompt: 'ตอบคำถามก่อนแล้วแนะนำอย่างเป็นธรรมชาติ',
+          },
+        ],
+        responseStyle: { targetLength: 'short', emojiLevel: 'light' },
+        promptVersion: 2,
         fallbackMessage: fallback,
       }),
     },
@@ -208,6 +217,7 @@ function build(
     retrieval,
     budget as unknown as AiBudgetService,
     provider,
+    config,
   );
   const classifier = new AiIntentClassifierService(
     budget as unknown as AiBudgetService,
@@ -320,15 +330,28 @@ describe('core text reply flow (real router/retrieval/classifier/answer, mocked 
   });
 
   it.each(['cached', 'patterns'] as const)(
-    'a safe REWRITE preset from %s uses one grounded call',
+    'a safe REWRITE preset from %s continues retrieval and includes MicroKnowledge',
     async (layer) => {
-      const ctx = build({ [layer]: [pattern({ renderMode: 'REWRITE' })] });
+      const rewrite = pattern({ renderMode: 'REWRITE' });
+      const micro = fact({
+        id: '00000000-0000-4000-8000-000000000003',
+        answer: 'ห้ามซักไส้หมอนด้วยน้ำ',
+      });
+      const ctx = build({
+        cached: layer === 'cached' ? [rewrite] : [],
+        patterns: [rewrite],
+        micro: [micro],
+      });
       ctx.generate.mockResolvedValueOnce(
         response('ถอดปลอกซักได้ครับ ส่วนไส้เก็บแยกไว้'),
       );
       await ctx.send(question);
       expect(ctx.generate).toHaveBeenCalledTimes(1);
-      expect(ctx.embed.embedQuery).not.toHaveBeenCalled();
+      expect(ctx.embed.embedQuery).toHaveBeenCalledTimes(1);
+      expect(ctx.prisma.microKnowledge.findMany).toHaveBeenCalledTimes(1);
+      expect(ctx.generate.mock.calls[0][0].systemInstruction).toContain(
+        'MICRO_KNOWLEDGE',
+      );
       expect(ctx.classify).not.toHaveBeenCalled();
     },
   );
@@ -420,6 +443,79 @@ describe('core text reply flow (real router/retrieval/classifier/answer, mocked 
     const prompt = ctx.generate.mock.calls[0][0].systemInstruction;
     expect(prompt).toContain('ซักปลอกได้');
     expect(prompt).toContain('ห้ามซักไส้หมอน');
+  });
+
+  it('RAG generation sends every AiSetting and data section deterministically', async () => {
+    const ctx = build({ vectors: [vectorRow()] });
+    ctx.generate.mockResolvedValueOnce(response('ถอดปลอกก่อนซักครับ'));
+
+    await ctx.send(paraphrase, history('สนใจหมอน Cloud', 'ยินดีแนะนำครับ'));
+
+    const prompt = ctx.generate.mock.calls[0][0].systemInstruction ?? '';
+    for (const section of [
+      'systemPrompt',
+      'ownerPrompt',
+      'tone',
+      'skill',
+      'responseStyle',
+      'historyMessage',
+      'currentMessage',
+      'ragContext',
+    ]) {
+      expect(prompt).toContain(`<${section}>`);
+      expect(prompt).toContain(`</${section}>`);
+    }
+    expect(prompt).toContain('customer-sales');
+    expect(prompt).toContain('targetLength: short');
+    expect(prompt).toContain('สนใจหมอน Cloud');
+    expect(prompt).toContain(paraphrase);
+    expect(prompt).toContain('ถอดปลอกซักได้ แต่ห้ามซักไส้หมอน');
+    expect(prompt).not.toContain('[object Object]');
+    expect(prompt).not.toContain('undefined');
+    expect(prompt).not.toContain('\nnull\n');
+  });
+
+  it('GENERAL generation uses the same sections with an empty RAG context', async () => {
+    const ctx = build();
+    ctx.generate.mockResolvedValueOnce(response('สวัสดีครับ'));
+
+    await ctx.send('สวัสดี', history('เมื่อวานคุยกัน', 'จำได้ครับ'));
+
+    const prompt = ctx.generate.mock.calls[0][0].systemInstruction ?? '';
+    expect(prompt).toContain('<systemPrompt>');
+    expect(prompt).toContain('<ownerPrompt>');
+    expect(prompt).toContain('<tone>');
+    expect(prompt).toContain('<skill>');
+    expect(prompt).toContain('<responseStyle>');
+    expect(prompt).toContain('<historyMessage>');
+    expect(prompt).toContain('<currentMessage>');
+    expect(prompt).toContain('<ragContext>\n[]\n</ragContext>');
+    expect(prompt).not.toContain('[object Object]');
+  });
+
+  it('image answer generation uses the structured AiSetting prompt', async () => {
+    const ctx = build();
+    ctx.generate.mockResolvedValueOnce(
+      response('{"classification":"SAFE_GENERAL","answer":"เป็นรูปแมวครับ"}'),
+    );
+
+    await ctx.service.handleImageMessage({
+      userId: 'test-user',
+      lineMemberId: ID,
+      conversationId: ID,
+      turnId: 'image-turn',
+      image: { mediaType: 'image/png', data: 'fixture' },
+      recentMessages: history('ช่วยดูรูปนี้หน่อย', 'ส่งรูปมาได้เลยครับ'),
+    });
+
+    const request = ctx.generate.mock.calls[0][0];
+    expect(request.systemInstruction).toContain('<systemPrompt>');
+    expect(request.systemInstruction).toContain('<ownerPrompt>');
+    expect(request.systemInstruction).toContain('<historyMessage>');
+    expect(request.systemInstruction).toContain(
+      '<ragContext>\n[]\n</ragContext>',
+    );
+    expect(request.messages.at(-1)?.images).toHaveLength(1);
   });
 
   it('lexical MicroKnowledge uses the same matcher but cannot be direct', async () => {
@@ -592,10 +688,10 @@ describe('core text reply flow (real router/retrieval/classifier/answer, mocked 
     await ctx.send(paraphrase);
     expect(ctx.generate).toHaveBeenCalledTimes(1);
     expect(ctx.generate.mock.calls[0][0].systemInstruction).toContain(
-      'ประเด็นของข้อมูล: cover',
+      '"topicKey": "cover"',
     );
     expect(ctx.generate.mock.calls[0][0].systemInstruction).toContain(
-      'ประเด็นของข้อมูล: core',
+      '"topicKey": "core"',
     );
     expect(ctx.session.set).not.toHaveBeenCalled();
   });

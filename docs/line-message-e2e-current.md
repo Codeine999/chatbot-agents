@@ -177,7 +177,7 @@ flowchart TD
 
 Customer ขอ staff หรือ business fallback → DB waiting_admin / requireAdmin=true → create adminNotifications → emit ADMIN_NOTIFICATION socket /admin → frontend เปิด conversation จาก metadata.conversationId; ยังไม่ mute และไม่ทับ registration
 
-Admin ส่งข้อความด้วย clientRequestId → durable PUSH → ก่อนส่งจริงตั้ง Redis chat:control:<lineUserId>=ADMIN, TTL AUTO_MUTE_WHEN_REPLY (default 10m) → accepted ADMIN history หรือ pending delivery response. Push attempt ใหม่ตั้ง TTL ใหม่เต็มระยะ ไม่บวกสะสม. Key หมดอายุจะกลับ AI; POST /api/line/conversations/:conversationId/resume-bot ปลด mute ก่อนเวลา, เปิด conversation และ clear context โดยไม่ลบ registration. Automatic PUSH ไม่ตั้ง mute; queued automatic replies ถูกระงับเมื่อพบ mute.
+Admin ส่งข้อความด้วย clientRequestId → durable PUSH → ก่อนส่งจริงตั้ง Redis chat:control:<lineUserId>=ADMIN, TTL AUTO_MUTE_WHEN_REPLY (default 10m) → เมื่อ LINE accept จะเปลี่ยน waiting_admin เป็น open แบบ atomic กับ delivery ACCEPTED แล้วบันทึก ADMIN history. Push attempt ใหม่ตั้ง TTL ใหม่เต็มระยะ ไม่บวกสะสม; push ที่ยังไม่ accepted จะไม่เปิด waiting_admin. Key หมดอายุจะกลับ AI; POST /api/line/conversations/:conversationId/resume-bot ปลด mute ก่อนเวลา, เปิด conversation และ clear context โดยไม่ลบ registration. Automatic PUSH ไม่ตั้ง mute; queued automatic replies ถูกระงับเมื่อพบ mute.
 
 Notification read state กับ conversation unread/history เป็นคนละข้อมูล อย่าถือว่า mark notification read คือ delivery accepted หรือ customer read receipt
 

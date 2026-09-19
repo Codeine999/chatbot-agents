@@ -3,77 +3,89 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AnswerPattern } from '../../../generated/prisma/client';
+import { ConfigService } from '@nestjs/config';
+import { MicroKnowledge } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { buildMicroKnowledgeDocument } from '../../ai/embeding/micro-knowledge-document';
 import { EmbeddingService } from '../../ai/embeding/embedding.service';
-import { AnswerPatternVectorRepository } from '../../ai/embeding/answer-pattern-vector.repository';
-import { buildAnswerPatternDocument } from '../../ai/embeding/answer-pattern-document';
-import { AnswerPatternCacheService } from '../../chatbot/knowledge/answer-pattern-cache.service';
+import { MicroKnowledgeVectorRepository } from '../../ai/embeding/micro-knowledge-vector.repository';
 import {
-  CreateAdminAnswerPatternDto,
-  UpdateAdminAnswerPatternDto,
-} from './dto/admin-answer-pattern.dto';
+  knowledgeScope,
+  KnowledgeScope,
+} from '../../chatbot/knowledge/knowledge-scope';
+import {
+  CreateAdminMicroKnowledgeDto,
+  UpdateAdminMicroKnowledgeDto,
+} from './dto/admin-micro-knowledge.dto';
 
 @Injectable()
-export class AdminAnswerPatternService {
+export class AdminKnowledgeMicroService {
+  private readonly scope: KnowledgeScope;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly embeddingService: EmbeddingService,
-    private readonly answerPatternCache: AnswerPatternCacheService,
-    private readonly vectors: AnswerPatternVectorRepository,
-  ) {}
+    private readonly vectors: MicroKnowledgeVectorRepository,
+    config: ConfigService,
+  ) {
+    this.scope = knowledgeScope(config);
+  }
 
-  list(): Promise<AnswerPattern[]> {
-    return this.prisma.answerPattern.findMany({
+  list(): Promise<MicroKnowledge[]> {
+    return this.prisma.microKnowledge.findMany({
+      where: { tenantId: this.scope.tenantId },
       orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
     });
   }
 
   async count(): Promise<{ total: number; active: number }> {
     const [total, active] = await Promise.all([
-      this.prisma.answerPattern.count(),
-      this.prisma.answerPattern.count({ where: { active: true } }),
+      this.prisma.microKnowledge.count({
+        where: { tenantId: this.scope.tenantId },
+      }),
+      this.prisma.microKnowledge.count({
+        where: { tenantId: this.scope.tenantId, active: true },
+      }),
     ]);
 
     return { total, active };
   }
 
   async create(
-    input: CreateAdminAnswerPatternDto,
+    input: CreateAdminMicroKnowledgeDto,
     adminMemberId?: string,
-  ): Promise<AnswerPattern> {
+  ): Promise<MicroKnowledge> {
     const embedding = await this.embeddingService.embedDocument(
-      buildAnswerPatternDocument(input),
+      buildMicroKnowledgeDocument(input),
       { adminMemberId },
     );
 
-    const pattern = await this.prisma.$transaction(async (tx) => {
-      const pattern = await tx.answerPattern.create({ data: input });
+    return this.prisma.$transaction(async (tx) => {
+      const knowledge = await tx.microKnowledge.create({
+        data: { ...input, tenantId: this.scope.tenantId },
+      });
       await this.vectors.upsert(
         tx,
-        pattern.id,
+        knowledge.id,
         embedding.values,
         embedding.model,
-        pattern.active,
+        knowledge.active,
       );
-      return pattern;
+      return knowledge;
     });
-
-    await this.answerPatternCache.refresh();
-    return pattern;
   }
 
   async update(
     id: string,
-    input: UpdateAdminAnswerPatternDto,
+    input: UpdateAdminMicroKnowledgeDto,
     adminMemberId?: string,
-  ): Promise<AnswerPattern> {
-    const existing = await this.prisma.answerPattern.findUnique({
-      where: { id },
+  ): Promise<MicroKnowledge> {
+    const existing = await this.prisma.microKnowledge.findFirst({
+      where: { id, tenantId: this.scope.tenantId },
     });
 
     if (!existing) {
-      throw new NotFoundException('Answer pattern not found');
+      throw new NotFoundException('Micro knowledge not found');
     }
 
     const { addKeywords, removeKeywords, ...updates } = input;
@@ -87,39 +99,35 @@ export class AdminAnswerPatternService {
     };
     const merged = { ...existing, ...data };
     const embedding = await this.embeddingService.embedDocument(
-      buildAnswerPatternDocument(merged),
+      buildMicroKnowledgeDocument(merged),
       { adminMemberId },
     );
 
-    const pattern = await this.prisma.$transaction(async (tx) => {
-      const pattern = await tx.answerPattern.update({
+    return this.prisma.$transaction(async (tx) => {
+      const knowledge = await tx.microKnowledge.update({
         where: { id },
         data,
       });
       await this.vectors.upsert(
         tx,
-        pattern.id,
+        knowledge.id,
         embedding.values,
         embedding.model,
-        pattern.active,
+        knowledge.active,
       );
-      return pattern;
+      return knowledge;
     });
-
-    await this.answerPatternCache.refresh();
-    return pattern;
   }
 
   async remove(id: string): Promise<{ deleted: true }> {
-    const result = await this.prisma.answerPattern.deleteMany({
-      where: { id },
+    const result = await this.prisma.microKnowledge.deleteMany({
+      where: { id, tenantId: this.scope.tenantId },
     });
 
     if (!result.count) {
-      throw new NotFoundException('Answer pattern not found');
+      throw new NotFoundException('Micro knowledge not found');
     }
 
-    await this.answerPatternCache.refresh();
     return { deleted: true };
   }
 
@@ -127,26 +135,28 @@ export class AdminAnswerPatternService {
     indexed: number;
     failed: Array<{ id: string; reason: string }>;
   }> {
-    const patterns = await this.prisma.answerPattern.findMany();
+    const rows = await this.prisma.microKnowledge.findMany({
+      where: { tenantId: this.scope.tenantId },
+    });
     const failed: Array<{ id: string; reason: string }> = [];
     let indexed = 0;
 
-    for (const pattern of patterns) {
+    for (const knowledge of rows) {
       try {
         const embedding = await this.embeddingService.embedDocument(
-          buildAnswerPatternDocument(pattern),
+          buildMicroKnowledgeDocument(knowledge),
           { adminMemberId },
         );
         await this.vectors.upsert(
           this.prisma,
-          pattern.id,
+          knowledge.id,
           embedding.values,
           embedding.model,
-          pattern.active,
+          knowledge.active,
         );
         indexed += 1;
       } catch (error) {
-        failed.push({ id: pattern.id, reason: String(error) });
+        failed.push({ id: knowledge.id, reason: String(error) });
       }
     }
 

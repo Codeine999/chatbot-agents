@@ -178,11 +178,30 @@ export class LineDeliveryService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async accept(row: LineDelivery, owner: string) {
-    const updated = await this.finishAttempt(row.id, owner, {
-      status: 'ACCEPTED',
-      acceptedAt: new Date(),
-      lastError: null,
+    const acceptedAt = new Date();
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const accepted = await tx.lineDelivery.updateMany({
+        where: { id: row.id, leaseOwner: owner, status: 'SENDING' },
+        data: {
+          status: 'ACCEPTED',
+          acceptedAt,
+          lastError: null,
+          leaseOwner: null,
+          leaseUntil: null,
+        },
+      });
+
+      if (accepted.count && row.adminMemberId) {
+        // waiting_admin is the request queue state. Redis remains the bot gate.
+        await tx.lineConversation.updateMany({
+          where: { id: row.conversationId, status: 'waiting_admin' },
+          data: { status: 'open' },
+        });
+      }
+
+      return accepted;
     });
+
     if (updated.count) {
       // Finalization failures must never change an accepted delivery back to pending.
       try {

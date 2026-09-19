@@ -142,12 +142,17 @@ erDiagram
 
     AiSetting {
         uuid id PK
-        string systemPrompt
-        string tone "nullable"
+        uuid tenantId "nullable deployment scope"
+        string systemPrompt "DEV-only platform rules"
+        string ownerPrompt "nullable business persona"
+        string tone "nullable text"
+        json skills "default []"
+        json responseStyle "targetLength + emojiLevel"
+        int promptVersion "default 1"
         string fallbackMessage "nullable"
         boolean active "default true — multiple actives possible"
         datetime createdAt
-        datetime updatedAt "no @updatedAt"
+        datetime updatedAt "@updatedAt"
     }
 
     CreditWallet {
@@ -198,14 +203,14 @@ erDiagram
 
 ## Missing / Suspicious — findings
 
-1. **`AnswerPatternVector` requires its migration to be applied.** Migration `20260725000000_add_answer_pattern_vectors` creates the `vector` extension, table, and HNSW index. Existing patterns created before vector indexing still need `POST /api/admin/answer-patterns/reindex`.
+1. **`AnswerPatternVector` requires its migration to be applied.** Migration `20260725000000_add_answer_pattern_vectors` creates the `vector` extension, table, and HNSW index. Existing patterns created before vector indexing still need `POST /api/admin/knowledge-patterns/reindex`.
 2. **`Payment.approveBy` is a dangling UUID** — `AdminMember` now exists, so this column can finally become a real FK. Today nothing enforces it and no code writes it.
 3. **`Payment` → `Member` joins on `username`**, a business-visible field, instead of the immutable `uuid` PK. Works because `username` is unique, but renaming a user breaks history semantics. `Payment` also lacks an **amount/currency** and any slip reference — unusual for a payment record.
 4. **Free-text status columns**: `Member.statusaccount` (`'pending'`), `LineConversation.status` (`'open'`), `LineChatHistory.sentStatus` (`'received'`) are strings, while `Payment.status` is a proper enum. Inconsistent; typos become silent states. `LineConversation.status` is the natural home for the admin-takeover flag (`open`/`admin`/`closed`) — worth making an enum when that lands.
 5. **`LineChatHistory.lineMessageId` is unique nullable** — it makes message redelivery idempotent while allowing postbacks/system rows that have no LINE message ID. The migration fails explicitly if historical duplicate IDs must be cleaned first.
 6. **No session/conversation-state table** — chat sessions intentionally live in Redis with a sliding TTL; PostgreSQL stores chat history, not transient flow state.
 7. **Multiple active `AiSetting` rows are possible**; code picks `findFirst(active, orderBy updatedAt desc)`. A partial unique index on `active = true` (or a singleton row convention) would remove the ambiguity.
-8. **`updatedAt` without `@updatedAt`** on `AiSetting`, `AnswerPattern`, `AnswerPatternVector` — the column never updates unless set manually, which breaks the "newest active setting wins" ordering above.
+8. **`updatedAt` without `@updatedAt`** remains on `AnswerPattern` and `AnswerPatternVector`; `AiSetting` now uses `@updatedAt` so its "newest active setting wins" ordering advances on Prisma updates.
 9. **Credentials at rest**: `Member.password` is bcrypt-hashed (good), but the register-success chat reply containing the *plaintext* password is persisted into `LineChatHistory.text` (see architecture doc §6, finding 2). A data-model-adjacent leak worth fixing at the application layer.
 10. **`CreditWallet` is global** (unique per type, no tenant/member FK) — correct for a single-OA deployment; becomes a remodel if multi-tenant is ever planned.
 11. **`AnswerPattern.tenantId` exists but is dead** — nullable, never read, never written, no index, no FK. It is a placeholder for the SaaS fork; until then it silently suggests a multi-tenant guarantee that no query enforces.

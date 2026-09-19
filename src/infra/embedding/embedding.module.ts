@@ -20,8 +20,8 @@ import { GeminiEmbeddingAdapter } from './gemini-embedding.adapter';
  *    chat providers is not reachable anyway.
  *
  * Changing `GEMINI_EMBEDDING_MODEL` carries the same cost as (1): the whole
- * knowledge base must be reindexed (`POST` reindex on the admin answer-pattern
- * route) before vector search works again. Treat it as a migration, not a
+ * knowledge base must be reindexed (the admin answer-pattern and micro-knowledge
+ * reindex routes) before vector search works again. Treat it as a migration, not a
  * setting.
  */
 @Module({
