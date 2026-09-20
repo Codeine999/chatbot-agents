@@ -12,6 +12,12 @@ enum RichMenuStatus {
 model RichMenuTemplate {
   id String @id @default(uuid()) @db.Uuid
 
+  /// Owning company. Every read and write scopes to it so one tenant never
+  /// sees or replaces another tenant's menus. Null is the legacy single-tenant
+  /// deployment, which is a scope of its own and not shared with any company.
+  tenantId String?  @db.Uuid
+  tenant   Company? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   /// LINE `name` — internal label, not shown to users. Max 300 chars on LINE.
   name        String @db.VarChar(300)
   /// LINE `chatBarText` — the label on the tab that opens the menu. Max 14 chars.
@@ -29,13 +35,29 @@ model RichMenuTemplate {
   areas Json
 
   /// Menu image stored locally under `/uploads/richmenu` and uploaded to LINE on publish.
+  /// When the tenant uploads one image per cell this holds the composited result.
   imagePath     String? @db.VarChar(500)
   imageMimeType String? @db.VarChar(100)
   imageBytes    Int?
 
+  /// How many equal cells the menu image is divided into.
+  ///
+  /// It cannot be derived from `areas`: a cell that is decorative has no area
+  /// at all, so a six-cell menu with three buttons would read back as three.
+  /// Null is a menu built before per-cell images, where areas are the only
+  /// grid there is.
+  cellCount Int?
+
+  /// One uploaded image per tappable cell, shape-validated by
+  /// `richMenuCellImagesSchema`. Kept so a tenant can replace a single cell
+  /// without re-uploading the whole menu; `imagePath` is derived from these.
+  cellImages Json?
+
   status RichMenuStatus @default(DRAFT)
 
   /// `richMenuId` LINE returned for the live revision of this template.
+  /// LINE issues these globally, so the unique index stays global: scoping it
+  /// per tenant would let two null-tenant rows claim the same live menu.
   lineRichMenuId String? @unique @db.VarChar(100)
   /// LINE rich menu alias, used by tab-style menus that switch between each other.
   lineAliasId    String? @db.VarChar(100)
@@ -54,7 +76,47 @@ model RichMenuTemplate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([tenantId, status, updatedAt])
   @@index([status, updatedAt])
   @@index([createdByAdminId])
   @@map("richMenuTemplate")
+}
+
+/// What the bot answers when a tenant's customer taps one rich menu button.
+///
+/// The menu on LINE carries only `menu=<key>`; the wording lives here so a
+/// tenant can rewrite an answer without republishing the menu, and so two
+/// menus can share one answer.
+model RichMenuReply {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Owning company, scoped exactly like RichMenuTemplate.
+  tenantId String?  @db.Uuid
+  tenant   Company? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Stable id the menu points at (`postback` data `menu=<key>`). Tenant-chosen,
+  /// lowercase slug, never shown to the customer.
+  key String @db.VarChar(64)
+
+  /// What the customer reads: the button caption, and the text echoed into the
+  /// chat when they tap it. Typing it by hand resolves to the same reply.
+  label String @db.VarChar(100)
+
+  /// The answer sent back. Plain text; LINE caps one text message at 5000 chars.
+  replyText String @db.Text
+
+  /// Off keeps the row and its history while the bot stops answering with it.
+  active Boolean @default(true)
+
+  /// Ordering in the back office list only; it has no effect on matching.
+  sortOrder Int @default(0)
+
+  createdByAdminId String? @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, key])
+  @@index([tenantId, active])
+  @@map("richMenuReply")
 }

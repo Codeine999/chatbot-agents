@@ -16,6 +16,10 @@ export class CreateAdminDto extends createZodDto(
     phone: z.string().trim().min(3).max(30),
     image: z.string().trim().url().nullable().optional(),
     role: z.enum(ADMIN_ROLES),
+    /**
+     * Reserved for future tenancy. New accounts currently have no company.
+     */
+    companyId: z.null().optional(),
     /** Initial ADMIN_AI_QUERY allowance; omitted admin accounts start locked. */
     aiBudgetLimitCredit: creditLimit.optional(),
   }),

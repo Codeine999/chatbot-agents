@@ -21,6 +21,7 @@ const ADMIN_PUBLIC_SELECT = {
   phone: true,
   image: true,
   role: true,
+  companyId: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -46,6 +47,7 @@ export class AdminAuthService {
       id: admin.id,
       username: admin.username,
       role: admin.role,
+      companyId: admin.companyId,
     });
 
     const { password: _password, ...safeAdmin } = admin;
@@ -60,11 +62,10 @@ export class AdminAuthService {
   }
 
   async create(input: CreateAdminDto) {
-
     if (input.role === 'dev') {
       throw new BadRequestException('Can not create dev user');
     }
-    
+
     const password = await bcrypt.hash(input.password, 12);
     let createdAdminId: string | undefined;
 
@@ -79,6 +80,7 @@ export class AdminAuthService {
           image: input.image ?? null,
           password,
           role: input.role,
+          companyId: null,
         },
         select: ADMIN_PUBLIC_SELECT,
       });
@@ -95,7 +97,6 @@ export class AdminAuthService {
 
       const { firstname, lastname, ...admin } = created;
       return { ...admin, firstName: firstname, lastName: lastname };
-
     } catch (error) {
       if (createdAdminId) {
         await this.prisma.adminMember
@@ -131,17 +132,17 @@ export class AdminAuthService {
           throw new ConflictException('Owner setup is already complete');
         }
         return tx.adminMember.create({
-        data: {
-          username: input.username,
-          firstname: input.firstName,
-          lastname: input.lastName,
-          email: input.email.toLowerCase(),
-          phone: input.phone,
-          image: input.image ?? null,
-          password,
-          role: 'owner',
-        },
-        select: ADMIN_PUBLIC_SELECT,
+          data: {
+            username: input.username,
+            firstname: input.firstName,
+            lastname: input.lastName,
+            email: input.email.toLowerCase(),
+            phone: input.phone,
+            image: input.image ?? null,
+            password,
+            role: 'owner',
+          },
+          select: ADMIN_PUBLIC_SELECT,
         });
       });
 

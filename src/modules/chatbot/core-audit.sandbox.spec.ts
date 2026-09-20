@@ -19,6 +19,7 @@ import { AiChatService } from './aichat.service';
 import { AiIntentClassifierService } from './ai-intent-classifier.service';
 import { IntentRouterService } from './intent-router.service';
 import { RuleIntentService } from './rule-intent.service';
+import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
 import { AdminAiSettingService } from '../admin/ai-setting/admin-ai-setting.service';
 import { CreateAdminAiSettingDto } from '../admin/ai-setting/dto/admin-ai-setting.dto';
 import { AdminKnowledgeMicroService } from '../admin/knowledge/admin-knowledge-micro.service';
@@ -147,6 +148,7 @@ sandbox(
         new RuleIntentService(),
         retrieval,
         new AiIntentClassifierService(budget, provider),
+        new RichMenuReplyCacheService(db, config),
       );
       microAdmin = new AdminKnowledgeMicroService(
         db,
@@ -414,6 +416,7 @@ sandbox(
         new ReplyTemplateService(),
         ai,
         new StickerIntentService(),
+        new RichMenuReplyCacheService(db, config),
         config,
       );
       generate.mockRejectedValueOnce(new Error('synthetic provider timeout'));
@@ -532,6 +535,7 @@ sandbox(
         new ReplyTemplateService(),
         scopedAi,
         new StickerIntentService(),
+        new RichMenuReplyCacheService(db, config),
         config,
       );
       const replyText = jest.fn().mockResolvedValue(true);
@@ -560,6 +564,7 @@ sandbox(
         lineAdmin,
         delivery,
         sessions,
+        new RichMenuReplyCacheService(db, config),
       );
       const member = await db.lineMember.create({
         data: {

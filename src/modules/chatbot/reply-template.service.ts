@@ -51,16 +51,29 @@ export class ReplyTemplateService {
     ].join('\n');
   }
 
-  defaultMessage(): string {
+  /**
+   * The greeting shown when there is nothing else to say.
+   *
+   * It takes the captions of the menu that is actually live rather than
+   * naming buttons of its own: a tenant who rebuilds its rich menu would
+   * otherwise have this message describing buttons that no longer exist, and
+   * nothing would fail to reveal it.
+   */
+  defaultMessage(menuLabels: readonly string[] = []): string {
+    if (!menuLabels.length) {
+      return [
+        'สวัสดีครับ',
+        'เลือกเมนูด้านล่าง หรือพิมพ์คำถามที่ต้องการสอบถามได้เลยครับ',
+      ].join('\n');
+    }
+
     return [
       'สวัสดีครับ',
       'กรุณาเลือกบริการที่ต้องการใช้งาน',
       '',
-      '1️⃣ สมัครสมาชิก',
-      '2️⃣ สอบถามข้อมูลทั่วไป',
-      '3️⃣ ติดต่อแอดมิน',
+      ...menuLabels.map((label) => `• ${label}`),
       '',
-      'โปรดพิมพ์หมายเลข 1, 2 หรือ 3 เพื่อดำเนินการต่อครับ',
+      'หรือพิมพ์คำถามที่ต้องการสอบถามได้เลยครับ',
     ].join('\n');
   }
 

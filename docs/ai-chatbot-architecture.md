@@ -217,6 +217,33 @@ Applied: RAG, GENERAL, image final answer. Not applied: deterministic rule/DIREC
 DIRECT คืนข้อความ curated ตาม DB เป๊ะ จึงไม่ได้รับ owner tone/emojiStyle; REWRITE จะไม่ใช้ exact fast path แต่ไหลต่อผ่าน micro lexical และ vector retrieval ก่อนส่ง evidence รวมให้ LLM ทั้งนี้ admin DTO ปัจจุบันยังไม่ expose renderMode เป็น field จึงตั้ง renderMode ผ่าน DTO นี้ไม่ได้
 
 
+### Rich menu editing and routing (2026-09-20)
+
+Rich menu HTTP controllers authenticate admins and use `tenantId=null` for
+all current requests. The reply cache uses the same null scope; admin company
+and `LINE_CHANNEL_TENANT_ID` do not select a rich menu tenant yet. Tenant/company
+columns remain reserved for future use. Non-null historical rows are not
+backfilled or merged automatically. New admin accounts accept only null companyId.
+
+Frontend preserves existing LINE actions in `{kind:"action",action:{...}}`.
+Saving a layout sends `{cells,buttons:[{action:...}|{replyKey}|{uri}|null]}`;
+the backend validates each action with the existing LINE action schema and
+rebuilds its bounds. Existing intent/message buttons therefore survive editing.
+When a layout is dirty, image upload first awaits layout persistence.
+
+Layout, cell upload/removal, full image upload and template updates acquire
+`SELECT ... FOR UPDATE` on the template inside a PostgreSQL transaction before
+reading and replacing its data. Image composition is local and performs no
+provider calls in that transaction. Stored artwork is resized to the current
+cell bounds at composition time. Removing the final cell image clears
+imagePath/imageMimeType/imageBytes; uploading a full image clears the per-cell
+sources. Old files are removed after commit; newly created files are cleaned
+up on rollback. The upload directory must be shared across app instances.
+
+Rich menu replies take precedence over an active registration flow. A new
+matching menu action clears the active session and chat context, as explicitly
+required for this deployment; it does not resume the interrupted form.
+
 ## 5. Function flow: ingress, worker และ delivery
 
 Source: [line.controller.ts](../src/modules/line/line.controller.ts), [processor](../src/modules/line/line-events.processor.ts), [webhook service](../src/modules/line/line-webhook.service.ts), [delivery service](../src/modules/line/line-delivery.service.ts)

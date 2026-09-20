@@ -132,6 +132,10 @@ model Company {
   aiUsageEvents AiUsageEvent[]
   creditTopups  CreditTopupHistory[]
 
+  adminMembers      AdminMember[]
+  richMenuTemplates RichMenuTemplate[]
+  richMenuReplies   RichMenuReply[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

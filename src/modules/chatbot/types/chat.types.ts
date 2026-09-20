@@ -1,11 +1,16 @@
-export type ChatIntent =
-  | 'REGISTER'
-  | 'GENERAL_QUESTION'
-  | 'ANSWER_KNOWLEDGE'
-  | 'REGISTER_HOW_TO'
-  | 'CONTACT_ADMIN'
-  | 'CANCEL'
-  | 'UNKNOWN';
+/** Runtime list so a rich menu button can be validated against it. */
+export const CHAT_INTENTS = [
+  'REGISTER',
+  'GENERAL_QUESTION',
+  'ANSWER_KNOWLEDGE',
+  'REGISTER_HOW_TO',
+  'CONTACT_ADMIN',
+  'RICH_MENU_REPLY',
+  'CANCEL',
+  'UNKNOWN',
+] as const;
+
+export type ChatIntent = (typeof CHAT_INTENTS)[number];
 
 export type ChatAction =
   | 'CANCEL_SESSION'
@@ -18,6 +23,7 @@ export type ChatAction =
   | 'FALLBACK'
   | 'CLARIFY'
   | 'CONTACT_ADMIN'
+  | 'RICH_MENU_REPLY'
   | 'DEFAULT';
 
 export type IntentSource =
@@ -72,6 +78,8 @@ export type RouteDecision = {
   retrieval?: KnowledgeRetrievalResult;
   businessFallback?: boolean;
   fallbackReason?: string;
+  /** Set by RICH_MENU_REPLY: the tenant-authored answer to send verbatim. */
+  richMenuReply?: { key: string; label: string; replyText: string };
 };
 
 export type ChatContextRole = 'user' | 'assistant';
@@ -103,6 +111,11 @@ export type ChatRequest = LineAiUsageContext &
     userId: string;
     text: string;
     recentMessages?: readonly ChatContextMessage[];
+    /**
+     * `postback.data` when a rich menu tap produced this turn. Text typed by a
+     * customer never carries it, so its presence is proof of a real tap.
+     */
+    postbackData?: string;
   }>;
 
 export type ImageChatRequest = LineAiUsageContext &

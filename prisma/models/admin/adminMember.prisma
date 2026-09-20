@@ -10,6 +10,11 @@ model AdminMember {
   role      AdminRole
   aiEnabled Boolean   @default(true)
 
+  /// The tenant this admin administers. Every company-owned query scopes to it,
+  /// so a null value can only read and write the legacy unscoped rows.
+  companyId String?  @db.Uuid
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -25,5 +30,6 @@ model AdminMember {
   approvedCreditTopupHistories  CreditTopupHistory[] @relation("CreditTopupApprovedBy")
   rejectedCreditTopupHistories  CreditTopupHistory[] @relation("CreditTopupRejectedBy")
 
+  @@index([companyId])
   @@map("adminMember")
 }

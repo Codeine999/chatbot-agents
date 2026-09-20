@@ -28,6 +28,7 @@ import { KnowledgeRetrievalService } from './knowledge/knowledge-retrieval.servi
 import { AiIntentClassifierService } from './ai-intent-classifier.service';
 import { IntentRouterService } from './intent-router.service';
 import { RuleIntentService } from './rule-intent.service';
+import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
 import { ChatbotService } from './chatbot.service';
 import { AiChatService } from './aichat.service';
 import { UserSessionService } from './user-session.service';
@@ -224,10 +225,18 @@ function build(
     provider,
   );
   const classify = jest.spyOn(classifier, 'classifyLowConfidence');
+  // This harness covers text routing only; no menu is configured, so every
+  // lookup misses and routing falls through exactly as it does today.
+  const richMenuReplies = {
+    byKey: () => null,
+    byLabel: () => null,
+    labels: () => [],
+  } as unknown as RichMenuReplyCacheService;
   const router = new IntentRouterService(
     new RuleIntentService(),
     retrieval,
     classifier,
+    richMenuReplies,
   );
   const session = {
     get: jest
@@ -249,6 +258,7 @@ function build(
     new ReplyTemplateService(),
     aiChat,
     new StickerIntentService(),
+    richMenuReplies,
     config,
   );
   const send = (text: string, recentMessages: ChatContextMessage[] = []) =>

@@ -2,9 +2,14 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import {
   RICH_MENU_BULK_MAX_USERS,
+  RICH_MENU_CELL_LAYOUTS,
   RICH_MENU_MAX_AREAS,
   RICH_MENU_SIZES,
 } from '../rich-menu.constants';
+import {
+  isMenuPostback,
+  parseMenuPostback,
+} from '../../../../shared/richMenu/menu-postback';
 
 const label = z.string().trim().min(1).max(20);
 
@@ -15,7 +20,25 @@ const label = z.string().trim().min(1).max(20);
 const postbackActionSchema = z.object({
   type: z.literal('postback'),
   label: label.optional(),
-  data: z.string().trim().min(1).max(300),
+  /**
+   * `intent=<ChatIntent>` or `menu=<reply key>`; see `menu-postback.ts`.
+   *
+   * A value using neither grammar is accepted and left to the tenant: menus
+   * published before this format still work, and the router falls through to
+   * normal routing for them. What is refused is a value that *looks* like one
+   * of the grammars but names something that does not exist — that is a typo,
+   * and it would otherwise only surface as a silent dead button on a menu
+   * already sitting on customers' phones.
+   */
+  data: z
+    .string()
+    .trim()
+    .min(1)
+    .max(300)
+    .refine(
+      (value) => !isMenuPostback(value) || parseMenuPostback(value) !== null,
+      'postback data must be intent=<known intent> or menu=<lowercase key>',
+    ),
   /** Echoed into the chat as if the user typed it. */
   displayText: z.string().trim().min(1).max(300).optional(),
   inputOption: z
@@ -95,6 +118,81 @@ export const richMenuAreasSchema = z
 
 export type RichMenuArea = z.infer<typeof richMenuAreaSchema>;
 export type RichMenuAction = z.infer<typeof richMenuActionSchema>;
+
+/** One uploaded button image, positioned by its index in the cell grid. */
+const richMenuCellImageSchema = z.object({
+  index: z.number().int().min(0).max(19),
+  path: z.string().trim().min(1).max(500),
+  mimeType: z.string().trim().min(1).max(100),
+  bytes: z.number().int().min(0),
+  width: z.number().int().min(1),
+  height: z.number().int().min(1),
+});
+
+export const richMenuCellImagesSchema = z.array(richMenuCellImageSchema);
+
+export type RichMenuCellImage = z.infer<typeof richMenuCellImageSchema>;
+
+export const RICH_MENU_CELL_COUNTS: readonly number[] =
+  RICH_MENU_CELL_LAYOUTS.map((layout) => layout.cells);
+
+export class RichMenuCellParamDto extends createZodDto(
+  z.object({
+    id: z.string().uuid(),
+    /** Position in the grid, left to right then top to bottom. */
+    index: z
+      .string()
+      .regex(/^\d{1,2}$/, 'index must be a number')
+      .transform(Number)
+      .refine((value) => value >= 0 && value < 20, 'index is out of range'),
+  }),
+) {}
+
+/**
+ * What one cell does when tapped. `null` leaves the cell decorative: its image
+ * still shows, it simply is not a button.
+ */
+const richMenuButtonSchema = z
+  .object({
+    /** Preserve an existing LINE action when editing a legacy menu. */
+    action: richMenuActionSchema.optional(),
+    /** A `RichMenuReply.key`; its label becomes the caption and chat echo. */
+    replyKey: z.string().trim().toLowerCase().max(64).optional(),
+    /** Opens a link instead of answering in chat. */
+    uri: z
+      .string()
+      .trim()
+      .max(1000)
+      .refine(
+        (value) => /^(https?|line|tel):/i.test(value),
+        'uri must start with http, https, line or tel',
+      )
+      .optional(),
+  })
+  .nullable()
+  .refine(
+    (value) =>
+      !value ||
+      [value.replyKey, value.uri, value.action].filter(Boolean).length === 1,
+    'a button must contain exactly one action, replyKey or uri',
+  );
+
+export class ApplyRichMenuLayoutDto extends createZodDto(
+  z.object({
+    /** How many equal cells the menu image is divided into. */
+    cells: z
+      .number()
+      .int()
+      .refine(
+        (value) => RICH_MENU_CELL_COUNTS.includes(value),
+        `cells must be one of ${RICH_MENU_CELL_COUNTS.join(', ')}`,
+      ),
+    /** One entry per cell, in grid order. Shorter arrays leave the rest blank. */
+    buttons: z.array(richMenuButtonSchema).max(RICH_MENU_MAX_AREAS).default([]),
+  }),
+) {}
+
+export type RichMenuButtonInput = z.infer<typeof richMenuButtonSchema>;
 
 const sizeSchema = z
   .object({

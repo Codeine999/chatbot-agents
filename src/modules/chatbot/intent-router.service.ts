@@ -3,6 +3,9 @@ import { ConversationSession } from './user-session.service';
 import { RuleIntentService } from './rule-intent.service';
 import { AiIntentClassifierService } from './ai-intent-classifier.service';
 import { KnowledgeRetrievalService } from './knowledge/knowledge-retrieval.service';
+
+import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
+import { parseMenuPostback } from '../../shared/richMenu/menu-postback';
 import {
   ChatContextMessage,
   IntentSource,
@@ -23,6 +26,7 @@ export class IntentRouterService {
     private readonly ruleIntentService: RuleIntentService,
     private readonly knowledgeRetrievalService: KnowledgeRetrievalService,
     private readonly aiIntentClassifierService: AiIntentClassifierService,
+    private readonly richMenuReplies: RichMenuReplyCacheService,
   ) {}
 
   async resolve(
@@ -31,6 +35,8 @@ export class IntentRouterService {
       input: string;
       session: ConversationSession | undefined;
       recentMessages?: readonly ChatContextMessage[];
+      /** `postback.data` when this turn came from a rich menu tap. */
+      postbackData?: string;
     },
   ): Promise<RouteDecision> {
     const {
@@ -41,6 +47,7 @@ export class IntentRouterService {
       lineMemberId,
       conversationId,
       turnId,
+      postbackData,
     } = params;
 
     this.logger.debug(
@@ -50,6 +57,11 @@ export class IntentRouterService {
         `status=${session?.status ?? 'none'}`,
       ]),
     );
+
+    // A rich menu tap is a contract the tenant published, so it outranks every
+    // rule, session and classifier below: the button says what it means.
+    const menuDecision = this.resolveRichMenu(postbackData, input);
+    if (menuDecision) return this.logDecision(input, menuDecision);
 
     //detect from rule base first
     const rule = this.ruleIntentService.detect(input);
@@ -256,6 +268,76 @@ export class IntentRouterService {
     return retrieval.selectedItems[0]?.metadata?.retrievalLayer === 'DATABASE'
       ? 'DATABASE'
       : 'CACHE';
+  }
+
+  /**
+   * Turns a rich menu tap into a decision.
+   *
+   * `postbackData` is the reliable path: the button carries its own meaning,
+   * so nothing has to be guessed from wording. The text path exists because a
+   * tap echoes its caption into the chat and customers also type captions by
+   * hand — both should land on the same answer.
+   *
+   * Returns null whenever nothing matches, including for a button whose reply
+   * was deleted, so the caller falls through to ordinary routing instead of
+   * answering with an empty message.
+   */
+  private resolveRichMenu(
+    postbackData: string | undefined,
+    input: string,
+  ): RouteDecision | null {
+    if (postbackData) {
+      const parsed = parseMenuPostback(postbackData);
+
+      if (parsed?.kind === 'intent') {
+        return {
+          ...fromRule({
+            intent: parsed.intent,
+            confidence: 1,
+            source: 'RULE',
+            reason: 'rich menu postback',
+          }),
+          source: 'RULE',
+        };
+      }
+
+      if (parsed?.kind === 'reply') {
+        const match = this.richMenuReplies.byKey(parsed.key);
+
+        if (match) {
+          return {
+            action: 'RICH_MENU_REPLY',
+            intent: 'RICH_MENU_REPLY',
+            confidence: 1,
+            source: 'DATABASE',
+            reason: `rich menu key ${match.key}`,
+            richMenuReply: match,
+          };
+        }
+
+        this.logger.warn(
+          logBlock('RichMenu', [
+            `key=${parsed.key}`,
+            'result=no active reply; falling through to normal routing',
+          ]),
+        );
+      }
+    }
+
+    const byLabel = this.richMenuReplies.byLabel(input);
+
+    if (byLabel) {
+      return {
+        action: 'RICH_MENU_REPLY',
+        intent: 'RICH_MENU_REPLY',
+        confidence: 1,
+        source: 'DATABASE',
+        reason: `rich menu label "${byLabel.label}"`,
+        richMenuReply: byLabel,
+      };
+    }
+
+    return null;
   }
 
   private logDecision(

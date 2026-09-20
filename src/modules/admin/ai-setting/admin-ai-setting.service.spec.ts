@@ -30,6 +30,7 @@ const admin = (role: AuthenticatedAdmin['role']): AuthenticatedAdmin => ({
   email: `${role}@example.com`,
   phone: '0000000000',
   image: null,
+  companyId: null,
   role,
 });
 

@@ -33,7 +33,12 @@ export class AdminJwtService {
         : DEFAULT_EXPIRES_IN_SECONDS;
   }
 
-  sign(subject: { id: string; username: string; role: AdminRole }): string {
+  sign(subject: {
+    id: string;
+    username: string;
+    role: AdminRole;
+    companyId: string | null;
+  }): string {
     const secret = this.getSigningSecret();
     const now = Math.floor(Date.now() / 1000);
     const header = this.encode({ alg: JWT_ALGORITHM, typ: 'JWT' });
@@ -41,6 +46,7 @@ export class AdminJwtService {
       sub: subject.id,
       username: subject.username,
       role: subject.role,
+      companyId: subject.companyId,
       tokenType: 'admin',
       iat: now,
       exp: now + this.expiresInSeconds,
@@ -71,6 +77,7 @@ export class AdminJwtService {
         phone: true,
         image: true,
         role: true,
+        companyId: true,
       },
     });
 
@@ -112,6 +119,9 @@ export class AdminJwtService {
       if (
         typeof payload.sub !== 'string' ||
         typeof payload.username !== 'string' ||
+        (payload.companyId !== null &&
+          payload.companyId !== undefined &&
+          typeof payload.companyId !== 'string') ||
         payload.tokenType !== 'admin' ||
         !isAdminRole(payload.role) ||
         typeof payload.iat !== 'number' ||

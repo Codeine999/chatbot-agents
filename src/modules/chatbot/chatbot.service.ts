@@ -14,6 +14,7 @@ import {
   StickerChatRequest,
 } from './types/chat.types';
 import { StickerIntentService } from './sticker-intent.service';
+import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
 import { logBlock, logSafeText } from '../../utils/text.utils';
 import { isRegistrationEnabled } from '../registration/registration-feature';
 
@@ -29,6 +30,7 @@ export class ChatbotService {
     private readonly replyTemplateService: ReplyTemplateService,
     private readonly aiChatService: AiChatService,
     private readonly stickerIntentService: StickerIntentService,
+    private readonly richMenuReplies: RichMenuReplyCacheService,
     private readonly configService: ConfigService,
   ) {
     this.aiMaxMessageLength = Number(
@@ -44,6 +46,7 @@ export class ChatbotService {
       lineMemberId,
       conversationId,
       turnId,
+      postbackData,
     } = request;
     const input = text.trim();
     const usage = { userId, lineMemberId, conversationId, turnId };
@@ -57,7 +60,9 @@ export class ChatbotService {
 
     if (!input) {
       return this.response(
-        this.replyTemplateService.defaultMessage(),
+        this.replyTemplateService.defaultMessage(
+          this.richMenuReplies.labels(),
+        ),
         'SYSTEM',
         'CLEAR',
       );
@@ -106,6 +111,7 @@ export class ChatbotService {
       input,
       session,
       recentMessages,
+      postbackData,
     });
 
     this.logger.debug(
@@ -218,6 +224,31 @@ export class ChatbotService {
         return this.contactAdminResponse(userId, true);
       }
 
+      case 'RICH_MENU_REPLY': {
+        // The tenant wrote this answer for this button. It is sent verbatim:
+        // no AI call, no retrieval, nothing to spend and nothing to invent.
+        if (!decision.richMenuReply) {
+          return this.response(
+            this.replyTemplateService.defaultMessage(
+          this.richMenuReplies.labels(),
+        ),
+            'SYSTEM',
+            'CLEAR',
+          );
+        }
+
+        // A menu tap starts a fresh topic, so whatever flow was open ends here.
+        if (session?.status === 'ACTIVE') {
+          await this.userSessionService.clear(userId);
+        }
+
+        return this.response(
+          decision.richMenuReply.replyText,
+          'RULE',
+          'CLEAR',
+        );
+      }
+
       case 'CONTACT_ADMIN':
         return this.contactAdminResponse(userId, decision.businessFallback);
 
@@ -228,7 +259,9 @@ export class ChatbotService {
 
       default:
         return this.response(
-          this.replyTemplateService.defaultMessage(),
+          this.replyTemplateService.defaultMessage(
+          this.richMenuReplies.labels(),
+        ),
           'SYSTEM',
           'CLEAR',
         );

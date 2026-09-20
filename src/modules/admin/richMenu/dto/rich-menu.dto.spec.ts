@@ -128,3 +128,35 @@ describe('Rich menu DTO schemas', () => {
     ).toThrow();
   });
 });
+
+describe('rich menu postback data', () => {
+  const area = (data: string) => ({
+    bounds: { x: 0, y: 0, width: 2500, height: 1686 },
+    action: { type: 'postback' as const, data },
+  });
+
+  const parse = (data: string) =>
+    CreateRichMenuTemplateDto.schema.safeParse({
+      name: 'เมนู',
+      chatBarText: 'เมนู',
+      size: { width: 2500, height: 1686 },
+      areas: [area(data)],
+    });
+
+  it('accepts a known intent and a slug key', () => {
+    expect(parse('intent=REGISTER').success).toBe(true);
+    expect(parse('menu=promo_today').success).toBe(true);
+  });
+
+  it('rejects an intent that does not exist', () => {
+    expect(parse('intent=REGISTR').success).toBe(false);
+  });
+
+  it('rejects a key that is not a lowercase slug', () => {
+    expect(parse('menu=Promo Today').success).toBe(false);
+  });
+
+  it('still accepts a value using neither grammar', () => {
+    expect(parse('action=legacy').success).toBe(true);
+  });
+});

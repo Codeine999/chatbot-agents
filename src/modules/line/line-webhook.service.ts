@@ -11,6 +11,7 @@ import {
 } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ChatbotService } from '../chatbot/chatbot.service';
+import { RichMenuReplyCacheService } from '../chatbot/menu/rich-menu-reply-cache.service';
 import { LoadContextService } from '../chatbot/context/load-context.service';
 import type { ChatResponse } from '../chatbot/types/chat.types';
 import type {
@@ -59,6 +60,7 @@ export class LineWebhookService {
     private readonly lineAdminService: LineAdminService,
     private readonly deliveryService: LineDeliveryService,
     private readonly sessions: UserSessionService,
+    private readonly richMenuReplies: RichMenuReplyCacheService,
   ) {}
 
   /**
@@ -72,9 +74,13 @@ export class LineWebhookService {
     if (existingDelivery) { await this.deliveryService.deliver(existingDelivery.id); return; }
     const savedIncomingEvent = await this.saveIncomingEvent(event);
 
-    if (event.type !== 'message') return;
+    // A rich menu tap arrives as a postback, not a message. It is answered
+    // through the same path as text so a tap and the equivalent typed message
+    // share one set of session, mute, context and delivery rules.
+    if (event.type !== 'message' && event.type !== 'postback') return;
 
     if (
+      event.type === 'message' &&
       event.message.type !== 'text' &&
       event.message.type !== 'image' &&
       event.message.type !== 'sticker'
@@ -101,7 +107,23 @@ export class LineWebhookService {
       turnId: event.webhookEventId,
     };
 
-    if (event.message.type === 'text') {
+    if (event.type === 'postback') {
+      // LINE echoes a button's `displayText` into the customer's chat but does
+      // not send it back, so the caption is read from the reply the button
+      // points at. Stored context then reads as if the customer said it, and
+      // an unrecognised button still carries its raw data into normal routing.
+      contextUserText =
+        this.richMenuReplies.byPostbackData(event.postback.data)?.label ??
+        event.postback.data;
+
+      response = await this.chatbotService.handleTextMessage({
+        userId: event.source.userId,
+        ...thread,
+        text: contextUserText,
+        postbackData: event.postback.data,
+        recentMessages,
+      });
+    } else if (event.message.type === 'text') {
       contextUserText = event.message.text;
       response = await this.chatbotService.handleTextMessage({
         userId: event.source.userId,

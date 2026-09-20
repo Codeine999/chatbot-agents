@@ -31,6 +31,10 @@ export const RULE_MAP: Record<ChatIntent, IntentRouteMapping> = {
     action: 'ANSWER_KNOWLEDGE',
     reason: 'AI how-to-register, answer from knowledge base',
   },
+  RICH_MENU_REPLY: {
+    action: 'RICH_MENU_REPLY',
+    reason: 'rich menu button answered from the tenant reply table',
+  },
   UNKNOWN: {
     action: 'GENERAL_QUESTION',
     reason: 'rule fallback',

@@ -35,3 +35,22 @@ export const RICH_MENU_UPLOAD_URL_PREFIX = '/uploads/richmenu';
 
 /** LINE rejects a bulk link/unlink request carrying more than 500 user ids. */
 export const RICH_MENU_BULK_MAX_USERS = 500;
+
+/** LINE rejects a text message longer than this, so a reply cannot exceed it. */
+export const RICH_MENU_REPLY_TEXT_MAX = 5000;
+
+/**
+ * Cell counts a tenant can build a menu from. Each entry is a grid over the
+ * full canvas, and every cell takes one uploaded image.
+ */
+export const RICH_MENU_CELL_LAYOUTS = [
+  { cells: 1, columns: 1, rows: 1 },
+  { cells: 2, columns: 2, rows: 1 },
+  { cells: 3, columns: 3, rows: 1 },
+  { cells: 4, columns: 2, rows: 2 },
+  { cells: 6, columns: 3, rows: 2 },
+] as const;
+
+export type RichMenuCellLayout = (typeof RICH_MENU_CELL_LAYOUTS)[number];
+
+export const RICH_MENU_CELL_UPLOAD_URL_PREFIX = '/uploads/richmenu/cells';

@@ -12,9 +12,11 @@ import { AiModule } from './ai.module';
 import { NotificationModule } from '../admin/notification/notification.module';
 import { LoadContextService } from './context/load-context.service';
 import { StickerIntentService } from './sticker-intent.service';
+import { PrismaModule } from '../../prisma/prisma.module';
+import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
 
 @Module({
-  imports: [RegistrationModule, AiModule, NotificationModule],
+  imports: [PrismaModule, RegistrationModule, AiModule, NotificationModule],
   providers: [
     ChatbotService,
     RuleIntentService,
@@ -23,12 +25,14 @@ import { StickerIntentService } from './sticker-intent.service';
     UserSessionService,
     LoadContextService,
     StickerIntentService,
+    RichMenuReplyCacheService,
     RegistrationFlowService,
     RegisterParser,
     RegisterValidator,
   ],
   exports: [
     ChatbotService,
+    RichMenuReplyCacheService,
     ReplyTemplateService,
     UserSessionService,
     LoadContextService,
