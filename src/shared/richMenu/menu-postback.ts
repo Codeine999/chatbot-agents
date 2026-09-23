@@ -1,18 +1,5 @@
 import { CHAT_INTENTS, type ChatIntent } from '../../modules/chatbot/types/chat.types';
 
-/**
- * What a rich menu button sends back when a customer taps it.
- *
- * A menu on LINE is immutable and lives on the customer's phone long after it
- * is replaced here, so the button has to describe itself. Two grammars exist:
- *
- * - `intent=REGISTER` — a capability the product implements in code.
- * - `menu=promo_today` — an answer the tenant wrote, resolved from
- *   `RichMenuReply` at chat time so editing the wording never republishes.
- *
- * Anything else is left alone: it may be a tenant's own convention from before
- * this format, and the router simply falls through to normal routing.
- */
 export type MenuPostback =
   | { kind: 'intent'; intent: ChatIntent }
   | { kind: 'reply'; key: string };

@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { RichMenuReply } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -18,7 +13,6 @@ export type RichMenuReplyMatch = Readonly<{
   via: 'POSTBACK' | 'LABEL';
 }>;
 
-const CACHE_TTL_MS = 60_000;
 const MAX_CACHED_REPLIES = 200;
 
 /**
@@ -34,18 +28,14 @@ const MAX_CACHED_REPLIES = 200;
  * routing rather than answering with nothing.
  */
 @Injectable()
-export class RichMenuReplyCacheService
-  implements OnModuleInit, OnModuleDestroy
-{
+export class RichMenuReplyCacheService implements OnModuleInit {
   private readonly logger = new Logger(RichMenuReplyCacheService.name);
   private readonly tenantId: string | null;
 
   private byKeyIndex = new Map<string, RichMenuReply>();
   private byLabelIndex = new Map<string, RichMenuReply>();
-  private loadedAt = 0;
   /** In-flight refresh; concurrent callers await it instead of re-querying. */
   private refreshing: Promise<void> | null = null;
-  private timer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -56,21 +46,15 @@ export class RichMenuReplyCacheService
 
   async onModuleInit(): Promise<void> {
     await this.refresh();
-    this.timer = setInterval(() => void this.refresh(), CACHE_TTL_MS);
-    this.timer.unref?.();
-  }
-
-  onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
   }
 
   byKey(key: string): RichMenuReplyMatch | null {
-    return this.toMatch(this.current().byKeyIndex.get(key), 'POSTBACK');
+    return this.toMatch(this.byKeyIndex.get(key), 'POSTBACK');
   }
 
   /** Captions in the tenant's own order, for prompting a customer with them. */
   labels(): string[] {
-    return [...this.current().byKeyIndex.values()].map((reply) => reply.label);
+    return [...this.byKeyIndex.values()].map((reply) => reply.label);
   }
 
   /** Resolves a raw `postback.data` value, ignoring the grammars it is not. */
@@ -85,14 +69,14 @@ export class RichMenuReplyCacheService
     const normalized = this.normalizeLabel(text);
     if (!normalized) return null;
 
-    return this.toMatch(this.current().byLabelIndex.get(normalized), 'LABEL');
+    return this.toMatch(this.byLabelIndex.get(normalized), 'LABEL');
   }
 
   /**
    * Reloads the snapshot from the database.
    *
-   * A plain call joins a refresh that is already running, which is right for
-   * the periodic tick. `force` is for a caller that has just written: joining
+   * A plain call joins a refresh that is already running. `force` is for a
+   * caller that has just written: joining
    * an in-flight read would settle on a snapshot taken before that write
    * committed, so the caller would be told the bot is up to date when it is
    * serving the previous wording. A forced refresh therefore queues behind
@@ -113,16 +97,6 @@ export class RichMenuReplyCacheService
     });
 
     return started;
-  }
-
-  /**
-   * A stale snapshot still answers. A rich menu button is a deterministic
-   * contract the tenant published, so serving the previous wording beats
-   * dropping the customer into the AI path because a refresh is due.
-   */
-  private current(): this {
-    if (Date.now() - this.loadedAt > CACHE_TTL_MS) void this.refresh();
-    return this;
   }
 
   private async doRefresh(): Promise<void> {
@@ -147,7 +121,6 @@ export class RichMenuReplyCacheService
 
       this.byKeyIndex = byKeyIndex;
       this.byLabelIndex = byLabelIndex;
-      this.loadedAt = Date.now();
 
       this.logger.debug(
         `[RichMenuReplyCache] loaded ${rows.length} active repl(ies)`,

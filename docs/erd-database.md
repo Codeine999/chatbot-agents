@@ -17,6 +17,7 @@ erDiagram
         string bankname
         string banknumber UK
         string statusaccount "free text, default 'pending' — not an enum"
+        datetime createdAt "registration time; sorts/display the admin user list"
     }
 
     Payment {

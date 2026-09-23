@@ -93,7 +93,7 @@ describe('RichMenuReplyCacheService', () => {
   });
 
   it('a forced refresh reads again instead of joining one already running', async () => {
-    // The race this closes: an admin saves a reply while the periodic refresh
+    // The race this closes: an admin saves a reply while another refresh
     // is mid-query. Joining that query would settle on rows read before the
     // save committed, and the admin would be told the bot is up to date.
     const { findMany, service } = build([]);

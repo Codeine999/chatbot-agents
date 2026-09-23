@@ -30,15 +30,7 @@ import {
   UpdateRichMenuTemplateDto,
 } from './dto/rich-menu.dto';
 
-/**
- * Rich menu back office.
- *
- * Reading is open to any admin; anything that changes what LINE users see is
- * restricted to `dev` and `owner`, matching the other admin write endpoints.
- *
- * Routes with a static first segment (`line`, `users`, `default`, `unlink`)
- * are declared before the `:id` routes so the file reads in match order.
- */
+
 @AdminGuard()
 @Controller('api/admin/rich-menus')
 export class RichMenuController {

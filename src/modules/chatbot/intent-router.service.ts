@@ -35,7 +35,6 @@ export class IntentRouterService {
       input: string;
       session: ConversationSession | undefined;
       recentMessages?: readonly ChatContextMessage[];
-      /** `postback.data` when this turn came from a rich menu tap. */
       postbackData?: string;
     },
   ): Promise<RouteDecision> {
@@ -58,9 +57,8 @@ export class IntentRouterService {
       ]),
     );
 
-    // A rich menu tap is a contract the tenant published, so it outranks every
-    // rule, session and classifier below: the button says what it means.
     const menuDecision = this.resolveRichMenu(postbackData, input);
+    console.log('menuDecision', menuDecision)
     if (menuDecision) return this.logDecision(input, menuDecision);
 
     //detect from rule base first
@@ -270,18 +268,6 @@ export class IntentRouterService {
       : 'CACHE';
   }
 
-  /**
-   * Turns a rich menu tap into a decision.
-   *
-   * `postbackData` is the reliable path: the button carries its own meaning,
-   * so nothing has to be guessed from wording. The text path exists because a
-   * tap echoes its caption into the chat and customers also type captions by
-   * hand — both should land on the same answer.
-   *
-   * Returns null whenever nothing matches, including for a button whose reply
-   * was deleted, so the caller falls through to ordinary routing instead of
-   * answering with an empty message.
-   */
   private resolveRichMenu(
     postbackData: string | undefined,
     input: string,

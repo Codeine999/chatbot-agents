@@ -86,9 +86,13 @@ export class KnowledgeRetrievalService {
       message.trim(),
       context.recentMessages ?? [],
     );
-    if (resolved.missingReference)
-      return this.result([], [], 'LOW_CONFIDENCE', 'MISSING_USER_INFORMATION');
+
+    if (resolved.missingReference) {
+      this.result([], [], 'LOW_CONFIDENCE', 'MISSING_USER_INFORMATION');
+    }
+
     const query = resolved.query;
+
     if (query !== message.trim())
       this.logger.debug(
         logBlock('Retrieval', [
@@ -96,10 +100,13 @@ export class KnowledgeRetrievalService {
           `query=${JSON.stringify(logSafeText(query))}`,
         ]),
       );
-    if (!normalizeText(query))
-      return this.result([], [], 'LOW_CONFIDENCE', 'NO_SEARCH_RESULTS');
 
+    if (!normalizeText(query)) {
+      return this.result([], [], 'LOW_CONFIDENCE', 'NO_SEARCH_RESULTS');
+    }
+      
     let failed = false;
+    
     const read = async (
       label: string,
       call: () => Promise<KnowledgeItem[]> | KnowledgeItem[],

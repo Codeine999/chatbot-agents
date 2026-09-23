@@ -8,8 +8,10 @@ model Member {
   bankname      String
   banknumber    String        @unique
   statusaccount String        @default("pending")
+  createdAt     DateTime      @default(now())
   payments      UserPayment[]
   lineMembers   LineMember[]
 
+  @@index([createdAt])
   @@map("member")
 }

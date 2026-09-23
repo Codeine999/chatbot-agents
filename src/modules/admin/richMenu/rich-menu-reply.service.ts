@@ -163,12 +163,12 @@ export class RichMenuReplyService {
   }
 
   /**
-   * Pulls the bot's in-memory copy forward immediately.
+   * Pulls the bot's in-memory copy forward immediately after a committed
+   * create, update, or delete.
    *
    * Without it a tenant who adds a button, publishes it and taps it to check
-   * gets the AI answer for up to a cache TTL, and reasonably concludes the
-   * feature is broken. A failed reload is not worth failing the write over:
-   * the periodic refresh still catches up on its own.
+   * gets the AI answer for up to a cache refresh, and reasonably concludes the
+   * feature is broken. A failed reload is not worth failing the write.
    */
   private async reloadBot(): Promise<void> {
     await this.cache.refresh({ force: true }).catch(() => undefined);

@@ -78,11 +78,6 @@ export class AnswerPatternService {
     this.scope = knowledgeScope(config);
   }
 
-  /**
-   * Direct DB search over answer_patterns — no embedding involved.
-   * Scores every active pattern against the normalized message and returns
-   * the strongest matches sorted by score desc, then priority desc.
-   */
   async findMatches(message: string): Promise<KnowledgeItem[]> {
     const normalized = normalizeText(message);
     if (!normalized) return [];
@@ -96,11 +91,6 @@ export class AnswerPatternService {
     return this.findMatchesFromPatterns(message, patterns, 'DATABASE');
   }
 
-  /**
-   * Score an existing pattern snapshot with the exact same matcher as the DB
-   * path. The cache calls this method so scoring weights cannot drift between
-   * cache lookup and the authoritative database fallback.
-   */
   findMatchesFromPatterns(
     message: string,
     patterns: readonly KnowledgeRecord[],
@@ -187,10 +177,6 @@ export class AnswerPatternService {
     );
   }
 
-  /**
-   * Whitespace tokens. Unspaced Thai text stays a single token and is
-   * matched via substring containment instead.
-   */
   private tokenize(normalized: string): string[] {
     return normalized.split(' ').filter((token) => token.length > 1);
   }
@@ -240,7 +226,6 @@ export class AnswerPatternService {
     return score;
   }
 
-  /** Best single-keyword score plus a small capped bonus for extra keyword hits. */
   private scoreKeywords(
     keywords: string[],
     normalized: string,
@@ -277,7 +262,6 @@ export class AnswerPatternService {
     return best + multiBonus;
   }
 
-  /** Best similarity score across the pattern's question examples. */
   private scoreQuestionExamples(
     examples: string[],
     normalized: string,
@@ -311,12 +295,10 @@ export class AnswerPatternService {
     return best;
   }
 
-  /** Substring containment guarded against overly short, ambiguous needles. */
   private contains(haystack: string, needle: string): boolean {
     return needle.length >= MIN_CONTAINS_LENGTH && haystack.includes(needle);
   }
 
-  /** Fraction of source tokens that also appear in target. */
   private tokenOverlapRatio(source: string[], target: string[]): number {
     if (source.length === 0 || target.length === 0) return 0;
     const targetSet = new Set(target);
