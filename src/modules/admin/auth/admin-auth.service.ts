@@ -61,7 +61,11 @@ export class AdminAuthService {
     };
   }
 
-  async create(input: CreateAdminDto) {
+  /**
+   * `companyId` is the creating admin's company; `POST /api/admin/auth/add`
+   * still passes the legacy null scope.
+   */
+  async create(input: CreateAdminDto, companyId: string | null = null) {
     if (input.role === 'dev') {
       throw new BadRequestException('Can not create dev user');
     }
@@ -80,7 +84,7 @@ export class AdminAuthService {
           image: input.image ?? null,
           password,
           role: input.role,
-          companyId: null,
+          companyId,
         },
         select: ADMIN_PUBLIC_SELECT,
       });
