@@ -17,6 +17,7 @@ import { StickerIntentService } from './sticker-intent.service';
 import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
 import { logBlock, logSafeText } from '../../utils/text.utils';
 import { isRegistrationEnabled } from '../registration/registration-feature';
+import { CLARIFY_MESSAGE } from './constants/knowledge-routing.constants';
 
 @Injectable()
 export class ChatbotService {
@@ -60,9 +61,7 @@ export class ChatbotService {
 
     if (!input) {
       return this.response(
-        this.replyTemplateService.defaultMessage(
-          this.richMenuReplies.labels(),
-        ),
+        this.replyTemplateService.defaultMessage(this.richMenuReplies.labels()),
         'SYSTEM',
         'CLEAR',
       );
@@ -73,7 +72,7 @@ export class ChatbotService {
         `message from ${userId} too long for AI: 
         ${input.length} > ${this.aiMaxMessageLength}`,
       );
-      
+
       return this.response(
         this.replyTemplateService.messageTooLong(),
         'SYSTEM',
@@ -202,11 +201,7 @@ export class ChatbotService {
         );
 
       case 'CLARIFY':
-        return this.response(
-          'ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยครับ',
-          'RULE',
-          'INCLUDE',
-        );
+        return this.response(CLARIFY_MESSAGE, 'RULE', 'INCLUDE');
 
       case 'ANSWER_KNOWLEDGE': {
         const result = await this.aiChatService.answerKnowledge(input, {
@@ -230,8 +225,8 @@ export class ChatbotService {
         if (!decision.richMenuReply) {
           return this.response(
             this.replyTemplateService.defaultMessage(
-          this.richMenuReplies.labels(),
-        ),
+              this.richMenuReplies.labels(),
+            ),
             'SYSTEM',
             'CLEAR',
           );
@@ -242,11 +237,7 @@ export class ChatbotService {
           await this.userSessionService.clear(userId);
         }
 
-        return this.response(
-          decision.richMenuReply.replyText,
-          'RULE',
-          'CLEAR',
-        );
+        return this.response(decision.richMenuReply.replyText, 'RULE', 'CLEAR');
       }
 
       case 'CONTACT_ADMIN':
@@ -260,8 +251,8 @@ export class ChatbotService {
       default:
         return this.response(
           this.replyTemplateService.defaultMessage(
-          this.richMenuReplies.labels(),
-        ),
+            this.richMenuReplies.labels(),
+          ),
           'SYSTEM',
           'CLEAR',
         );

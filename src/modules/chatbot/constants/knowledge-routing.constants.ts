@@ -12,3 +12,4 @@ export const DEFAULT_LEXICAL_CANDIDATE_MIN_SCORE = 3;
 export const MAX_RAG_EVIDENCE_CHARACTERS = 12_000;
 
 export const INSUFFICIENT_CONTEXT = 'INSUFFICIENT_CONTEXT';
+export const CLARIFY_MESSAGE = 'ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยครับ';

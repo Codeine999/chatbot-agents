@@ -1,5 +1,6 @@
 import { resolveRetrievalQuery } from '../retrieval-query-planner.service';
 import { userMessage } from './knowledge.fixtures';
+import { CLARIFY_MESSAGE } from '../../constants/knowledge-routing.constants';
 
 describe('resolveRetrievalQuery', () => {
   it('ข้อความปกติที่ไม่ได้อ้างถึงของเดิม ส่งผ่านตรง ๆ', () => {
@@ -82,6 +83,49 @@ describe('resolveRetrievalQuery', () => {
     expect(
       resolveRetrievalQuery('อันนี้ราคาเท่าไร', [userMessage(buried)])
         .missingReference,
+    ).toBe(true);
+  });
+
+  it.each([
+    ['สนใจโรงแรมริมทะเล', 'โรงแรมนี้ราคาเท่าไร'],
+    ['โปรโมชั่นส่งฟรีมีไหม', 'อันนี้ใช้ถึงวันไหน'],
+    ['สนใจสินค้าเครื่องกรองน้ำ', 'สินค้านี้รับประกันกี่ปี'],
+  ])('ใช้หัวข้อธุรกิจล่าสุดจากประวัติ: %s → %s', (previous, input) => {
+    expect(resolveRetrievalQuery(input, [userMessage(previous)])).toEqual({
+      query: `${previous}\n${input}`,
+      missingReference: false,
+    });
+  });
+
+  it('หลังถามให้ระบุหัวข้อ นำคำตอบสั้นมารวมกับคำถามเดิม', () => {
+    const history = [
+      userMessage('อันนี้ราคาเท่าไร'),
+      {
+        role: 'assistant' as const,
+        text: CLARIFY_MESSAGE,
+        source: 'RULE' as const,
+        createdAt: Date.now(),
+      },
+    ];
+    expect(resolveRetrievalQuery('โรงแรมริมทะเล', history)).toEqual({
+      query: 'โรงแรมริมทะเล\nอันนี้ราคาเท่าไร',
+      missingReference: false,
+    });
+  });
+
+  it('ไม่เดาหัวข้อเมื่อข้อความก่อนหน้าระบุสองทางเลือก', () => {
+    expect(
+      resolveRetrievalQuery('อันนี้ราคาเท่าไร', [
+        userMessage('สนใจโรงแรมริมทะเลกับโรงแรมภูเขา'),
+      ]).missingReference,
+    ).toBe(true);
+  });
+
+  it('ไม่ใช้ข้อความก่อนหน้าที่มีข้อมูลส่วนตัวเป็น search query', () => {
+    expect(
+      resolveRetrievalQuery('อันนี้ราคาเท่าไร', [
+        userMessage('อีเมล somchai@example.com'),
+      ]).missingReference,
     ).toBe(true);
   });
 });

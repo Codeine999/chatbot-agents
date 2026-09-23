@@ -2,6 +2,8 @@
 
 ตรวจ working tree ปัจจุบัน ไม่ใช่เฉพาะ HEAD และไม่ใช่การรับรองว่าระบบ production ใช้โค้ดชุดนี้แล้ว
 
+> อัปเดตหลังการตรวจ: R01 แก้แล้วโดยคืนผล `MISSING_USER_INFORMATION` ทันทีเมื่ออ้างอิงไม่ชัด และ R12 ขยายให้ใช้หัวข้อจากข้อความผู้ใช้ล่าสุดที่ปลอดภัยใน context สูงสุด 3 turns ได้ เช่น โปรโมชัน สินค้า และโรงแรม รายละเอียดด้านล่างเป็น snapshot ตอนตรวจครั้งแรก; ข้อความที่ระบุว่า R01/R12 ยังไม่แก้เป็นหลักฐานย้อนหลัง ไม่ใช่สถานะล่าสุด
+
 ขอบเขตหลัก: อ่าน production source ครบ **30 ไฟล์ / 3,880 บรรทัด** ใน `src/modules/chatbot` ยกเว้น test, fixture และ audit harness; ตาม dependency ที่จำเป็นออกไปดู LINE ingress/delivery, embedding, vector SQL, knowledge writers, schema/migrations และ provider boundary เพื่ออธิบาย flow ได้ครบ ส่วนเทสต์ใช้เป็นเครื่องมือพิสูจน์หลังตรวจ source ไม่ใช้แทนการอ่าน source
 
 งานนี้เพิ่มรายงานและ characterization tests เท่านั้น ไม่แก้ production logic, schema, ข้อมูล หรือไฟล์เดิมของผู้ใช้ ไม่เรียก LINE/AI จริง ไม่ตรวจ billing correctness ทั้งระบบ
@@ -45,7 +47,7 @@ flowchart TD
 ข้อยกเว้นสำคัญของภาพ:
 
 - cache หรือ DB `directResult()` คืน conflict ได้ทันที จึงมีทางออกก่อนขั้นค้นถัดไปด้วย
-- สาขา `missingReference` ตั้งใจให้หยุดแล้ว CLARIFY แต่โค้ดปัจจุบันไม่มี `return` จึงยังค้นต่อ (R01)
+- ณ เวลาตรวจครั้งแรก สาขา `missingReference` ไม่มี `return` จึงค้นต่อ (R01); แก้แล้วตามหมายเหตุด้านบน
 - conflict และ retrieval error ไป CONTACT_ADMIN โดยไม่เข้า classifier
 - provider error / empty generation / generation-budget rejection คืน fallback ธรรมดา ไม่เข้า handoff (R04)
 - การ append context เกิดหลัง LINE accepted; context เก็บสูงสุด 3 turns / 6 messages, TTL 30 นาที

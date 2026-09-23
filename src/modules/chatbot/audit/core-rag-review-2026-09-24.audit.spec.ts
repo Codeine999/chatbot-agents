@@ -28,15 +28,17 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 describe('Current RAG review: routing and retrieval', () => {
-  it('observes unresolved reference continuing all the way to a DIRECT answer', async () => {
+  it('asks for the missing reference before reading knowledge or generating', async () => {
     const query = 'อันนี้คืนได้ไหม';
     expect(resolveRetrievalQuery(query, []).missingReference).toBe(true);
     const h = buildHarness({
       patterns: [pattern({ questionExamples: [query], answer: 'คืนได้ครับ' })],
     });
     const response = await h.chatbot.handleTextMessage(ask(query));
-    expect(response.text).toBe('คืนได้ครับ');
-    expect(response.source).toBe('KNOWLEDGE');
+    expect(response.text).toBe('ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยครับ');
+    expect(response.source).toBe('RULE');
+    expect(h.spies.answerPatternFindMany).not.toHaveBeenCalled();
+    expect(h.spies.embedQuery).not.toHaveBeenCalled();
     expect(h.spies.generate).not.toHaveBeenCalled();
   });
 

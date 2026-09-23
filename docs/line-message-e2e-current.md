@@ -4,6 +4,8 @@
 
 อ่าน flow รวม auth/admin/indexing/top-up ที่ [End-to-end ทั้งระบบ](mvp-line-rag-billing-flow.md) และ dependency map ที่ [Service flow](service-flow.md) ไฟล์ architecture.html / line-message-e2e.drawio เป็นภาพประกอบเก่าที่ยังไม่ได้ปรับในงาน Markdown นี้
 
+อัปเดต retrieval follow-up 24 กันยายน 2026: `resolveRetrievalQuery` ใช้ context ที่โหลดไว้สูงสุด 3 turns เพื่อเติมหัวข้อจากข้อความผู้ใช้ล่าสุดให้คำถามอ้างอิง เช่น “โปรโมชั่นส่งฟรีมีไหม” → “อันนี้ใช้ถึงวันไหน” หรือ “สนใจโรงแรมริมทะเล” → “โรงแรมนี้ราคาเท่าไร” หากไม่มีหัวข้อที่ใช้ได้ หรือประวัติคลุมเครือ/มีข้อมูลส่วนตัว จะคืน `MISSING_USER_INFORMATION` ก่อนค้น knowledge แล้ว router ตอบ `CLARIFY` เมื่อผู้ใช้ระบุหัวข้อในข้อความถัดไป ระบบรวมกับคำถามเดิมจาก context เพื่อค้นอีกครั้ง โดยไม่มีการเรียกโมเดลในขั้นวาง query นี้
+
 ## 1. Request → response sequence
 
 ```mermaid
@@ -115,6 +117,7 @@ Core text flow อัปเดต 13 กันยายน 2026: [implementation
 | --- | --- |
 | Human-controlled session | ส่ง text ว่าง; inbound ถูกเก็บแต่ไม่สร้าง auto delivery |
 | CANCEL ที่รองรับ | clear เฉพาะ registration; ไม่ปลด admin mute หรือ waiting_admin |
+| คำถามอ้างอิงที่ไม่มีหัวข้อชัด | retrieval คืน `MISSING_USER_INFORMATION` ก่อนอ่าน knowledge; router เลือก CLARIFY และเก็บ turn ไว้ให้ลูกค้าระบุหัวข้อ |
 | Registration ปิด | คืน unavailable; active registration ถูก clear เมื่อพยายามต่อ |
 | Exact conflict | handoff ไม่เลือกคำตอบขัดกันแบบสุ่ม |
 | Safe approved-question exact, scoped, no conflict | DIRECT stored answer / REWRITE one generation |

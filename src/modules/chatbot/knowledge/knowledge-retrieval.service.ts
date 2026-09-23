@@ -88,7 +88,7 @@ export class KnowledgeRetrievalService {
     );
 
     if (resolved.missingReference) {
-      this.result([], [], 'LOW_CONFIDENCE', 'MISSING_USER_INFORMATION');
+      return this.result([], [], 'LOW_CONFIDENCE', 'MISSING_USER_INFORMATION');
     }
 
     const query = resolved.query;
@@ -104,9 +104,9 @@ export class KnowledgeRetrievalService {
     if (!normalizeText(query)) {
       return this.result([], [], 'LOW_CONFIDENCE', 'NO_SEARCH_RESULTS');
     }
-      
+
     let failed = false;
-    
+
     const read = async (
       label: string,
       call: () => Promise<KnowledgeItem[]> | KnowledgeItem[],

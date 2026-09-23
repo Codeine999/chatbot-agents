@@ -322,6 +322,75 @@ describe('Grounded answering', () => {
 });
 
 describe('Follow-up rewriting', () => {
+  it('uses recent promotion context to search and ground a follow-up', async () => {
+    const harness = buildHarness({
+      patterns: [
+        pattern({ keywords: ['โปรโมชั่นส่งฟรี'], answer: 'ใช้ถึงสิ้นเดือน' }),
+      ],
+      generations: ['โปรโมชั่นส่งฟรีใช้ถึงสิ้นเดือนครับ'],
+    });
+
+    const response = await harness.chatbot.handleTextMessage(
+      ask('อันนี้ใช้ถึงวันไหน', {
+        recentMessages: [
+          {
+            role: 'user',
+            text: 'โปรโมชั่นส่งฟรีมีไหม',
+            source: 'USER',
+            createdAt: 1,
+          },
+          {
+            role: 'assistant',
+            text: 'มีโปรโมชั่นส่งฟรีครับ',
+            source: 'KNOWLEDGE',
+            createdAt: 2,
+          },
+        ],
+      }),
+    );
+
+    expect(response.source).toBe('KNOWLEDGE');
+    expect(harness.spies.embedQuery).toHaveBeenCalledWith(
+      'โปรโมชั่นส่งฟรีมีไหม\nอันนี้ใช้ถึงวันไหน',
+      expect.anything(),
+    );
+    expect(harness.ragContext()).toHaveLength(1);
+  });
+
+  it('uses a clarification reply to search the original hotel question', async () => {
+    const harness = buildHarness({
+      patterns: [
+        pattern({ keywords: ['โรงแรมริมทะเล'], answer: 'ราคา 1,500 บาท' }),
+      ],
+      generations: ['โรงแรมริมทะเลราคา 1,500 บาทครับ'],
+    });
+
+    const response = await harness.chatbot.handleTextMessage(
+      ask('โรงแรมริมทะเล', {
+        recentMessages: [
+          {
+            role: 'user',
+            text: 'อันนี้ราคาเท่าไร',
+            source: 'USER',
+            createdAt: 1,
+          },
+          {
+            role: 'assistant',
+            text: 'ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยครับ',
+            source: 'RULE',
+            createdAt: 2,
+          },
+        ],
+      }),
+    );
+
+    expect(response.source).toBe('KNOWLEDGE');
+    expect(harness.spies.embedQuery).toHaveBeenCalledWith(
+      'โรงแรมริมทะเล\nอันนี้ราคาเท่าไร',
+      expect.anything(),
+    );
+  });
+
   it('an ambiguous follow-up asks for details instead of guessing an entity', async () => {
     const harness = buildHarness();
 
