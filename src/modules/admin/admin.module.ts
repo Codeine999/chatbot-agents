@@ -14,6 +14,7 @@ import { AdminAiPricingModule } from './pricing/admin-ai-pricing.module';
 import { CreditExchangeRateModule } from './dev/credit/credit-exchange-rate.module';
 import { AdminWalletModule } from './wallet/admin-wallet.module';
 import { AdminUsageModule } from './usage/admin-usage.module';
+import { AdminAnalyticsModule } from './analytics/admin-analytics.module';
 import { RichMenuModule } from './richMenu/rich-menu.module';
 import { AdminSysCategoryController } from './knowledge/admin-sys-category.controller';
 import { AdminSysCategoryService } from './knowledge/admin-sys-category.service';
@@ -36,6 +37,7 @@ import { AdminAiSettingService } from './ai-setting/admin-ai-setting.service';
     CreditExchangeRateModule,
     AdminWalletModule,
     AdminUsageModule,
+    AdminAnalyticsModule,
     RichMenuModule,
   ],
   controllers: [
