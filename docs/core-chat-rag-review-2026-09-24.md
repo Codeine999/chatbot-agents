@@ -158,7 +158,7 @@ escape tag ในข้อมูลและแยก instruction/data เป็
 | R02 | P1 | **Registration PII หลุดผ่าน informational digression**: active REGISTER + ข้อความ “สมัครยังไง เบอร์โทร: …” ได้ REGISTER_HOW_TO แล้วส่งข้อความเต็มเข้า embedding และ generation การ redact เฉพาะ log/เก็บ history ไม่ป้องกัน current input | `intent-router.service.ts:87`, `chatbot.service.ts:212`, `aichat.service.ts:304`; เทสต์ใหม่ใช้เบอร์สมมติ |
 | R03 | P1 | **Sentinel รั่ว**: `INSUFFICIENT_CONTEXT.` ไม่ตรง equality จึงส่งเป็นคำตอบปกติและ INCLUDE context | `aichat.service.ts:398`; audit เดิมทำซ้ำได้ |
 | R04 | P2 | **Fallback สัญญาส่งแอดมินโดยไม่มี handoff**: error/empty/budget ของ generation และ unsafe image ไม่ตั้ง insufficientContext; chatbot จึงคืน fallback โดยไม่ requestAdmin | `aichat.service.ts:327`, `chatbot.service.ts:220`, `constants/ai-chat.constants.ts:15`; audit เดิม |
-| R05 | P1 ตาม AGENTS | **waiting_admin ไม่ mute AI**: requestAdmin เปลี่ยน DB status แต่ isMuted อ่านเฉพาะ Redis; turn ถัดไปตอบ AI ต่อได้ และ mute ของ admin reply หมดอายุตาม TTL | `user-session.service.ts:88,102`; เทสต์ใหม่ + LINE delivery source ยืนยัน; docs ปัจจุบันระบุพฤติกรรมนี้ว่า intentional จึงเป็นข้อขัดกันระหว่าง policy กับ implementation ต้องตัดสินความหมาย handoff ให้ตรงก่อนแก้ |
+| R05 | พฤติกรรมที่ตั้งใจ | `waiting_admin` คือส่งคำขอให้แอดมินดู **AI ยังตอบต่อได้**; Redis admin mute เป็นอีกสถานะแยกกัน ตั้งเมื่อแอดมินส่ง PUSH และหมดอายุตาม TTL. เมื่อ LINE ยอมรับข้อความแอดมิน หรือเรียก `resume-bot` ห้องเปลี่ยนกลับเป็น `open`; endpoint ยังล้าง mute และ context | `user-session.service.ts:88,102`, `line-delivery.service.ts:150,195`, `line-webhook.service.ts:461`; ผู้ใช้ยืนยันนโยบายนี้ และเทสต์ยืนยันว่า waiting_admin ไม่ mute AI |
 | R06 | P2 | **Cache conflict บล็อก authoritative DB**: directResult ตรวจ conflict ก่อนหา safe exact และคืนทันที แม้ DB ปัจจุบันมีคำตอบถูกต้องแล้ว; ยังเกิดจาก low-ranked conflict ใน cache/DB/merged ได้ | `knowledge-retrieval.service.ts:133,158,182`; เทสต์ใหม่และ audit เดิม |
 | R07 | P2 | **Cache หลัง admin write อาจยังเก่า**: refresh หลัง commit ไป join refresh ที่อ่านก่อน commit ได้; หลาย process ไม่มี distributed invalidation ส่วน cache ปกติมี TTL 240s | `answer-pattern-cache.service.ts:58`, `admin-knowledge-pattern.service.ts:122`; เทสต์ใหม่จำลอง overlapping read พิสูจน์ snapshot เก่า |
 | R08 | P2 | **Lexical recall ถูกตัดก่อนค้นที่ 500 แถว**; พอ snapshot ครบ 500 จะปิด DIRECT เพราะพิสูจน์ exact uniqueness ไม่ครบ เป็น guard ที่สมเหตุผลแต่มีผลต่อ cost/recall | `answer-pattern.service.ts:84,163`, `micro-knowledge.service.ts:21`; เทสต์ใหม่แถวที่ 501 + audit เดิม |
@@ -178,6 +178,7 @@ escape tag ในข้อมูลและแยก instruction/data เป็
 - `vector >= 0.6` ไม่ได้แปลว่าเกี่ยวข้องแน่นอน และไม่ได้แปลว่า noise แน่นอน ต้องวัด model/corpus นี้ ข้อกล่าวว่า classifier “แทบไม่ทำงาน” ยังไม่มี traffic distribution รองรับ
 - ไม่มี gate หลัง fusion ไม่ใช่ข้อผิดโดยตัวมันเอง ถ้าจะเพิ่ม ต้องตรวจ relevance ของ evidence ที่ส่งจริง ไม่ใช่เพียง max score ของ candidate สักตัวแล้วปล่อยรายการไม่เกี่ยวทั้งหมดผ่าน
 - DIRECT ไม่อ่าน micro: ใช้ได้เมื่อ preset เป็นคำตอบครบถ้วน; ใช้ไม่ได้เมื่อธุรกิจคาดให้ micro override หรือเพิ่มข้อยกเว้นทุกครั้ง ต้องกำหนด ownership ของข้อเท็จจริง
+- `waiting_admin` ยังให้ AI ตอบเป็นนโยบายที่ยืนยันแล้ว ไม่ใช่ mute หรือข้อบกพร่องของ handoff; เฉพาะ Redis admin mute ที่ระงับ AI ชั่วคราว
 - Conflict detection เป็น heuristic ไม่ใช่เครื่องพิสูจน์ความขัดแย้งทั้งหมด: ตรวจเฉพาะหัวข้อ/subject + negation/numeric template บางรูปแบบ, ข้ามข้อความมีคำบอกเงื่อนไข และ ambiguousExact เพียงปิด DIRECT ไม่ได้บังคับ handoff เสมอ
 - การย้าย conflict ไปตรวจเฉพาะ top-3 อย่างเดียวอาจซ่อนข้อยกเว้นสำคัญที่อันดับ 4 ควรกรอง relevance/subject/topic ก่อน แล้วคง relevant conflicts แม้เกินจำนวน context ปกติ
 - การผ่าน tests ด้าน escape tag ไม่พิสูจน์ว่า LLM จะไม่เชื่อคำสั่งโจมตี ต้องทดสอบกับโมเดลจริงและไม่ให้ผลโมเดลมีอำนาจทำธุรกรรม
@@ -198,7 +199,7 @@ escape tag ในข้อมูลและแยก instruction/data เป็
 ## 7. ข้อเสนอเรียงตามความจำเป็น
 
 1. **แก้ correctness/privacy ก่อนจูนคะแนน**: คืน missingReference return; แยกข้อมูลสมัคร/PII ออกจาก query และ prompt รวมภาพตาม policy; ทำ structured abstention หรือ final sentinel guard; ทำให้ fallback text ตรงกับ handoff ที่เกิดจริง
-2. **ตกลง state ของ handoff**: waiting_admin คือแค่ “ขอคนมาดูแต่ AI ยังตอบ” หรือ “ส่งต่อแล้วหยุด AI จน release”; AGENTS กับ docs/source ตอนนี้คนละแบบ อย่าแก้ด้วย TTL โดยไม่กำหนดความหมาย
+2. **รักษาความหมายของ handoff ที่ยืนยันแล้ว**: `waiting_admin` ใช้แจ้งแอดมินและยังให้ AI ตอบ; Redis admin mute ใช้หยุดชั่วคราวหลังแอดมินส่งข้อความ; accepted admin reply และ `resume-bot` เปิดห้องเป็น `open` ตาม flow ปัจจุบัน
 3. **แก้การค้นและ freshness**: authoritative exact lookup ที่ไม่ผูกกับ snapshot 500, cache invalidation หลังเขียนที่ไม่ join pre-write read, version ของ evidence/index; แก้ renderMode/tenant ใน admin writer ที่เป็นต้นทางข้อมูล
 4. **ทำ relevance dataset ก่อนเลือก threshold**: ใช้ corpus ของธุรกิจจริง, queries ที่คาดหวัง evidence ids และคำถามที่ควรไม่เจอ; แยกชุดปรับค่ากับชุดประเมิน ไม่ใช้ cosine สมมติเพื่อตัดสินค่า production
 5. **ทดลอง selection ทีละอย่าง**: relevance-filtered pool, content dedup ที่รักษาเงื่อนไข/วันที่/source, ลด conflict นอกเรื่อง, evidence budget ตาม tokens, reranker ถ้าผล eval แสดงประโยชน์ ไม่บังคับ AnswerPattern slot ถ้าไม่เกี่ยว
@@ -285,5 +286,5 @@ escape tag ในข้อมูลและแยก instruction/data เป็
 - audit เดิม C06 mock EmbeddingService ให้สำเร็จแล้วปฏิเสธ budget ที่ classifier จึงพิสูจน์สาเหตุ embedding budget ไม่ได้; ชุดใหม่นี้แยกสาเหตุแล้ว
 - C16 เดิมกล่าวว่า menu label “ยกเลิก” ทำให้ออกจาก registration ไม่ได้ แต่ RICH_MENU_REPLY ล้าง active session อยู่แล้ว และผู้ใช้ยืนยันไม่มีเมนูดังกล่าว จึงไม่จัดเป็น defect ปัจจุบันในรายงานนี้
 - `docs/erd-database.md` ยังกล่าวว่า AnswerPattern.tenantId ไม่มีใครอ่าน ทั้งที่ retrieval/filter อ่านจริง; admin writer ที่ไม่ scope เป็นอีกเรื่องหนึ่ง
-- `docs/line-message-e2e-current.md` อธิบายว่า waiting_admin ยังให้ AI ทำงานและ mute หมดอายุได้ ซึ่งตรง source แต่ขัด AGENTS ที่กำหนด durable handoff จน explicit release; diagram ยังบอกว่า chatbot ตรวจ waiting_admin ทั้งที่ actual gate อ่าน Redis
+- `docs/line-message-e2e-current.md` อธิบายว่า waiting_admin ยังให้ AI ทำงานและ admin mute หมดอายุได้ ซึ่งตรงกับนโยบายที่ผู้ใช้ยืนยันแล้ว; แก้ AGENTS ให้ตรงกันในรอบนี้ และแก้ diagram ที่เคยบอกว่า chatbot ตรวจ waiting_admin ทั้งที่ actual gate อ่าน Redis
 - `docs/mvp-line-rag-billing-flow.md` และ `docs/service-flow.md` ที่ AGENTS อ้างไม่มีใน tree ที่ตรวจ รวมถึงลิงก์บางส่วนจาก current-flow doc จึงใช้ source เป็นหลัก

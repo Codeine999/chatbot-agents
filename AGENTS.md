@@ -163,8 +163,12 @@ Context must be bounded and PII-redacted.
 
 Preserve registration state across allowed informational digressions.
 
-Admin handoff is durable conversation state. While active, automatic AI replies
-must remain muted until explicitly released.
+`waiting_admin` is a durable request-for-admin state, not an AI mute. Keep
+automatic AI replies available while an admin has been requested. An actual
+admin reply uses the separate Redis admin mute for its configured TTL; expiry
+allows AI replies again. When LINE accepts the admin reply, move a
+`waiting_admin` conversation back to `open`. The resume-bot endpoint must
+clear the Redis mute, set the conversation to `open`, and clear chat context.
 
 Do not overwrite registration data merely to represent handoff.
 

@@ -36,7 +36,8 @@ sequenceDiagram
         W->>DB: dedupe inbound + member/conversation/history
         W->>R: load 3 delivered turns
         W->>B: text/image/sticker + thread identity
-        B->>DB: ตรวจ waiting_admin และค้น knowledge ตามเส้นทาง
+        B->>R: ตรวจ Redis admin mute (waiting_admin ยังให้ AI ตอบ)
+        B->>DB: ค้น knowledge ตามเส้นทาง
         opt ต้องใช้ AI / embedding
             B->>C: call พร้อม operation identity
             C->>DB: replay lookup หรือ reserve + settle/result
