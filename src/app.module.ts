@@ -1,7 +1,6 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { MongooseModule } from '@nestjs/mongoose';
 import { LineModule } from './modules/line/line.module';
 import { RegistrationModule } from './modules/registration/registration.module';
 import { PipelineModule } from './modules/pipeline/pipeline.module';
@@ -39,13 +38,6 @@ import { AiProviderModule } from './modules/ai/ai-provider.module';
           port: Number(configService.get<string>('REDIS_PORT') ?? 6379),
           password: configService.get<string>('REDIS_PASSWORD') || undefined,
         },
-      }),
-    }),
-
-    MongooseModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        uri: configService.getOrThrow<string>('MONGO_URI'),
       }),
     }),
 

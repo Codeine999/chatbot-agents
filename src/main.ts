@@ -6,8 +6,6 @@ import {
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { SwaggerTheme, SwaggerThemeNameEnum } from 'swagger-themes';
 import { Logger } from '@nestjs/common';
-import { getConnectionToken } from '@nestjs/mongoose';
-import { Connection } from 'mongoose';
 import { ZodValidationPipe, cleanupOpenApiDoc } from 'nestjs-zod';
 import fastifyRawBody from 'fastify-raw-body';
 import fastifyMultipart from '@fastify/multipart';
@@ -107,20 +105,6 @@ async function bootstrap() {
     swaggerOptions: {
       persistAuthorization: true,
     },
-  });
-
-  const mongoConnection = app.get<Connection>(getConnectionToken());
-
-  await mongoConnection.asPromise();
-
-  Logger.log(`MongoDB connected: ${mongoConnection.name}`, 'Bootstrap');
-
-  mongoConnection.on('error', (error) => {
-    Logger.error('MongoDB connection error', error, 'Bootstrap');
-  });
-
-  mongoConnection.on('disconnected', () => {
-    Logger.warn('MongoDB disconnected', 'Bootstrap');
   });
 
   const port = configService.get<number>('PORT') || 8080;
