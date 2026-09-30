@@ -4,19 +4,17 @@ import {
   Injectable,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { randomUUID } from 'node:crypto';
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { extname } from 'node:path';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Company } from '../../../generated/prisma/client';
+import { FileStorageService } from '../../../infra/storage/file-storage.service';
 import {
   COMPANY_IMAGE_ALLOWED_EXTENSIONS,
   COMPANY_IMAGE_MAX_BYTES,
   COMPANY_IMAGE_MIME_TO_EXTENSION,
-  COMPANY_UPLOAD_URL_PREFIX,
+  COMPANY_UPLOAD_FOLDER,
 } from './company-upload.constants';
-
-const COMPANY_UPLOAD_DIR = join(process.cwd(), 'uploads', 'company');
+import type { UpdateCompanyDto } from './dto/update-company.dto';
 
 export type FollowerChange = {
   changePercent: number | null;
@@ -27,7 +25,10 @@ export type FollowerChange = {
 export class CompanyService {
   private companyId?: string;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly fileStorage: FileStorageService,
+  ) {}
 
   async getCompanyId(): Promise<string> {
     if (this.companyId) return this.companyId;
@@ -53,6 +54,7 @@ export class CompanyService {
     let companyType = '';
     let imageBuffer: Buffer | undefined;
     let imageExtension = '';
+    let imageMimeType = '';
 
     try {
       for await (const part of request.parts({
@@ -88,6 +90,7 @@ export class CompanyService {
             );
           }
 
+          imageMimeType = part.mimetype;
           imageBuffer = await part.toBuffer();
 
           if (part.file.truncated) {
@@ -116,12 +119,13 @@ export class CompanyService {
       );
     }
 
-    await mkdir(COMPANY_UPLOAD_DIR, { recursive: true });
-
-    const filename = `${randomUUID()}${imageExtension}`;
-    const filePath = join(COMPANY_UPLOAD_DIR, filename);
-    const imagePath = `${COMPANY_UPLOAD_URL_PREFIX}/${filename}`;
-    await writeFile(filePath, imageBuffer);
+    const imagePath = await this.fileStorage.upload({
+      visibility: 'public',
+      folder: COMPANY_UPLOAD_FOLDER,
+      body: imageBuffer,
+      contentType: imageMimeType,
+      extension: imageExtension,
+    });
 
     const existing = await this.prisma.company.findFirst();
 
@@ -156,6 +160,41 @@ export class CompanyService {
         ? error
         : new InternalServerErrorException('Failed to save company');
     }
+  }
+
+  /**
+   * Partial brand edit: only the fields sent change. A new image is stored
+   * before the row is updated and the old one is deleted only afterwards, so a
+   * failed update never leaves the company pointing at a missing logo.
+   */
+  async updateCompany(dto: UpdateCompanyDto): Promise<Company> {
+    const existing = await this.getOrCreate();
+
+    const imagePath = dto.image
+      ? await this.fileStorage.upload({
+          visibility: 'public',
+          folder: COMPANY_UPLOAD_FOLDER,
+          body: dto.image.buffer,
+          contentType: dto.image.mimetype,
+          extension: COMPANY_IMAGE_MIME_TO_EXTENSION[dto.image.mimetype],
+        })
+      : undefined;
+
+    const company = await this.prisma.company
+      .update({
+        where: { id: existing.id },
+        data: { name: dto.name, image: imagePath },
+      })
+      .catch(async (error: unknown) => {
+        if (imagePath) await this.deleteStoredImage(imagePath);
+        throw error;
+      });
+
+    if (imagePath && existing.image) {
+      await this.deleteStoredImage(existing.image);
+    }
+
+    return company;
   }
 
   async recordOutboundMessage(count = 1): Promise<void> {
@@ -242,14 +281,7 @@ export class CompanyService {
   }
 
   private async deleteStoredImage(imagePath: string): Promise<void> {
-    if (!imagePath.startsWith(`${COMPANY_UPLOAD_URL_PREFIX}/`)) return;
-
-    const filename = imagePath.slice(COMPANY_UPLOAD_URL_PREFIX.length + 1);
-    try {
-      await unlink(join(COMPANY_UPLOAD_DIR, filename));
-    } catch {
-      // Best-effort cleanup; a missing file is not an error.
-    }
+    await this.fileStorage.remove(imagePath, COMPANY_UPLOAD_FOLDER);
   }
 
   private currentPeriod(date = new Date()): string {

@@ -10,6 +10,8 @@ export function normalizeText(text: string): string {
 /** Strip customer PII that must never reach stored context or logs. */
 export function redactPii(text: string): string {
   return text
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, '[REDACTED_EMAIL]')
+    .replace(/(?<!\d)\d(?:[ -]?\d){12}(?!\d)/gu, '[REDACTED_ID]')
     .replace(
       /((?:รหัสผ่าน|password|passcode)\s*[:=]?\s*)\S+/giu,
       '$1[REDACTED_PASSWORD]',

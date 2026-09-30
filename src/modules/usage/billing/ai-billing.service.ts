@@ -206,8 +206,11 @@ export class AiBillingService {
     const startedAt = Date.now();
     let result: T;
     const heartbeat = setInterval(() => {
-      void this.creditService.keepReservationAlive(reservation.id)
-        .catch((error: unknown) => this.logger.error(`AI reservation lease: ${String(error)}`));
+      void this.creditService
+        .keepReservationAlive(reservation.id)
+        .catch((error: unknown) =>
+          this.logger.error(`AI reservation lease: ${String(error)}`),
+        );
     }, 30_000);
     heartbeat.unref();
 
@@ -376,8 +379,17 @@ export class AiBillingService {
           params.request.messages.map((message) => [
             message.role,
             message.text,
-            (message.images ?? []).map(image => createHash('sha256').update(image.mediaType + image.data).digest('hex')),
+            (message.images ?? []).map((image) =>
+              createHash('sha256')
+                .update(image.mediaType + image.data)
+                .digest('hex'),
+            ),
           ]),
+          // Preserve legacy keys when no schema is requested. A changed output
+          // contract must not replay a response billed for a different schema.
+          ...(params.request.responseJsonSchema
+            ? [params.request.responseJsonSchema]
+            : []),
         ]),
       )
       .digest('hex')

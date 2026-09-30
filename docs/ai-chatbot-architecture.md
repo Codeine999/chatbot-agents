@@ -1,6 +1,6 @@
 # AI chatbot — architecture และ flow การทำงานปัจจุบัน
 
-อัปเดตจาก source ใน working tree: 2026-09-20
+อัปเดต core routing/RAG จาก source ใน working tree: 2026-09-30
 
 เอกสารนี้อธิบายการทำงานจริงของ core LINE/AI/RAG: function รับข้อมูลอะไร เรียก service ใด เปลี่ยน state อะไร และคืนผลลัพธ์ให้ใคร รวม schema และ data contracts ไม่ครอบคลุมรายละเอียดภายใน registration
 
@@ -23,11 +23,13 @@ flowchart TD
   K -->|safe DIRECT preset| L[DIRECT stored answer]
   K -->|no safe DIRECT / REWRITE preset| M[Micro lexical + one query embedding]
   M --> N[Two vector searches + RRF + conflict/evidence checks]
-  N -->|selected facts| O[AiChatService RAG: one generation]
-  N -->|no evidence| P[BUSINESS / GENERAL classifier]
+  N -->|lexical or hybrid evidence| O[AiChatService RAG: one generation]
+  N -->|no evidence or vector-only| P[BUSINESS / GENERAL classifier]
   P -->|GENERAL| Q[AiChatService GENERAL: one generation]
-  P -->|BUSINESS or malformed| R[requestAdmin + static fallback]
-  O -->|INSUFFICIENT_CONTEXT| R
+  P -->|BUSINESS with selected evidence| O
+  P -->|BUSINESS without evidence or failed classification| R[requestAdmin + static fallback]
+  O -->|insufficient, invalid, error or budget denied| R
+  Q -->|error or budget denied| R
   I --> Q
   L --> S[Persist LineDelivery]
   O --> S
@@ -63,7 +65,9 @@ REPLY ใช้ token เมื่อ deadline timestamp+50s ยังไม่�
 | Exact approved DIRECT (cache/DB) | 0 | 0 |
 | Greeting/acknowledgment | 0 | 1 |
 | Exact preset renderMode=REWRITE | 1 | 1; unified retrieval รวม MicroKnowledge |
-| Hybrid/vector RAG | 1 | 1 |
+| Lexical/hybrid RAG | 1 | 1 |
+| Vector-only → BUSINESS | 1 | 2: classifier แล้ว grounded answer |
+| Vector-only → GENERAL | 1 | 2: classifier แล้ว general answer |
 | LOW → BUSINESS | 1 ตามเส้นทางค้นปกติ | 1 classifier |
 | LOW → GENERAL | 1 ตามเส้นทางค้นปกติ | 2: classifier แล้ว answer |
 | Missing reference | 0 | 0, CLARIFY |
@@ -290,10 +294,10 @@ Source: [ChatbotService](../src/modules/chatbot/chatbot.service.ts), [IntentRout
 | handleTextMessage | ChatRequest → isMuted, get session, trim/length gate → router.resolve → switch action → ChatResponse |
 | RuleIntentService.detect | text → deterministic menu/keyword rules → {intent,confidence,source:'RULE',reason}; ไม่เรียก DB/provider |
 | IntentRouterService.resolve | input/session/history/usage IDs → cancel → active workflow boundary → greeting → high-confidence rule → retrieval; missing info→CLARIFY, conflict/error→CONTACT_ADMIN, DIRECT/RAG→ANSWER_KNOWLEDGE, LOW→resolveLowConfidence |
-| resolveLowConfidence | input/history/usage IDs → classifyLowConfidence → GENERAL_QUESTION หรือ CONTACT_ADMIN(businessFallback=true) |
+| resolveLowConfidence | input/history/usage IDs → classifyLowConfidence → GENERAL_QUESTION; BUSINESS + vector-only RAG evidence → ANSWER_KNOWLEDGE; BUSINESS ไม่มีหลักฐานหรือ classifier failed → CONTACT_ADMIN |
 | retrievalSource | retrieval.matchType + selected metadata → EMBEDDING/DATABASE/CACHE source |
 | logDecision | decision/retrieval → diagnostic log แล้วคืน decision เดิม |
-| classifyLowConfidence | input/context → budget.tryConsume; provider.generate ด้วย classifier prompt → strip JSON fence + parse/validate BUSINESS/GENERAL/confidence/reason → analysis; error/budget→BUSINESS confidence0; PendingAiUsageError rethrow |
+| classifyLowConfidence | input/context → budget.tryConsume; provider.generate ด้วย classifier prompt → strip JSON fence + parse/validate BUSINESS/GENERAL/confidence/reason → analysis; error/budget→BUSINESS confidence0 + failed=true; PendingAiUsageError rethrow |
 | handleImageMessage | ImageChatRequest → mute check → answerImage → aiResponse(source AI) |
 | handleStickerMessage | hints/text → StickerIntentService.resolve → greeting/thanks/unknown template หรือส่ง TEXT กลับเข้า handleTextMessage |
 | response | text/source/contextPolicy → ChatResponse ไม่มี I/O |
@@ -305,17 +309,17 @@ Source: [ChatbotService](../src/modules/chatbot/chatbot.service.ts), [IntentRout
 | answerImage | image/context → settings+budget → bounded history + image → compose image rules → provider.generate → parseImageAnalysisResponse + isSafeImageAnalysis → answer/fallback |
 | getActiveAiSetting | trusted tenant → Prisma findFirst(active, updatedAt desc) → trim strings, parse skills/style defaults → AiRuntimeSetting; DB error ใช้ code defaults |
 | generateText | messages/systemInstruction/fallback/context → budget gate → provider.generate → trimmed text; empty/error→fallback; PendingAiUsageError rethrow |
-| generateFromKnowledge | selected items/message/setting/history → buildKnowledgeSystemInstruction → budget → provider.generate temperature0 → sentinel/empty/error/success แยก AiAnswerResult |
-| buildKnowledgeSystemInstruction | items/message/settings/history → composeAiAnswerPrompt พร้อม KNOWLEDGE_RULES และ sentinel instruction → string |
-| isInsufficientContext | model text → strip fence/quotes, trim, uppercase → เทียบ INSUFFICIENT_CONTEXT เป็น boolean |
+| generateFromKnowledge | selected items/message/setting/history → buildKnowledgeSystemInstruction → budget → provider.generate temperature0 → parse JSON askedAbout/directlyAnswered/decision/answer/evidenceIds; ANSWER ต้องมี directlyAnswered=true และอ้าง ID ใน selectedItems เท่านั้น, output อื่น fallback + handoff |
+| buildKnowledgeSystemInstruction | items/message/settings/history → composeAiAnswerPrompt พร้อม KNOWLEDGE_RULES และกฎตรวจความเพียงพอของหลักฐาน → string |
 
 Action executor:
 - CANCEL_SESSION → clear workflow → cancelled template, CLEAR
 - START_AI_CHAT → askAiChatQuestion template, CLEAR
 - CONTINUE_AI_CHAT / GENERAL_QUESTION → answerGeneral → aiResponse
 - CLARIFY → “ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยครับ”, RULE/INCLUDE
-- ANSWER_KNOWLEDGE → answerKnowledge; insufficientContext=true จึง contactAdminResponse(true), ไม่เช่นนั้น aiResponse
-- CONTACT_ADMIN → contactAdminResponse; FALLBACK → answerFallback, SYSTEM/EXCLUDE
+- ANSWER_KNOWLEDGE → answerKnowledge → aiResponse; ทุก isFallback=true (รวม budget/error/invalid) ทำ requestAdmin และคืน SYSTEM/CLEAR; คำตอบสำเร็จ INCLUDE
+- CONTACT_ADMIN / FALLBACK → contactAdminResponse; SYSTEM/CLEAR สำหรับ business fallback
+- GENERAL/image ที่ isFallback=true ผ่าน aiResponse จะ requestAdmin เช่นกัน โดยไม่ตั้ง Redis mute และไม่ล้าง registration session
 - Default/empty → default menu, CLEAR
 - Registration actions เป็น call boundary ไป RegistrationFlowService; ไม่อธิบาย implementation ในเอกสารนี้
 
@@ -327,24 +331,20 @@ Source: [retrieval](../src/modules/chatbot/knowledge/knowledge-retrieval.service
 |---|---|
 | resolveRetrievalQuery | current+history6 messages → หา reference และ explicit รุ่น/model; ไม่กำกวมคืน original หรือ query เติมรุ่น; ไม่พบ/หลายรุ่น→missingReference=true |
 | retrieve | message/context → runRetrieval → logRetrieval → KnowledgeRetrievalResult |
-| runRetrieval | resolved query → cached lexical + directResult → DB lexical + directResult → parallel micro lexical/semantic → noise filters → rank → conflicts → read failure gate → selectContexts → result |
-| eligible | KnowledgeItem → active/scope/language/answer/nonfinite score checks → boolean |
-| directResult | candidate[] → conflict check → เลือกเฉพาะ safeDirect ANSWER_PATTERN ที่ไม่ใช่ REWRITE เป็น DIRECT; REWRITE/ไม่มี direct candidate → undefined เพื่อให้ unified retrieval ทำงานต่อ |
-| rank | lexical[]+vectors[] → sort แต่ละ list ด้วย raw signal → dedupe source:id ต่อ list → sum 1/(60+rank) → sort RRF/priority/key → merged[] |
-| selectContexts | ranked[] → เก็บ whole items ไม่เกิน3/12000 characters → selectedItems |
-| conflicts | items → explicit conflicting flag; pairwise same fact scope + polarity/numeric template checks; conditional assertions ข้าม → boolean |
+| runRetrieval | resolved query → cached lexical + directResult → DB lexical + directResult → parallel micro lexical/semantic → noise filters → rank → read failure gate → selectContexts → conflicts เฉพาะ selected และ related facts → result |
+| eligible | KnowledgeItem → active/scope/language/answer/nonfinite score checks + reject SNAPSHOT/test content → boolean |
+| directResult | candidate[] → ตรวจความขัดแย้งเฉพาะ exact FAQ → เลือก safeDirect ANSWER_PATTERN ที่ไม่ใช่ REWRITE เป็น DIRECT; REWRITE/ไม่มี direct candidate → unified retrieval |
+| rank | แยก AP BM25 / Micro BM25 / vector เป็น 3 lists → dedupe source:id ต่อ list → sum 1/(60+rank) → sort RRF/priority/key; content ของ DB lexical ชนะ vector เมื่อ source/id เดียวกัน |
+| selectContexts | ให้ related facts ก่อน, dedupe คำตอบเทียบเท่าของเรื่องเดียวกัน, ไม่เติมช่องด้วย unrelated vector-only neighbours; เก็บ whole items ไม่เกิน3/12000 characters |
+| related / conflicts | เทียบ entityKey/topicKey ก่อน แล้วใช้ shared question/title เมื่อ key ไม่ครบ; ตรวจ explicit conflicting flag และ polarity/numeric template เฉพาะ selected กับ related candidates; conditional assertions ข้าม → boolean |
 | assertion / sharedQuestion | answer→normalized polarity; questionExamples สอง items→normalized intersection → comparison helpers |
 | key / raw / tieBreak | item→source:id; metadata field→finite number/default0; priority/key→sort order |
 | result | candidates/selected/route/reason → infer matchType, topScores, scoreGap → KnowledgeRetrievalResult |
 | logRetrieval | query/result → logs top5 candidates, raw lexical/vector/RRF, selected markers; ไม่เปลี่ยนผล |
 | AnswerPatternService.findMatches | query→DB active+scope สูงสุด500 priority/updatedAt desc → findMatchesFromPatterns |
-| findMatchesFromPatterns | query+rows/layer/source → scope filter, normalize/tokenize, score + exact flag → ambiguity guard → sort → top20 KnowledgeItem[] |
+| findMatchesFromPatterns | query+rows/layer/source → scope filter → Thai word segmentation + field-weighted BM25 รวม answer → exact flag แยก → ambiguity guard → sort → top20 KnowledgeItem[] |
 | isExactMatch | normalized query + questionExamples → full equality และไม่ใช่ broad DIRECT word |
-| tokenize / contains | split whitespace tokens length>1; substring needle length≥2 → token[]/boolean |
-| scoreKeywords | best full5/token4/contains3/partial1.5 + additional-hit bonus0.5 cap1 → number |
-| scoreQuestionExamples | best exact5/contains2.5/token overlap≥0.5 times2 → number |
-| scoreAnswerPattern | keyword+example+intent2+title1+category1+description0.5 → raw score |
-| tokenOverlapRatio | query tokens/example tokens → fraction of query tokens present in example |
+| thaiTerms / bm25Scores | Intl.Segmenter('th') → weighted BM25 ต่อ corpus; ถ้าตรงกันเพียง function words/ตัวเลขให้คะแนน0; คำเชื่อม/ปฏิเสธ/คำถามยังอยู่ใน scoring เมื่อมี content term ตรงกัน |
 | toKnowledgeItem | source row/score/exact/layer → content/answer/renderMode + metadata(rawScore/safeDirect/scope) |
 | MicroKnowledgeService.findMatches | query → active+scope DB rowsสูงสุด500 → shared findMatchesFromPatterns source MICRO_KNOWLEDGE |
 | cache.onModuleInit / onModuleDestroy | load snapshot + timer240s / clear timer |
@@ -356,7 +356,7 @@ Source: [retrieval](../src/modules/chatbot/knowledge/knowledge-retrieval.service
 | toVectorLiteral | number[] → PostgreSQL vector literal string |
 | AnswerPatternVectorRepository.coverage | LEFT JOIN pattern/vector → per-row active/model/updatedAt coverage rows |
 
-Matcher ตัด raw score<2; hybrid layer ตัด lexical<3 และ cosine<0.6 ตาม default configuration; เฉพาะ exact DIRECT short-circuit ที่ไม่ผ่าน hybrid floor ส่วน exact REWRITE ต้องเข้าชั้น hybrid. RRF top1 หนึ่ง list=1/61, top1สอง lists=2/61; score เป็นอันดับไม่ใช่ probability ไม่มีการเทียบ RRF กับ cosine threshold
+Matcher ส่งรายการที่ BM25>0 หรือ exact; hybrid layer ใช้ BM25≥0.1 และ cosine≥0.6 เป็น **candidate noise floors เท่านั้น** (exact REWRITE ผ่าน lexical floor) ไม่ได้ยืนยันว่ามีข้อมูลพอตอบ. RAG generation ต้องคืน JSON decision=ANSWER พร้อม evidenceIds ที่อยู่ใน selectedItems และคำตอบไม่ว่าง มิฉะนั้น fallback/handoff. การอ้าง ID ถูกต้องยังไม่พิสูจน์เชิงตรรกะว่าคำตอบรองรับครบ ต้องวัดกับชุดคำถามจริง. ค่า `KNOWLEDGE_LEXICAL_CANDIDATE_MIN_SCORE` เดิมที่ตั้งตามสเกล heuristic ต้องปรับเป็นสเกล BM25 ก่อน deploy. RRF top1 หนึ่ง list=1/61, top1สอง lists=2/61; score เป็นอันดับ ไม่ใช่ probability.
 
 ## 8. Function flow: context, settings และ indexing
 
@@ -450,4 +450,15 @@ Provider acceptance, billing settlement และ LINE delivery acceptance เ�
 6. processEvent สร้าง LineDelivery.context={conversationId,eventId,userText,response,createdAt}; deliver ส่ง text
 7. accept/finalize เก็บ SYSTEM history แล้ว appendTurn ใส่ context สำหรับคำถามต่อไป
 
-ถ้า retrieval เป็น LOW: classifier คืน {classification:'GENERAL',confidence,...} → router GENERAL_QUESTION → answerGeneral เรียกอีกหนึ่ง generation; BUSINESS→requestAdmin+fallback, CLEAR. ถ้า RAG ส่ง INSUFFICIENT_CONTEXT → contactAdminResponse(true) โดยไม่กลับเข้า classifier
+ถ้า retrieval เป็น LOW: classifier คืน {classification:'GENERAL',confidence,...} → router GENERAL_QUESTION → answerGeneral เรียกอีกหนึ่ง generation; BUSINESS→requestAdmin+fallback, CLEAR. ถ้า RAG ส่ง INSUFFICIENT_CONTEXT หรือ fallback อื่น → aiResponse ทำ requestAdmin + SYSTEM/CLEAR โดยไม่กลับเข้า classifier
+
+### Core behavior (อัปเดต 2026-09-30)
+
+- เลข 1/2/3 เป็นข้อความลูกค้าตามปกติ ไม่มีคำสั่งเมนูเลขแบบ hard-code; เมนูใช้ Rich Menu postback/label ที่กำหนดไว้ และ active registration รับเลขตาม flow
+- คำถามสถานะปัจจุบันผ่าน retrieval ตามปกติ ไม่มี deterministic live-data guard; ยังไม่มี live API เชื่อมต่อ จึงห้ามยืนยันค่าปัจจุบันจาก KB ตามกฎ prompt และต้อง fallback เมื่อไม่มีหลักฐานที่ใช้ตอบได้ คำตอบ DIRECT ที่ผู้ดูแลเขียนไว้ถูกส่งตามข้อความเดิม
+- ไม่ใช้หลักฐานที่มี marker SNAPSHOT/ข้อมูลทดสอบ/ห้ามใช้เป็นข้อมูลปัจจุบัน และเพิ่ม prompt ว่าไม่กล่าวถึง ≠ ยืนยันว่าไม่มี
+- Native structured output เปิดเฉพาะ Gemini ด้วย responseMimeType + responseJsonSchema ผ่าน shared AiGenerateRequest; adapters อื่นยังใช้ prompt + Zod/citation validator ตามเดิม schema เป็นส่วนหนึ่งของ billing fingerprint เฉพาะ request ที่ระบุ schema (key เดิมของ request ปกติคงเดิม)
+- Current message/history ถูก redact ก่อน generation และ query ถูก redact ก่อน embedding; เพิ่ม email/เลข13หลักใน redaction เดิม
+- ค่า cosine/BM25 floors คงเดิม ไม่มี reranker หรือ dependency ใหม่ การใช้ classifier กับ vector-only เพิ่มได้หนึ่ง generation call ก่อนคำตอบ และไม่ใช่เครื่องรับรอง answerability
+
+ผลตรวจและข้อจำกัด: [fallback verification](chatbot-fallback-verification-2026-09-27.md)

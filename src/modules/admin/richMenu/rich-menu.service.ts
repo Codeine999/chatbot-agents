@@ -8,10 +8,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { FastifyRequest } from 'fastify';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { extname } from 'node:path';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { FileStorageService } from '../../../infra/storage/file-storage.service';
 import {
   LineChatMessageType,
   Prisma,
@@ -23,7 +22,7 @@ import {
   type LineRichMenuPayload,
 } from './line-rich-menu.client';
 import { readImageDimensions } from './image-size';
-import { RichMenuImageService } from './rich-menu-image.service';
+import { RichMenuImageService, type CellRect } from './rich-menu-image.service';
 import { lineChannelTenantId } from './line-channel-tenant';
 import { encodeMenuReplyPostback } from '../../../shared/richMenu/menu-postback';
 import {
@@ -31,7 +30,7 @@ import {
   RICH_MENU_IMAGE_ALLOWED_EXTENSIONS,
   RICH_MENU_IMAGE_MAX_BYTES,
   RICH_MENU_IMAGE_MIME_TO_EXTENSION,
-  RICH_MENU_UPLOAD_URL_PREFIX,
+  RICH_MENU_UPLOAD_FOLDER,
 } from './rich-menu.constants';
 import {
   richMenuAreasSchema,
@@ -47,7 +46,11 @@ import {
   type UpdateRichMenuTemplateDto,
 } from './dto/rich-menu.dto';
 
-const RICH_MENU_UPLOAD_DIR = join(process.cwd(), 'uploads', 'richmenu');
+/**
+ * How many times a composite is rebuilt when other edits keep landing while it
+ * renders. Past that, the newest edit's own rebuild is left to finish the job.
+ */
+const RECOMPOSITE_ATTEMPTS = 3;
 
 const STATS_DEFAULT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -71,7 +74,6 @@ export type RichMenuTemplateView = Omit<
 @Injectable()
 export class RichMenuService {
   private afterCommit?: Array<() => Promise<void>>;
-  private afterRollback?: Array<() => Promise<void>>;
   private readonly logger = new Logger(RichMenuService.name);
   /** The only tenant allowed to write to the LINE channel; see the helper. */
   private readonly channelTenantId: string | null;
@@ -81,6 +83,7 @@ export class RichMenuService {
     private readonly lineClient: LineRichMenuClient,
     private readonly images: RichMenuImageService,
     config: ConfigService,
+    private readonly fileStorage: FileStorageService,
   ) {
     this.channelTenantId = lineChannelTenantId(config);
   }
@@ -135,9 +138,12 @@ export class RichMenuService {
     id: string,
     dto: UpdateRichMenuTemplateDto,
   ): Promise<RichMenuTemplateView> {
-    return this.withTemplateLock(tenantId, id, (service) =>
+    const view = await this.withTemplateLock(tenantId, id, (service) =>
       service.updateLocked(tenantId, id, dto),
     );
+
+    // A new size moves every cell, so the cells are flattened again.
+    return dto.size ? this.recomposite(tenantId, id) : view;
   }
 
   private async updateLocked(
@@ -171,7 +177,7 @@ export class RichMenuService {
       },
     });
 
-    return dto.size ? this.recomposite(updated) : this.toView(updated);
+    return this.toView(updated);
   }
 
   async remove(
@@ -209,32 +215,70 @@ export class RichMenuService {
   }
 
   /**
-   * Stores the menu image locally. It is sent to LINE at publish time, so the
-   * image can be replaced as often as the draft needs without touching LINE.
+   * Stores the menu image. It is sent to LINE at publish time, so the image
+   * can be replaced as often as the draft needs without touching LINE.
+   *
+   * The file is stored before the row lock is taken, so no storage call runs
+   * inside the transaction; under the lock the size is checked again and the
+   * paths are swapped.
    */
   async uploadImage(
     tenantId: string | null,
     id: string,
     request: FastifyRequest,
   ): Promise<RichMenuTemplateView> {
+    const template = await this.findOrThrow(tenantId, id);
+    const upload = await this.readUploadedImage(request);
+    this.assertImageFits(upload.buffer, template);
+
+    const imagePath = await this.fileStorage.upload({
+      visibility: 'public',
+      folder: RICH_MENU_UPLOAD_FOLDER,
+      body: upload.buffer,
+      contentType: upload.mimeType,
+      extension: upload.extension,
+    });
+
     return this.withTemplateLock(tenantId, id, (service) =>
-      service.uploadImageLocked(tenantId, id, request),
-    );
+      service.saveImageLocked(tenantId, id, imagePath, upload),
+    ).catch(async (error: unknown) => {
+      await this.deleteStoredImageNow(imagePath);
+      throw error;
+    });
   }
 
-  private async uploadImageLocked(
+  private async saveImageLocked(
     tenantId: string | null,
     id: string,
-    request: FastifyRequest,
+    imagePath: string,
+    upload: { buffer: Buffer; mimeType: string },
   ): Promise<RichMenuTemplateView> {
     const template = await this.findOrThrow(tenantId, id);
+    // The menu size may have been edited while the file was uploading.
+    this.assertImageFits(upload.buffer, template);
 
-    const upload = await this.readUploadedImage(request);
-    const imageBuffer = upload.buffer;
-    const mimeType = upload.mimeType;
-    const extension = upload.extension;
+    const updated = await this.prisma.richMenuTemplate.update({
+      where: { id },
+      data: {
+        imagePath,
+        imageMimeType: upload.mimeType,
+        imageBytes: upload.buffer.length,
+        cellImages: [],
+        needsRepublish: template.lineRichMenuId ? true : undefined,
+      },
+    });
 
-    const dimensions = readImageDimensions(imageBuffer);
+    await this.deleteStoredImage(template.imagePath);
+    await this.removeCellFiles(this.parseCellImages(template));
+
+    return this.toView(updated);
+  }
+
+  private assertImageFits(
+    image: Buffer,
+    template: Pick<RichMenuTemplate, 'width' | 'height'>,
+  ): void {
+    const dimensions = readImageDimensions(image);
     if (!dimensions) {
       throw new BadRequestException('Could not read the image dimensions');
     }
@@ -246,34 +290,6 @@ export class RichMenuService {
       throw new BadRequestException(
         `Image is ${dimensions.width}x${dimensions.height} but the menu is ${template.width}x${template.height}`,
       );
-    }
-
-    await mkdir(RICH_MENU_UPLOAD_DIR, { recursive: true });
-
-    const filename = `${randomUUID()}${extension}`;
-    const imagePath = `${RICH_MENU_UPLOAD_URL_PREFIX}/${filename}`;
-    await writeFile(join(RICH_MENU_UPLOAD_DIR, filename), imageBuffer);
-    this.afterRollback?.push(() => this.deleteStoredImageNow(imagePath));
-
-    try {
-      const updated = await this.prisma.richMenuTemplate.update({
-        where: { id },
-        data: {
-          imagePath,
-          imageMimeType: mimeType,
-          imageBytes: imageBuffer.length,
-          cellImages: [],
-          needsRepublish: template.lineRichMenuId ? true : undefined,
-        },
-      });
-
-      await this.deleteStoredImage(template.imagePath);
-      await this.removeCellFiles(this.parseCellImages(template));
-
-      return this.toView(updated);
-    } catch (error) {
-      await this.deleteStoredImage(imagePath);
-      throw error;
     }
   }
 
@@ -291,16 +307,20 @@ export class RichMenuService {
     id: string,
     dto: ApplyRichMenuLayoutDto,
   ): Promise<RichMenuTemplateView> {
-    return this.withTemplateLock(tenantId, id, (service) =>
+    const hadCells = await this.withTemplateLock(tenantId, id, (service) =>
       service.applyLayoutLocked(tenantId, id, dto),
     );
+
+    // The grid changed, so every stored cell sits in a new rect.
+    return this.recomposite(tenantId, id, hadCells);
   }
 
+  /** Saves the new grid; true when the menu had cell images to recomposite. */
   private async applyLayoutLocked(
     tenantId: string | null,
     id: string,
     dto: ApplyRichMenuLayoutDto,
-  ): Promise<RichMenuTemplateView> {
+  ): Promise<boolean> {
     const template = await this.findOrThrow(tenantId, id);
     const rects = this.images.cellRects(
       dto.cells,
@@ -380,7 +400,7 @@ export class RichMenuService {
       (cell) => cell.index >= dto.cells,
     );
 
-    const updated = await this.prisma.richMenuTemplate.update({
+    await this.prisma.richMenuTemplate.update({
       where: { id: template.id },
       data: {
         cellCount: dto.cells,
@@ -392,8 +412,7 @@ export class RichMenuService {
 
     await this.removeCellFiles(droppedCells);
 
-    // The grid changed, so every stored cell sits in a new rect.
-    return this.recomposite(updated, this.parseCellImages(template).length > 0);
+    return this.parseCellImages(template).length > 0;
   }
 
   /**
@@ -409,43 +428,44 @@ export class RichMenuService {
     index: number,
     request: FastifyRequest,
   ): Promise<RichMenuTemplateView> {
-    return this.withTemplateLock(tenantId, id, (service) =>
-      service.uploadCellImageLocked(tenantId, id, index, request),
-    );
+    const template = await this.findOrThrow(tenantId, id);
+    const rect = this.cellRectOf(template, index);
+    const upload = await this.readUploadedImage(request);
+    const stored = await this.images.storeCell(upload.buffer, rect);
+
+    await this.withTemplateLock(tenantId, id, (service) =>
+      service.saveCellImageLocked(tenantId, id, stored),
+    ).catch(async (error: unknown) => {
+      await this.images.removeCellImages([stored]);
+      throw error;
+    });
+
+    return this.recomposite(tenantId, id);
   }
 
-  private async uploadCellImageLocked(
+  private async saveCellImageLocked(
     tenantId: string | null,
     id: string,
-    index: number,
-    request: FastifyRequest,
-  ): Promise<RichMenuTemplateView> {
+    stored: RichMenuCellImage,
+  ): Promise<void> {
     const template = await this.findOrThrow(tenantId, id);
-    const cellCount = this.cellCountOf(template);
-    const rects = this.images.cellRects(
-      cellCount,
-      template.width,
-      template.height,
-    );
-    const rect = rects[index];
+    const rect = this.cellRectOf(template, stored.index);
 
-    if (!rect) {
-      throw new BadRequestException(
-        `This menu has ${cellCount} cells, so cell ${index} does not exist`,
+    // The layout may have changed while the artwork was uploading; a cell cut
+    // for the old grid would be stretched to fit the new one.
+    if (rect.width !== stored.width || rect.height !== stored.height) {
+      throw new ConflictException(
+        'The menu layout changed during the upload; upload the image again',
       );
     }
 
-    const upload = await this.readUploadedImage(request);
-    const stored = await this.images.storeCell(upload.buffer, rect);
-    this.afterRollback?.push(() => this.images.removeCellImages([stored]));
-
     const previous = this.parseCellImages(template);
     const cells = [
-      ...previous.filter((cell) => cell.index !== index),
+      ...previous.filter((cell) => cell.index !== stored.index),
       stored,
     ].sort((left, right) => left.index - right.index);
 
-    const updated = await this.prisma.richMenuTemplate.update({
+    await this.prisma.richMenuTemplate.update({
       where: { id: template.id },
       data: {
         cellImages: cells,
@@ -453,11 +473,26 @@ export class RichMenuService {
       },
     });
 
-    const view = await this.recomposite(updated);
+    await this.removeCellFiles(
+      previous.filter((cell) => cell.index === stored.index),
+    );
+  }
 
-    await this.removeCellFiles(previous.filter((cell) => cell.index === index));
+  private cellRectOf(template: RichMenuTemplate, index: number): CellRect {
+    const cellCount = this.cellCountOf(template);
+    const rect = this.images.cellRects(
+      cellCount,
+      template.width,
+      template.height,
+    )[index];
 
-    return view;
+    if (!rect) {
+      throw new BadRequestException(
+        `This menu has ${cellCount} cells, so cell ${index} does not exist`,
+      );
+    }
+
+    return rect;
   }
 
   async removeCellImage(
@@ -465,16 +500,18 @@ export class RichMenuService {
     id: string,
     index: number,
   ): Promise<RichMenuTemplateView> {
-    return this.withTemplateLock(tenantId, id, (service) =>
+    await this.withTemplateLock(tenantId, id, (service) =>
       service.removeCellImageLocked(tenantId, id, index),
     );
+
+    return this.recomposite(tenantId, id, true);
   }
 
   private async removeCellImageLocked(
     tenantId: string | null,
     id: string,
     index: number,
-  ): Promise<RichMenuTemplateView> {
+  ): Promise<void> {
     const template = await this.findOrThrow(tenantId, id);
     const previous = this.parseCellImages(template);
     const removed = previous.filter((cell) => cell.index === index);
@@ -483,7 +520,7 @@ export class RichMenuService {
       throw new NotFoundException(`Cell ${index} has no image`);
     }
 
-    const updated = await this.prisma.richMenuTemplate.update({
+    await this.prisma.richMenuTemplate.update({
       where: { id: template.id },
       data: {
         cellImages: previous.filter((cell) => cell.index !== index),
@@ -491,65 +528,123 @@ export class RichMenuService {
       },
     });
 
-    const view = await this.recomposite(updated, true);
     await this.removeCellFiles(removed);
-
-    return view;
   }
 
   /**
    * Flattens the stored cells into the single image LINE accepts and saves it
    * as this template's menu image. A menu with no cell images keeps whatever
-   * full-canvas image was uploaded directly.
+   * full-canvas image was uploaded directly, unless `clearEmpty` is set.
+   *
+   * Compositing reads and writes file storage, so it runs outside the row lock
+   * against a snapshot of the row. The lock is only taken to swap `imagePath`,
+   * and only while the cells still match the snapshot; when another request
+   * changed them meanwhile, the stale image is discarded and this starts over.
    */
   private async recomposite(
-    template: RichMenuTemplate,
+    tenantId: string | null,
+    id: string,
     clearEmpty = false,
   ): Promise<RichMenuTemplateView> {
-    const cells = this.parseCellImages(template);
+    for (let attempt = 1; ; attempt++) {
+      const snapshot = await this.findOrThrow(tenantId, id);
+      const cells = this.parseCellImages(snapshot);
 
-    if (!cells.length) {
-      if (!clearEmpty) return this.toView(template);
-      const updated = await this.prisma.richMenuTemplate.update({
-        where: { id: template.id },
-        data: { imagePath: null, imageMimeType: null, imageBytes: null },
-      });
-      await this.deleteStoredImage(template.imagePath);
-      return this.toView(updated);
-    }
+      if (!cells.length && (!clearEmpty || !snapshot.imagePath)) {
+        return this.toView(snapshot);
+      }
 
-    const composited = await this.images.composite(
-      this.cellCountOf(template),
-      cells,
-      template.width,
-      template.height,
-    );
+      const composited = cells.length
+        ? await this.images.composite(
+            this.cellCountOf(snapshot),
+            cells,
+            snapshot.width,
+            snapshot.height,
+          )
+        : null;
+      const imagePath = composited
+        ? await this.fileStorage.upload({
+            visibility: 'public',
+            folder: RICH_MENU_UPLOAD_FOLDER,
+            body: composited.buffer,
+            contentType: composited.mimeType,
+            extension: composited.mimeType === 'image/png' ? '.png' : '.jpg',
+          })
+        : null;
 
-    const extension = composited.mimeType === 'image/png' ? '.png' : '.jpg';
-    const filename = `${randomUUID()}${extension}`;
-    const imagePath = `${RICH_MENU_UPLOAD_URL_PREFIX}/${filename}`;
-
-    await mkdir(RICH_MENU_UPLOAD_DIR, { recursive: true });
-    await writeFile(join(RICH_MENU_UPLOAD_DIR, filename), composited.buffer);
-    this.afterRollback?.push(() => this.deleteStoredImageNow(imagePath));
-
-    try {
-      const updated = await this.prisma.richMenuTemplate.update({
-        where: { id: template.id },
-        data: {
+      const outcome = await this.withTemplateLock(tenantId, id, (service) =>
+        service.swapCompositeLocked(
+          tenantId,
+          id,
+          snapshot,
           imagePath,
-          imageMimeType: composited.mimeType,
-          imageBytes: composited.buffer.length,
-        },
+          composited,
+        ),
+      ).catch(async (error: unknown) => {
+        await this.deleteStoredImageNow(imagePath);
+        throw error;
       });
 
-      await this.deleteStoredImage(template.imagePath);
+      if (!outcome.swapped) await this.deleteStoredImageNow(imagePath);
+      if (outcome.view) return outcome.view;
 
-      return this.toView(updated);
-    } catch (error) {
-      await this.deleteStoredImage(imagePath);
-      throw error;
+      if (attempt >= RECOMPOSITE_ATTEMPTS) {
+        return this.toView(await this.findOrThrow(tenantId, id));
+      }
     }
+  }
+
+  /**
+   * Stores `imagePath` as the menu image if the row still composes to it.
+   * `view` is null when the cells changed since `snapshot`, so the caller must
+   * composite again; it is set without `swapped` when another request already
+   * stored an image for these exact cells.
+   */
+  private async swapCompositeLocked(
+    tenantId: string | null,
+    id: string,
+    snapshot: RichMenuTemplate,
+    imagePath: string | null,
+    composited: { buffer: Buffer; mimeType: string } | null,
+  ): Promise<{ view: RichMenuTemplateView | null; swapped: boolean }> {
+    const current = await this.findOrThrow(tenantId, id);
+
+    if (!this.composesSameAs(current, snapshot)) {
+      return { view: null, swapped: false };
+    }
+
+    if (current.imagePath !== snapshot.imagePath) {
+      return { view: this.toView(current), swapped: false };
+    }
+
+    const updated = await this.prisma.richMenuTemplate.update({
+      where: { id: current.id },
+      data: composited
+        ? {
+            imagePath,
+            imageMimeType: composited.mimeType,
+            imageBytes: composited.buffer.length,
+          }
+        : { imagePath: null, imageMimeType: null, imageBytes: null },
+    });
+
+    await this.deleteStoredImage(current.imagePath);
+
+    return { view: this.toView(updated), swapped: true };
+  }
+
+  /** Whether both rows flatten to the same menu image. */
+  private composesSameAs(
+    current: RichMenuTemplate,
+    snapshot: RichMenuTemplate,
+  ): boolean {
+    return (
+      current.width === snapshot.width &&
+      current.height === snapshot.height &&
+      this.cellCountOf(current) === this.cellCountOf(snapshot) &&
+      JSON.stringify(this.parseCellImages(current)) ===
+        JSON.stringify(this.parseCellImages(snapshot))
+    );
   }
 
   /**
@@ -926,41 +1021,39 @@ export class RichMenuService {
     return { valid: true };
   }
 
-  /** Serialize read/compose/write across processes, using the same DB row lock. */
-  private async withTemplateLock(
+  /**
+   * Serializes read-modify-write of one template across processes with a DB
+   * row lock. Only database work belongs inside: file storage is reached
+   * before the lock (uploads) or after commit (the `afterCommit` deletes).
+   */
+  private async withTemplateLock<T>(
     tenantId: string | null,
     id: string,
-    run: (service: RichMenuService) => Promise<RichMenuTemplateView>,
-  ): Promise<RichMenuTemplateView> {
+    run: (service: RichMenuService) => Promise<T>,
+  ): Promise<T> {
     const cleanup: Array<() => Promise<void>> = [];
-    const rollback: Array<() => Promise<void>> = [];
-    const result = await this.prisma
-      .$transaction(
-        async (tx) => {
-          const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         SELECT "id" FROM "richMenuTemplate"
         WHERE "id" = ${id}::uuid
           AND "tenantId" IS NOT DISTINCT FROM ${tenantId}::uuid
         FOR UPDATE
       `);
-          if (!rows.length)
-            throw new NotFoundException('Rich menu template not found');
-          const service = new RichMenuService(
-            tx as PrismaService,
-            this.lineClient,
-            this.images,
-            new ConfigService({}),
-          );
-          service.afterCommit = cleanup;
-          service.afterRollback = rollback;
-          return run(service);
-        },
-        { timeout: 60_000, maxWait: 10_000 },
-      )
-      .catch(async (error: unknown) => {
-        await Promise.all(rollback.map((remove) => remove()));
-        throw error;
-      });
+        if (!rows.length)
+          throw new NotFoundException('Rich menu template not found');
+        const service = new RichMenuService(
+          tx as PrismaService,
+          this.lineClient,
+          this.images,
+          new ConfigService({}),
+          this.fileStorage,
+        );
+        service.afterCommit = cleanup;
+        return run(service);
+      },
+      { timeout: 15_000, maxWait: 10_000 },
+    );
     await Promise.all(cleanup.map((remove) => remove()));
     return result;
   }
@@ -1152,15 +1245,18 @@ export class RichMenuService {
   }
 
   private async readStoredImage(imagePath: string): Promise<Buffer> {
-    const filename = imagePath.slice(RICH_MENU_UPLOAD_URL_PREFIX.length + 1);
+    const image = await this.fileStorage.read(
+      imagePath,
+      RICH_MENU_UPLOAD_FOLDER,
+    );
 
-    try {
-      return await readFile(join(RICH_MENU_UPLOAD_DIR, filename));
-    } catch {
+    if (!image) {
       throw new BadRequestException(
         'The stored menu image is missing; upload it again before publishing',
       );
     }
+
+    return image;
   }
 
   private async deleteStoredImage(imagePath: string | null): Promise<void> {
@@ -1172,15 +1268,7 @@ export class RichMenuService {
   }
 
   private async deleteStoredImageNow(imagePath: string | null): Promise<void> {
-    if (!imagePath?.startsWith(`${RICH_MENU_UPLOAD_URL_PREFIX}/`)) return;
-
-    const filename = imagePath.slice(RICH_MENU_UPLOAD_URL_PREFIX.length + 1);
-
-    try {
-      await unlink(join(RICH_MENU_UPLOAD_DIR, filename));
-    } catch {
-      // Best-effort cleanup; a missing file is not an error.
-    }
+    await this.fileStorage.remove(imagePath, RICH_MENU_UPLOAD_FOLDER);
   }
 
   private describeError(error: unknown): string {

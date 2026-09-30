@@ -5,12 +5,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
+import { FileStorageService } from '../../infra/storage/file-storage.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import type {
   AdminRole,
   AuthenticatedAdmin,
 } from '../../shared/guards/admin-auth.types';
 import { AdminService } from './admin.service';
+
+const fileStorage = {
+  remove: jest.fn().mockResolvedValue(undefined),
+} as unknown as FileStorageService;
 
 describe('AdminService.getAllAdmin', () => {
   const row = {
@@ -36,7 +41,7 @@ describe('AdminService.getAllAdmin', () => {
       .fn<Promise<unknown[]>, [FindManyArgs]>()
       .mockResolvedValue([row]);
     const prisma = { adminMember: { findMany } } as unknown as PrismaService;
-    return { service: new AdminService(prisma), findMany };
+    return { service: new AdminService(prisma, fileStorage), findMany };
   };
 
   it("scopes to the caller's company and never selects the password", async () => {
@@ -106,7 +111,12 @@ describe('AdminService update/delete', () => {
     const prisma = {
       adminMember: { findFirst, update, delete: remove },
     } as unknown as PrismaService;
-    return { service: new AdminService(prisma), findFirst, update, remove };
+    return {
+      service: new AdminService(prisma, fileStorage),
+      findFirst,
+      update,
+      remove,
+    };
   };
 
   it("looks the target up inside the actor's company only", async () => {

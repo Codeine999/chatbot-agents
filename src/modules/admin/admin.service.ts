@@ -7,10 +7,9 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import type { FastifyRequest } from 'fastify';
-import { randomUUID } from 'node:crypto';
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { extname } from 'node:path';
 import { Prisma } from '../../generated/prisma/client';
+import { FileStorageService } from '../../infra/storage/file-storage.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import type {
   AdminRole,
@@ -20,11 +19,10 @@ import {
   ADMIN_PROFILE_IMAGE_ALLOWED_EXTENSIONS,
   ADMIN_PROFILE_IMAGE_MAX_BYTES,
   ADMIN_PROFILE_IMAGE_MIME_TO_EXTENSION,
-  ADMIN_UPLOAD_URL_PREFIX,
+  ADMIN_UPLOAD_FOLDER,
+  ADMIN_UPLOAD_FOLDERS,
 } from './constants/admin-upload.constants';
 import type { UpdateAdminDto } from './dto/update-admin.dto';
-
-const ADMIN_UPLOAD_DIR = join(process.cwd(), 'uploads', 'admin');
 
 const ADMIN_PUBLIC_SELECT = {
   id: true,
@@ -39,7 +37,10 @@ const ADMIN_PUBLIC_SELECT = {
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly fileStorage: FileStorageService,
+  ) {}
 
   /**
    * Lists admins in one company only. A null companyId is the legacy scope and
@@ -240,19 +241,23 @@ export class AdminService {
       );
     }
 
-    await mkdir(ADMIN_UPLOAD_DIR, { recursive: true });
+    const image = await this.fileStorage.upload({
+      visibility: 'public',
+      folder: ADMIN_UPLOAD_FOLDER,
+      body: buffer,
+      contentType: file.mimetype,
+      extension,
+    });
 
-    const filename = `${randomUUID()}${extension}`;
-    const filePath = join(ADMIN_UPLOAD_DIR, filename);
-    await writeFile(filePath, buffer);
-
-    const publicPath = `${ADMIN_UPLOAD_URL_PREFIX}/${filename}`;
-
-    const { firstname, lastname, ...updated } =
-      await this.prisma.adminMember.update({
+    const { firstname, lastname, ...updated } = await this.prisma.adminMember
+      .update({
         where: { id: adminId },
-        data: { image: publicPath },
+        data: { image },
         select: ADMIN_PUBLIC_SELECT,
+      })
+      .catch(async (error: unknown) => {
+        await this.deleteStoredImage(image);
+        throw error;
       });
 
     await this.deleteStoredImage(admin.image);
@@ -265,13 +270,6 @@ export class AdminService {
   }
 
   private async deleteStoredImage(imagePath: string | null): Promise<void> {
-    if (!imagePath?.startsWith(`${ADMIN_UPLOAD_URL_PREFIX}/`)) return;
-
-    const filename = imagePath.slice(ADMIN_UPLOAD_URL_PREFIX.length + 1);
-    try {
-      await unlink(join(ADMIN_UPLOAD_DIR, filename));
-    } catch {
-      // best-effort cleanup; a missing file is not an error
-    }
+    await this.fileStorage.remove(imagePath, ADMIN_UPLOAD_FOLDERS);
   }
 }

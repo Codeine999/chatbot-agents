@@ -13,4 +13,5 @@ export const COMPANY_IMAGE_ALLOWED_EXTENSIONS = [
   '.webp',
 ] as const;
 
-export const COMPANY_UPLOAD_URL_PREFIX = '/uploads/company';
+/** Storage folder for company logos; legacy rows live at `/uploads/company/`. */
+export const COMPANY_UPLOAD_FOLDER = 'company';

@@ -86,7 +86,7 @@ describe('Current RAG review: routing and retrieval', () => {
     expect(h.spies.notifyAdminRequired).not.toHaveBeenCalled();
   });
 
-  it('observes cache conflicts short-circuiting the authoritative DB and all other sources', async () => {
+  it('ignores non-exact cache disagreements and checks the authoritative DB', async () => {
     const h = buildHarness({
       cached: [
         pattern({
@@ -110,8 +110,8 @@ describe('Current RAG review: routing and retrieval', () => {
       ],
     });
     const result = await h.retrieval.retrieve('จัดส่งกี่วัน');
-    expect(result.fallbackReason).toBe('CONFLICTING_CANDIDATES');
-    expect(h.spies.answerPatternFindMany).not.toHaveBeenCalled();
+    expect(result.route).toBe('DIRECT');
+    expect(h.spies.answerPatternFindMany).toHaveBeenCalled();
     expect(h.spies.embedQuery).not.toHaveBeenCalled();
   });
 
@@ -227,15 +227,15 @@ describe('Current RAG review: routing and retrieval', () => {
     );
   });
 
-  it('observes answer-only information receiving no lexical match', async () => {
+  it('retrieves information that appears only in the answer', async () => {
     const h = buildHarness({
       micro: [
         pattern({ title: 'บริการ', answer: 'สามารถเปลี่ยนวันนัดหมายได้' }),
       ],
     });
     const result = await h.retrieval.retrieve('เปลี่ยนวันนัดหมาย');
-    expect(result.items).toHaveLength(0);
-    expect(result.route).toBe('LOW_CONFIDENCE');
+    expect(result.items).toHaveLength(1);
+    expect(result.route).toBe('RAG');
   });
 
   it('observes an exact approved question beyond the 500-row scan not being found lexically', async () => {
@@ -289,10 +289,8 @@ describe('Current RAG review: routing and retrieval', () => {
     const result = await h.retrieval.retrieve('จัดส่งอย่างไร');
     expect(result.items).toHaveLength(1);
     expect(result.items[0].answer).toBe('ข้อความจาก vector snapshot');
-    expect(result.items[0].metadata).toMatchObject({
-      rawScore: 3,
-      vectorSimilarity: 0.8,
-    });
+    expect(typeof result.items[0].metadata?.rawScore).toBe('number');
+    expect(result.items[0].metadata?.vectorSimilarity).toBe(0.8);
   });
 });
 

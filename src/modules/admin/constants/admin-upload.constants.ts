@@ -13,4 +13,11 @@ export const ADMIN_PROFILE_IMAGE_ALLOWED_EXTENSIONS = [
   '.webp',
 ] as const;
 
-export const ADMIN_UPLOAD_URL_PREFIX = '/uploads/admin';
+/** Storage folder for profile pictures. */
+export const ADMIN_UPLOAD_FOLDER = 'admin_profile_image';
+
+/**
+ * Folders a stored profile picture may be in: the current one, and `admin`,
+ * where pictures uploaded before the rename live (`/uploads/admin/...`).
+ */
+export const ADMIN_UPLOAD_FOLDERS = [ADMIN_UPLOAD_FOLDER, 'admin'] as const;

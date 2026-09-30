@@ -8,7 +8,7 @@ import { GetAdminAnalyticsQueryDto } from './dto/get-admin-analytics-query.dto';
 export class AdminAnalyticsController {
   constructor(private readonly analyticsService: AdminAnalyticsService) {}
 
-  /** LINE message volume per sender. */
+  /** LINE messages per bucket: customer, AI answer, admin reply, fixed bot reply. */
   @Get('chat')
   getChatActivity(@Query() query: GetAdminAnalyticsQueryDto) {
     return this.analyticsService.getChatActivity(query);

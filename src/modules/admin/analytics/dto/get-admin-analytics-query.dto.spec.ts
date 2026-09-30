@@ -21,6 +21,18 @@ describe('admin analytics query', () => {
     });
   });
 
+  it('takes "today" from Thai time, not UTC', () => {
+    // 2026-09-30 18:00 UTC is already 2026-10-01 01:00 in Bangkok.
+    const bangkokNextDay = new Date('2026-09-30T18:00:00Z');
+
+    expect(
+      resolveAnalyticsQueryDefaults({ interval: 'day' }, bangkokNextDay),
+    ).toEqual({ interval: 'day', from: '2026-10-01', to: '2026-10-01' });
+    expect(
+      resolveAnalyticsQueryDefaults({ interval: 'hour' }, bangkokNextDay),
+    ).toEqual({ interval: 'hour', from: '2026-10-01', to: '2026-10-01' });
+  });
+
   it('keeps explicit bounds', () => {
     expect(
       resolveAnalyticsQueryDefaults(
@@ -46,9 +58,17 @@ describe('admin analytics query', () => {
       }),
     ).toEqual({
       interval: 'day',
-      from: new Date('2026-09-01T00:00:00Z'),
-      toExclusive: new Date('2026-10-01T00:00:00Z'),
+      from: '2026-09-01',
+      toExclusive: '2026-10-01',
+      timeZone: 'Asia/Bangkok',
     });
+    expect(
+      toAnalyticsRange({
+        interval: 'year',
+        from: '2022-01-01',
+        to: '2026-12-31',
+      }).toExclusive,
+    ).toBe('2027-01-01');
   });
 
   it('rejects inverted ranges, over-wide ranges, and unknown keys', () => {

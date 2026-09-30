@@ -1,14 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { randomUUID } from 'node:crypto';
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
 import { ZodValidationException } from 'nestjs-zod';
 import type { z } from 'zod';
 import type {
   MultipartPayload,
   ParseMultipartOptions,
-  StoreUploadOptions,
   UploadedFile,
 } from './multipart-upload.types';
 
@@ -103,38 +99,5 @@ export class MultipartUploadService {
     }
 
     return result.data;
-  }
-
-  async store(
-    file: UploadedFile,
-    options: StoreUploadOptions,
-  ): Promise<string> {
-    const extension = options.mimeToExtension[file.mimetype];
-    if (!extension) {
-      throw new BadRequestException('Unsupported upload type');
-    }
-
-    await mkdir(options.uploadDirectory, { recursive: true });
-
-    const filename = `${randomUUID()}${extension}`;
-    await writeFile(join(options.uploadDirectory, filename), file.buffer);
-
-    return `${options.publicUrlPrefix}/${filename}`;
-  }
-
-  async delete(
-    publicPath: string | null | undefined,
-    options: StoreUploadOptions,
-  ): Promise<void> {
-    if (!publicPath?.startsWith(`${options.publicUrlPrefix}/`)) return;
-
-    const filename = publicPath.slice(options.publicUrlPrefix.length + 1);
-    if (!filename || basename(filename) !== filename) return;
-
-    try {
-      await unlink(join(options.uploadDirectory, filename));
-    } catch {
-      // Best-effort cleanup; a missing file is not an error.
-    }
   }
 }

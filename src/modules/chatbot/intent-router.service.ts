@@ -58,7 +58,6 @@ export class IntentRouterService {
     );
 
     const menuDecision = this.resolveRichMenu(postbackData, input);
-    console.log('menuDecision', menuDecision)
     if (menuDecision) return this.logDecision(input, menuDecision);
 
     //detect from rule base first
@@ -145,26 +144,44 @@ export class IntentRouterService {
     });
 
     if (retrieval.fallbackReason === 'MISSING_USER_INFORMATION') {
-      return this.logDecision(input, {
-        action: 'CLARIFY',
-        intent: 'ANSWER_KNOWLEDGE',
-        confidence: 0,
-        source: 'DATABASE',
-        fallbackReason: retrieval.fallbackReason,
-      });
+      return this.logDecision(
+        input,
+        {
+          action: 'CLARIFY',
+          intent: 'ANSWER_KNOWLEDGE',
+          confidence: 0,
+          source: 'DATABASE',
+          fallbackReason: retrieval.fallbackReason,
+        },
+        retrieval,
+      );
     }
     if (
       retrieval.fallbackReason === 'CONFLICTING_CANDIDATES' ||
       retrieval.fallbackReason === 'RETRIEVAL_ERROR'
     ) {
-      return {
-        action: 'CONTACT_ADMIN',
-        intent: 'CONTACT_ADMIN',
-        confidence: 1,
-        source: 'DATABASE',
-        businessFallback: true,
-        fallbackReason: retrieval.fallbackReason,
-      };
+      return this.logDecision(
+        input,
+        {
+          action: 'CONTACT_ADMIN',
+          intent: 'CONTACT_ADMIN',
+          confidence: 1,
+          source: 'DATABASE',
+          businessFallback: true,
+          fallbackReason: retrieval.fallbackReason,
+        },
+        retrieval,
+      );
+    }
+    // Semantic neighbours alone do not establish that this is a business
+    // question. Reuse the existing classifier without discarding Thai
+    // paraphrases whose vocabulary differs from the stored knowledge.
+    if (retrieval.route === 'RAG' && retrieval.matchType === 'EMBEDDING') {
+      return this.resolveLowConfidence({
+        ...params,
+        retrieval,
+        fallbackReason: 'VECTOR_ONLY_CANDIDATES',
+      });
     }
     if (retrieval.route !== 'LOW_CONFIDENCE') {
       const decision: RouteDecision = {
@@ -235,7 +252,22 @@ export class IntentRouterService {
           fallbackReason,
         },
         retrieval,
-        'LOW_CONFIDENCE',
+      );
+    }
+
+    if (retrieval?.route === 'RAG' && !analysis.failed) {
+      return this.logDecision(
+        input,
+        {
+          action: 'ANSWER_KNOWLEDGE',
+          intent: 'ANSWER_KNOWLEDGE',
+          confidence: analysis.confidence,
+          source: 'AI',
+          reason: 'vector-only candidates classified as BUSINESS',
+          resolvedQuery: input,
+          retrieval,
+        },
+        retrieval,
       );
     }
 
@@ -251,7 +283,6 @@ export class IntentRouterService {
         fallbackReason,
       },
       retrieval,
-      'LOW_CONFIDENCE',
     );
   }
 
@@ -330,7 +361,6 @@ export class IntentRouterService {
     input: string,
     decision: RouteDecision,
     retrieval?: KnowledgeRetrievalResult,
-    routeOverride?: string,
   ): RouteDecision {
     // Per-candidate scores are already on the [Retrieval] line; keep this one
     // to the decision itself so a flow reads as one line per stage.
@@ -340,7 +370,6 @@ export class IntentRouterService {
       .slice(0, MAX_LOGGED_SCORES)
       .map((score) => score.toFixed(5));
     const hiddenScores = (retrieval?.topScores.length ?? 0) - scores.length;
-    const route = routeOverride ?? retrieval?.route;
     this.logger.debug(
       logBlock('Routing', [
         `query=${JSON.stringify(logSafeText(input))}`,
@@ -351,18 +380,20 @@ export class IntentRouterService {
         // Rule/session gates answer before any search runs. Saying so beats
         // printing candidates=0, which reads as "searched and found nothing".
         retrieval ? null : 'retrieval=skipped (decided before search)',
-        route ? `route=${route}` : null,
+        retrieval ? `retrievalRoute=${retrieval.route}` : null,
         retrieval ? `match=${retrieval.matchType}` : null,
         retrieval ? `candidates=${retrieval.items.length}` : null,
-        retrieval ? `selected=${evidence.length}` : null,
+        retrieval ? `contextCandidates=${evidence.length}` : null,
         scores.length
           ? `topScores=[${scores.join(', ')}${hiddenScores > 0 ? `, +${hiddenScores}` : ''}]`
           : null,
         scores.length
           ? `scoreGap=${retrieval?.scoreGap?.toFixed(5) ?? '-'}`
           : null,
-        evidence.length ? `evidence=${evidence.join('\n            ')}` : null,
-        `fallback=${decision.fallbackReason ?? retrieval?.fallbackReason ?? '-'}`,
+        evidence.length
+          ? `candidateRefs=${evidence.join('\n            ')}`
+          : null,
+        `reasonCode=${decision.fallbackReason ?? retrieval?.fallbackReason ?? '-'}`,
         `reason=${JSON.stringify(decision.reason ?? '')}`,
       ]),
     );

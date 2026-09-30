@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import sharp from 'sharp';
+import { createLocalFileStorage } from '../../../infra/storage/testing/local-file-storage';
 import { RichMenuImageService } from './rich-menu-image.service';
 
 const CANVAS = { width: 2500, height: 1686 };
@@ -17,7 +18,7 @@ const solid = (width: number, height: number, rgb: [number, number, number]) =>
     .toBuffer();
 
 describe('RichMenuImageService', () => {
-  const service = new RichMenuImageService();
+  const service = new RichMenuImageService(createLocalFileStorage());
 
   it('resizes stored artwork again when the layout changes from six cells to one', async () => {
     const cell = await service.storeCell(

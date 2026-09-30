@@ -7,7 +7,7 @@ import { MAX_RETRIEVAL_CANDIDATES } from '../constants/knowledge-routing.constan
 import { KnowledgeItem } from '../types/chat.types';
 import { MicroKnowledgeVectorRepository } from '../../ai/embeding/micro-knowledge-vector.repository';
 import { knowledgeScope, KnowledgeScope } from './knowledge-scope';
-import { logBlock, logSafeText } from '../../../utils/text.utils';
+import { logBlock, logSafeText, redactPii } from '../../../utils/text.utils';
 
 @Injectable()
 export class SemanticSearchService {
@@ -27,7 +27,10 @@ export class SemanticSearchService {
     input: string,
     context: EmbeddingUsageContext = {},
   ): Promise<KnowledgeItem[]> {
-    const embedding = await this.embeddingService.embedQuery(input, context);
+    const embedding = await this.embeddingService.embedQuery(
+      redactPii(input),
+      context,
+    );
 
     this.logger.debug(
       logBlock('SemanticSearch', [

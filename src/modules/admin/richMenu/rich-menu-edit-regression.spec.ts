@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import type { FastifyRequest } from 'fastify';
+import { FileStorageService } from '../../../infra/storage/file-storage.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { RichMenuService } from './rich-menu.service';
 import { RichMenuImageService, type CellRect } from './rich-menu-image.service';
@@ -8,12 +9,6 @@ import { ApplyRichMenuLayoutDto } from './dto/rich-menu.dto';
 import { tenantOf } from './rich-menu-tenant';
 import type { AdminRequest } from '../admin-jwt-auth.guard';
 import { CreateAdminDto } from '../auth/dto/create-admin.dto';
-
-jest.mock('node:fs/promises', () => ({
-  mkdir: jest.fn().mockResolvedValue(undefined),
-  writeFile: jest.fn().mockResolvedValue(undefined),
-  unlink: jest.fn().mockResolvedValue(undefined),
-}));
 
 function setup() {
   let row = {
@@ -52,13 +47,15 @@ function setup() {
         return Promise.resolve([{ id: row.id }]);
       }),
     richMenuTemplate: {
-      findFirst: jest.fn().mockImplementation(() => {
-        expect(locked).toBe(true);
-        return Promise.resolve(structuredClone(row));
-      }),
+      findFirst: jest
+        .fn()
+        .mockImplementation(() => Promise.resolve(structuredClone(row))),
+      // Reads may happen outside the lock (validation, composite snapshots),
+      // but every write must be made while holding it.
       update: jest
         .fn()
         .mockImplementation(({ data }: { data: Partial<typeof row> }) => {
+          expect(locked).toBe(true);
           row = { ...row, ...data };
           return Promise.resolve(structuredClone(row));
         }),
@@ -82,7 +79,11 @@ function setup() {
   );
   const images = {
     cellRects: (cells: number, width: number, height: number) =>
-      new RichMenuImageService().cellRects(cells, width, height),
+      new RichMenuImageService({} as FileStorageService).cellRects(
+        cells,
+        width,
+        height,
+      ),
     storeCell: jest.fn().mockImplementation((_buffer: Buffer, rect: CellRect) =>
       Promise.resolve({
         index: rect.index,
@@ -99,11 +100,21 @@ function setup() {
     }),
     removeCellImages: jest.fn().mockResolvedValue(undefined),
   };
+  let stored = 0;
+  const fileStorage = {
+    upload: jest
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(`/uploads/richmenu/composite-${++stored}.png`),
+      ),
+    remove: jest.fn().mockResolvedValue(undefined),
+  } as unknown as FileStorageService;
   const service = new RichMenuService(
     db as unknown as PrismaService,
     {} as LineRichMenuClient,
     images as unknown as RichMenuImageService,
     new ConfigService({}),
+    fileStorage,
   );
   const request = {
     isMultipart: () => true,

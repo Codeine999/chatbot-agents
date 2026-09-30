@@ -24,39 +24,6 @@ export class RuleIntentService {
       };
     }
 
-    // These digits are no longer how a rich menu reaches the bot: a button
-    // now carries `menu=<key>` or `intent=<ChatIntent>` and is resolved before
-    // any rule runs. They stay, at full confidence, for the two cases that are
-    // still real — a menu published before that format is still on customers'
-    // phones, and customers who learned to type the number keep doing it.
-    // They can be deleted once no published menu sends plain digits.
-    if (input === '1') {
-      return {
-        intent: 'REGISTER',
-        confidence: 1,
-        source: 'RULE',
-        reason: 'typed menu digit 1',
-      };
-    }
-
-    if (input === '3') {
-      return {
-        intent: 'CONTACT_ADMIN',
-        confidence: 1,
-        source: 'RULE',
-        reason: 'typed menu digit 3',
-      };
-    }
-
-    if (input === '2') {
-      return {
-        intent: 'GENERAL_QUESTION',
-        confidence: 1,
-        source: 'RULE',
-        reason: 'typed menu digit 2',
-      };
-    }
-
     if (['สมัคร', 'สมัครสมาชิก', 'register'].includes(input)) {
       return {
         intent: 'REGISTER',

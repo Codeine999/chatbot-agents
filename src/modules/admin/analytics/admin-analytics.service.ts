@@ -207,7 +207,7 @@ export class AdminAnalyticsService {
       from: query.from,
       to: query.to,
       interval: range.interval,
-      timezone: 'UTC',
+      timezone: range.timeZone,
     };
   }
 

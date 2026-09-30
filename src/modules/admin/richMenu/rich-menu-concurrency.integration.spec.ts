@@ -3,6 +3,7 @@ import type { FastifyRequest } from 'fastify';
 import sharp from 'sharp';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { RichMenuService } from './rich-menu.service';
+import { createLocalFileStorage } from '../../../infra/storage/testing/local-file-storage';
 import { RichMenuImageService } from './rich-menu-image.service';
 import type { LineRichMenuClient } from './line-rich-menu.client';
 
@@ -42,8 +43,9 @@ integration('rich menu concurrency with independent PostgreSQL clients', () => {
         new RichMenuService(
           db,
           {} as LineRichMenuClient,
-          new RichMenuImageService(),
+          new RichMenuImageService(createLocalFileStorage()),
           new ConfigService({}),
+          createLocalFileStorage(),
         ),
       );
       await db.$connect();

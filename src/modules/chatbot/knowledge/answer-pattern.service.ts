@@ -14,40 +14,10 @@ import {
   knowledgeScope,
   KnowledgeScope,
 } from './knowledge-scope';
+import { bm25Scores } from './thai-bm25';
+import { isUsableKnowledge } from './knowledge-answer.policy';
 
-/**
- * Score weights for direct (non-embedding) answer_patterns matching.
- * Thai text has no word spacing, so substring containment is treated as a
- * strong signal alongside token equality (which covers spaced/English text).
- */
-const WEIGHT = {
-  /** Whole normalized message equals a keyword. */
-  KEYWORD_FULL_MESSAGE: 5,
-  /** A message token equals a keyword exactly. */
-  KEYWORD_TOKEN_EXACT: 4,
-  /** Message contains the keyword as a substring (main Thai match path). */
-  KEYWORD_CONTAINS: 3,
-  /** A keyword contains one of the message tokens (loose partial). */
-  KEYWORD_PARTIAL: 1.5,
-  /** Whole normalized message equals a question example. */
-  EXAMPLE_EXACT: 5,
-  /** Message contains the example or vice versa. */
-  EXAMPLE_CONTAINS: 2.5,
-  /** Max score from token overlap between message and example. */
-  EXAMPLE_TOKEN_OVERLAP: 2,
-  INTENT_KEY: 2,
-  TITLE: 1,
-  CATEGORY: 1,
-  DESCRIPTION: 0.5,
-  /** Extra per additional matched keyword beyond the first. */
-  KEYWORD_MULTI_BONUS: 0.5,
-} as const;
-
-/** Matches scoring below this are considered noise and dropped. */
-const MIN_MATCH_SCORE = 2;
 const MAX_PATTERNS_SCANNED = 500;
-/** Substrings shorter than this are too ambiguous for containment matching. */
-const MIN_CONTAINS_LENGTH = 2;
 
 export type AnswerPatternRetrievalLayer = 'CACHE' | 'DATABASE';
 export type KnowledgeRecord = Omit<AnswerPattern, 'renderMode'> & {
@@ -100,19 +70,24 @@ export class AnswerPatternService {
     const normalized = normalizeText(message);
     if (!normalized) return [];
 
-    const tokens = this.tokenize(normalized);
-
-    const scored = patterns
-      .filter(
-        (pattern) =>
-          inKnowledgeScope(pattern, this.scope) && pattern.answer.trim(),
-      )
-      .map((pattern) => ({
+    const eligible = patterns.filter(
+      (pattern) =>
+        inKnowledgeScope(pattern, this.scope) &&
+        pattern.answer.trim() &&
+        isUsableKnowledge({
+          title: pattern.title,
+          content: pattern.description ?? '',
+          answer: pattern.answer,
+        }),
+    );
+    const scores = bm25Scores(normalized, eligible);
+    const scored = eligible
+      .map((pattern, index) => ({
         pattern,
-        score: this.scoreAnswerPattern(pattern, normalized, tokens),
+        score: scores[index],
         exact: this.isExactMatch(pattern, normalized),
       }))
-      .filter(({ score }) => score >= MIN_MATCH_SCORE)
+      .filter(({ score, exact }) => exact || score > 0)
       .sort((a, b) => {
         if (a.exact !== b.exact) return Number(b.exact) - Number(a.exact);
 
@@ -124,7 +99,7 @@ export class AnswerPatternService {
         return b.score - a.score || b.pattern.priority - a.pattern.priority;
       });
 
-    // Check the complete scanned exact set before the candidate limit hides a
+    // Check the complete scoped exact set before the candidate limit hides a
     // competing preset. A capped 500-row snapshot cannot prove uniqueness.
     const ambiguousExact =
       source === 'ANSWER_PATTERN' &&
@@ -175,135 +150,6 @@ export class AnswerPatternService {
         (value) => normalizeText(value) === normalized,
       )
     );
-  }
-
-  private tokenize(normalized: string): string[] {
-    return normalized.split(' ').filter((token) => token.length > 1);
-  }
-
-  private scoreAnswerPattern(
-    pattern: KnowledgeRecord,
-    normalized: string,
-    tokens: string[],
-  ): number {
-    let score = 0;
-
-    score += this.scoreKeywords(pattern.keywords, normalized, tokens);
-    score += this.scoreQuestionExamples(
-      pattern.questionExamples,
-      normalized,
-      tokens,
-    );
-
-    const intentKey = normalizeText(pattern.intentKey ?? '');
-
-    if (
-      intentKey &&
-      (tokens.includes(intentKey) || this.contains(normalized, intentKey))
-    ) {
-      score += WEIGHT.INTENT_KEY;
-    }
-
-    const title = normalizeText(pattern.title);
-    if (title && this.contains(normalized, title)) {
-      score += WEIGHT.TITLE;
-    }
-
-    const category = normalizeText(pattern.category ?? '');
-    if (category && this.contains(normalized, category)) {
-      score += WEIGHT.CATEGORY;
-    }
-
-    const description = normalizeText(pattern.description ?? '');
-    if (
-      description &&
-      (this.contains(description, normalized) ||
-        tokens.some((token) => this.contains(description, token)))
-    ) {
-      score += WEIGHT.DESCRIPTION;
-    }
-
-    return score;
-  }
-
-  private scoreKeywords(
-    keywords: string[],
-    normalized: string,
-    tokens: string[],
-  ): number {
-    let best = 0;
-    let matched = 0;
-
-    for (const raw of keywords) {
-      const keyword = normalizeText(raw);
-      if (!keyword) continue;
-
-      let current = 0;
-      if (normalized === keyword) {
-        current = WEIGHT.KEYWORD_FULL_MESSAGE;
-      } else if (tokens.includes(keyword)) {
-        current = WEIGHT.KEYWORD_TOKEN_EXACT;
-      } else if (this.contains(normalized, keyword)) {
-        current = WEIGHT.KEYWORD_CONTAINS;
-      } else if (tokens.some((token) => this.contains(keyword, token))) {
-        current = WEIGHT.KEYWORD_PARTIAL;
-      }
-
-      if (current > 0) {
-        matched += 1;
-        best = Math.max(best, current);
-      }
-    }
-
-    const multiBonus = Math.min(
-      Math.max(matched - 1, 0) * WEIGHT.KEYWORD_MULTI_BONUS,
-      1,
-    );
-    return best + multiBonus;
-  }
-
-  private scoreQuestionExamples(
-    examples: string[],
-    normalized: string,
-    tokens: string[],
-  ): number {
-    let best = 0;
-
-    for (const raw of examples) {
-      const example = normalizeText(raw);
-      if (!example) continue;
-
-      if (example === normalized) {
-        best = Math.max(best, WEIGHT.EXAMPLE_EXACT);
-        continue;
-      }
-
-      if (
-        this.contains(normalized, example) ||
-        this.contains(example, normalized)
-      ) {
-        best = Math.max(best, WEIGHT.EXAMPLE_CONTAINS);
-        continue;
-      }
-
-      const overlap = this.tokenOverlapRatio(tokens, this.tokenize(example));
-      if (overlap >= 0.5) {
-        best = Math.max(best, WEIGHT.EXAMPLE_TOKEN_OVERLAP * overlap);
-      }
-    }
-
-    return best;
-  }
-
-  private contains(haystack: string, needle: string): boolean {
-    return needle.length >= MIN_CONTAINS_LENGTH && haystack.includes(needle);
-  }
-
-  private tokenOverlapRatio(source: string[], target: string[]): number {
-    if (source.length === 0 || target.length === 0) return 0;
-    const targetSet = new Set(target);
-    const hits = source.filter((token) => targetSet.has(token)).length;
-    return hits / source.length;
   }
 
   private toKnowledgeItem(

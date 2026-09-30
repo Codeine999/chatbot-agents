@@ -27,6 +27,8 @@ export type AiGenerateRequest = Readonly<{
   messages: readonly AiProviderMessage[];
   temperature?: number;
   maxOutputTokens?: number;
+  /** Native JSON schema where supported; all callers still validate output. */
+  responseJsonSchema?: Readonly<Record<string, unknown>>;
 }>;
 
 export type AiProviderGenerateRequest = AiGenerateRequest &

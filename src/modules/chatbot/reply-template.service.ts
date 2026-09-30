@@ -86,7 +86,7 @@ export class ReplyTemplateService {
   }
 
   askAiChatQuestion(): string {
-    return 'ได้เลยค่ะ ต้องการสอบถามเรื่องอะไรคะ';
+    return 'ได้เลยครับ ต้องการสอบถามเรื่องอะไรครับ';
   }
 
   contactAdmin(): string {

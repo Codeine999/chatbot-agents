@@ -31,7 +31,8 @@ export const RICH_MENU_IMAGE_ALLOWED_EXTENSIONS = [
   '.png',
 ] as const;
 
-export const RICH_MENU_UPLOAD_URL_PREFIX = '/uploads/richmenu';
+/** Storage folder for menu images; legacy rows live at `/uploads/richmenu/`. */
+export const RICH_MENU_UPLOAD_FOLDER = 'richmenu';
 
 /** LINE rejects a bulk link/unlink request carrying more than 500 user ids. */
 export const RICH_MENU_BULK_MAX_USERS = 500;
@@ -53,4 +54,5 @@ export const RICH_MENU_CELL_LAYOUTS = [
 
 export type RichMenuCellLayout = (typeof RICH_MENU_CELL_LAYOUTS)[number];
 
-export const RICH_MENU_CELL_UPLOAD_URL_PREFIX = '/uploads/richmenu/cells';
+/** Storage folder for per-cell artwork; legacy rows live at `/uploads/richmenu/cells/`. */
+export const RICH_MENU_CELL_UPLOAD_FOLDER = 'richmenu/cells';

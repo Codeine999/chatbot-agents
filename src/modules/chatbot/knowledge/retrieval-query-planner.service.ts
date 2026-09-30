@@ -4,6 +4,7 @@ import { CLARIFY_MESSAGE } from '../constants/knowledge-routing.constants';
 
 const MAX_HISTORY_MESSAGES = 6;
 const MAX_CONTEXT_CHARACTERS = 160;
+
 const FOLLOW_UP =
   /อันนี้|อันนั้น|ตัวนี้|ตัวนั้น|เมื่อกี้|อันเดิม|เหมือนเดิม|เหมือนก่อน|โรงแรมนี้|โปรโมชันนี้|โปรโมชั่นนี้|โปรนี้|สินค้านี้|บริการนี้|\b(?:it|this one|that one|same one)\b/iu;
 const AMBIGUOUS_CONTEXT = /(?:กับ|หรือ|ระหว่าง|เทียบ|เปรียบเทียบ)/u;
@@ -25,6 +26,18 @@ export function resolveRetrievalQuery(
     .reverse()
     .find((message) => message.role === 'user');
   const lastAssistant = recent.at(-1);
+
+  // A number after an assistant question is an answer in the current topic.
+  if (/^\d+(?:[.,]\d+)?$/u.test(input)) {
+    if (
+      lastAssistant?.role === 'assistant' &&
+      lastUser &&
+      safeContext(lastUser.text)
+    ) {
+      return { query: `${lastUser.text}\n${input}`, missingReference: false };
+    }
+    return { query: input, missingReference: true };
+  }
 
   // CLARIFY turns are kept in the existing three-turn context. A short reply
   // supplies the missing subject for the preceding question without new state.

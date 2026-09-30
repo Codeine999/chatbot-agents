@@ -1,16 +1,12 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import sharp from 'sharp';
+import { FileStorageService } from '../../../infra/storage/file-storage.service';
 import {
   RICH_MENU_CELL_LAYOUTS,
-  RICH_MENU_CELL_UPLOAD_URL_PREFIX,
+  RICH_MENU_CELL_UPLOAD_FOLDER,
   RICH_MENU_IMAGE_MAX_BYTES,
 } from './rich-menu.constants';
 import type { RichMenuCellImage } from './dto/rich-menu.dto';
-
-const RICH_MENU_CELL_DIR = join(process.cwd(), 'uploads', 'richmenu', 'cells');
 
 /** A cell grid covering the whole canvas, in the order a tenant fills it. */
 export type CellRect = {
@@ -28,10 +24,15 @@ export type CellRect = {
  * LINE takes exactly one image per rich menu, but tenants think in buttons, so
  * each cell is stored separately and composited on demand. Storing the parts
  * is what lets one button's artwork be replaced without re-uploading the rest.
+ *
+ * `storeCell`, `composite` and the removals touch file storage, which is a
+ * network call under R2: call them outside any database transaction.
  */
 @Injectable()
 export class RichMenuImageService {
   private readonly logger = new Logger(RichMenuImageService.name);
+
+  constructor(private readonly fileStorage: FileStorageService) {}
 
   /**
    * Edges are rounded one at a time rather than by rounding a cell width, so
@@ -84,14 +85,17 @@ export class RichMenuImageService {
       .png()
       .toBuffer();
 
-    await mkdir(RICH_MENU_CELL_DIR, { recursive: true });
-
-    const filename = `${randomUUID()}.png`;
-    await writeFile(join(RICH_MENU_CELL_DIR, filename), normalized);
+    const path = await this.fileStorage.upload({
+      visibility: 'public',
+      folder: RICH_MENU_CELL_UPLOAD_FOLDER,
+      body: normalized,
+      contentType: 'image/png',
+      extension: '.png',
+    });
 
     return {
       index: rect.index,
-      path: `${RICH_MENU_CELL_UPLOAD_URL_PREFIX}/${filename}`,
+      path,
       mimeType: 'image/png',
       bytes: normalized.length,
       width: rect.width,
@@ -175,13 +179,7 @@ export class RichMenuImageService {
   }
 
   async removeCellImage(path: string | undefined): Promise<void> {
-    if (!path?.startsWith(`${RICH_MENU_CELL_UPLOAD_URL_PREFIX}/`)) return;
-
-    try {
-      await unlink(join(RICH_MENU_CELL_DIR, this.filenameOf(path)));
-    } catch {
-      // Best-effort cleanup; a missing file is not an error.
-    }
+    await this.fileStorage.remove(path, RICH_MENU_CELL_UPLOAD_FOLDER);
   }
 
   private async shrinkToLimit(canvas: sharp.Sharp): Promise<Buffer | null> {
@@ -201,24 +199,22 @@ export class RichMenuImageService {
     return null;
   }
 
+  /**
+   * Only a cell `storeCell` could have written is read back: anything outside
+   * the cell folder, or with a crafted path, is refused like a missing file.
+   */
   private async readCell(path: string): Promise<Buffer> {
-    try {
-      return await readFile(join(RICH_MENU_CELL_DIR, this.filenameOf(path)));
-    } catch {
+    const image = await this.fileStorage.read(
+      path,
+      RICH_MENU_CELL_UPLOAD_FOLDER,
+    );
+
+    if (!image) {
       throw new BadRequestException(
         `A stored cell image is missing (${path}); upload it again`,
       );
     }
-  }
 
-  /** Refuses anything but the flat uuid filenames `storeCell` writes. */
-  private filenameOf(path: string): string {
-    const filename = path.slice(RICH_MENU_CELL_UPLOAD_URL_PREFIX.length + 1);
-
-    if (!/^[0-9a-f-]{36}\.png$/.test(filename)) {
-      throw new BadRequestException('Invalid stored cell image path');
-    }
-
-    return filename;
+    return image;
   }
 }

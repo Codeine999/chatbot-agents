@@ -183,14 +183,6 @@ export class ChatbotService {
         );
 
       case 'CONTINUE_AI_CHAT':
-        return this.aiResponse(
-          await this.aiChatService.answerGeneral(input, {
-            ...usage,
-            recentMessages,
-          }),
-          'AI',
-        );
-
       case 'GENERAL_QUESTION':
         return this.aiResponse(
           await this.aiChatService.answerGeneral(input, {
@@ -198,6 +190,7 @@ export class ChatbotService {
             recentMessages,
           }),
           'AI',
+          userId,
         );
 
       case 'CLARIFY':
@@ -211,12 +204,7 @@ export class ChatbotService {
           retrieval: decision.retrieval,
         });
 
-        if (!result.insufficientContext) {
-          return this.aiResponse(result, 'KNOWLEDGE');
-        }
-
-        // RAG already spent its generation call. Never re-enter classification.
-        return this.contactAdminResponse(userId, true);
+        return this.aiResponse(result, 'KNOWLEDGE', userId);
       }
 
       case 'RICH_MENU_REPLY': {
@@ -244,8 +232,7 @@ export class ChatbotService {
         return this.contactAdminResponse(userId, decision.businessFallback);
 
       case 'FALLBACK': {
-        const fallback = await this.aiChatService.answerFallback();
-        return this.response(fallback.text, 'SYSTEM', 'EXCLUDE');
+        return this.contactAdminResponse(userId, true);
       }
 
       default:
@@ -273,6 +260,7 @@ export class ChatbotService {
         recentMessages: request.recentMessages,
       }),
       'AI',
+      request.userId,
     );
   }
 
@@ -330,15 +318,16 @@ export class ChatbotService {
     return { text, source, contextPolicy };
   }
 
-  private aiResponse(
+  private async aiResponse(
     result: { text: string; isFallback: boolean },
     source: 'AI' | 'KNOWLEDGE',
-  ): ChatResponse {
-    return this.response(
-      result.text,
-      source,
-      result.isFallback ? 'EXCLUDE' : 'INCLUDE',
-    );
+    userId: string,
+  ): Promise<ChatResponse> {
+    if (result.isFallback) {
+      await this.userSessionService.requestAdmin(userId);
+      return this.response(result.text, 'SYSTEM', 'CLEAR');
+    }
+    return this.response(result.text, source, 'INCLUDE');
   }
 
   private async contactAdminResponse(

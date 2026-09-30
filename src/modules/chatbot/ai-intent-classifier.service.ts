@@ -14,6 +14,7 @@ import {
 const LOW_CONFIDENCE_FALLBACK: LowConfidenceAnalysis = {
   classification: 'BUSINESS',
   confidence: 0,
+  failed: true,
 };
 
 @Injectable()

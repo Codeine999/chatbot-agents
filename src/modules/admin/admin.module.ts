@@ -23,6 +23,7 @@ import { AdminKnowledgeMicroService } from './knowledge/admin-knowledge-micro.se
 import { MicroKnowledgeVectorRepository } from '../ai/embeding/micro-knowledge-vector.repository';
 import { AdminAiSettingController } from './ai-setting/admin-ai-setting.controller';
 import { AdminAiSettingService } from './ai-setting/admin-ai-setting.service';
+import { StorageModule } from '../../infra/storage/storage.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AdminAiSettingService } from './ai-setting/admin-ai-setting.service';
     AdminUsageModule,
     AdminAnalyticsModule,
     RichMenuModule,
+    StorageModule,
   ],
   controllers: [
     AdminController,

@@ -12,11 +12,14 @@ import { ZodValidationPipe, cleanupOpenApiDoc } from 'nestjs-zod';
 import fastifyRawBody from 'fastify-raw-body';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { join } from 'node:path';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { ADMIN_PROFILE_IMAGE_MAX_BYTES } from './modules/admin/constants/admin-upload.constants';
 import { AppLogger } from './infra/logging/app-logger';
+import {
+  LOCAL_UPLOAD_ROOT,
+  LOCAL_UPLOAD_URL_PREFIX,
+} from './infra/storage/local-object-storage.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -43,9 +46,10 @@ async function bootstrap() {
     },
   });
 
+  // Local-driver uploads and every file stored before R2 keep being served here.
   await app.register(fastifyStatic, {
-    root: join(process.cwd(), 'uploads'),
-    prefix: '/uploads/',
+    root: LOCAL_UPLOAD_ROOT,
+    prefix: `${LOCAL_UPLOAD_URL_PREFIX}/`,
   });
 
   const configService = app.get(ConfigService);

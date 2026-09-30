@@ -6,6 +6,7 @@ import {
   logBlock,
   logSafeText,
   normalizeText,
+  redactPii,
 } from '../../../utils/text.utils';
 import {
   MAX_RAG_CONTEXTS,
@@ -28,6 +29,7 @@ import { SemanticSearchService } from './semantic-search.service';
 import { resolveRetrievalQuery } from './retrieval-query-planner.service';
 import { knowledgeScope, KnowledgeScope } from './knowledge-scope';
 import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
+import { isUsableKnowledge } from './knowledge-answer.policy';
 
 /** Enough rows to explain the winner without burying the flow. */
 const MAX_LOGGED_CANDIDATES = 5;
@@ -83,7 +85,7 @@ export class KnowledgeRetrievalService {
     context: RetrievalContext = {},
   ): Promise<KnowledgeRetrievalResult> {
     const resolved = resolveRetrievalQuery(
-      message.trim(),
+      redactPii(message),
       context.recentMessages ?? [],
     );
 
@@ -148,26 +150,39 @@ export class KnowledgeRetrievalService {
       read('semantic', () => this.semantic.search(query, context)),
     ]);
     const lexical = [...database, ...micro].filter(
-      (item) => this.raw(item, 'rawScore') >= this.lexicalNoiseFloor,
+      (item) =>
+        item.metadata?.exactMatch === true ||
+        this.raw(item, 'rawScore') >= this.lexicalNoiseFloor,
     );
     const vectors = semantic.filter(
       (item) => this.raw(item, 'vectorSimilarity') >= this.vectorNoiseFloor,
     );
     const merged = this.rank(lexical, vectors);
     const ranked = merged.slice(0, MAX_RETRIEVAL_CANDIDATES);
-    if (this.conflicts(merged))
-      return this.result(
-        ranked,
-        [],
-        'LOW_CONFIDENCE',
-        'CONFLICTING_CANDIDATES',
-      );
     // A missing source can hide an exception/conflict. Do not answer from a
     // partial pool while one of the required reads failed.
     if (failed)
       return this.result(ranked, [], 'LOW_CONFIDENCE', 'RETRIEVAL_ERROR');
 
     const selected = this.selectContexts(ranked);
+    // A low-ranked, unrelated candidate must not veto the evidence actually
+    // used. Check selected facts and their explicitly related companions.
+    const related = merged.filter((item) =>
+      selected.some((chosen) => this.related(chosen, item)),
+    );
+    if (
+      this.conflicts([
+        ...new Map(
+          [...selected, ...related].map((item) => [this.key(item), item]),
+        ).values(),
+      ])
+    )
+      return this.result(
+        ranked,
+        [],
+        'LOW_CONFIDENCE',
+        'CONFLICTING_CANDIDATES',
+      );
     return this.result(
       ranked,
       selected,
@@ -179,7 +194,13 @@ export class KnowledgeRetrievalService {
   private directResult(
     items: KnowledgeItem[],
   ): KnowledgeRetrievalResult | undefined {
-    if (this.conflicts(items)) {
+    const exactItems = items.filter(
+      (item) => item.metadata?.exactMatch === true,
+    );
+    if (
+      exactItems.some((item) => item.metadata?.ambiguousExact === true) ||
+      this.conflicts(exactItems)
+    ) {
       return this.result(items, [], 'LOW_CONFIDENCE', 'CONFLICTING_CANDIDATES');
     }
     const exact = items.filter(
@@ -202,20 +223,25 @@ export class KnowledgeRetrievalService {
       item.metadata?.tenantId === this.scope.tenantId &&
       item.metadata?.language === this.scope.language &&
       Boolean(item.answer?.trim()) &&
+      isUsableKnowledge(item) &&
       Number.isFinite(item.score)
     );
   }
 
-  /** Two ranking lists with comparable values *within* each list. */
+  /** BM25 scores from different corpora are ranked separately before RRF. */
   private rank(
     lexical: KnowledgeItem[],
     vectors: KnowledgeItem[],
   ): KnowledgeItem[] {
     const lists = [
-      [...lexical].sort(
-        (a, b) =>
-          this.raw(b, 'rawScore') - this.raw(a, 'rawScore') ||
-          this.tieBreak(a, b),
+      ...(['ANSWER_PATTERN', 'MICRO_KNOWLEDGE'] as const).map((source) =>
+        lexical
+          .filter((item) => item.source === source)
+          .sort(
+            (a, b) =>
+              this.raw(b, 'rawScore') - this.raw(a, 'rawScore') ||
+              this.tieBreak(a, b),
+          ),
       ),
       [...vectors].sort(
         (a, b) =>
@@ -233,6 +259,8 @@ export class KnowledgeRetrievalService {
         const previous = merged.get(key);
         merged.set(key, {
           ...item,
+          // Lexical DB content wins over a vector hit for the same source/ID.
+          ...previous,
           score: (previous?.score ?? 0) + 1 / (RRF_RANK_CONSTANT + index + 1),
           metadata: {
             ...previous?.metadata,
@@ -243,7 +271,7 @@ export class KnowledgeRetrievalService {
             matchTypes: [
               ...new Set([
                 ...((previous?.metadata?.matchTypes as string[]) ?? []),
-                channel === 0 ? 'KEYWORD' : 'EMBEDDING',
+                channel === 2 ? 'EMBEDDING' : 'KEYWORD',
               ]),
             ],
           },
@@ -258,7 +286,35 @@ export class KnowledgeRetrievalService {
   private selectContexts(items: KnowledgeItem[]): KnowledgeItem[] {
     const selected: KnowledgeItem[] = [];
     let characters = 0;
-    for (const item of items) {
+    const first = items[0];
+    const ordered = first
+      ? [
+          first,
+          ...items.slice(1).filter((item) => this.related(first, item)),
+          ...items.slice(1).filter((item) => !this.related(first, item)),
+        ]
+      : items;
+    for (const item of ordered) {
+      // Do not fill the remaining slots with unrelated vector neighbours.
+      if (
+        selected.length > 0 &&
+        item.metadata?.exactMatch !== true &&
+        !((item.metadata?.matchTypes as string[] | undefined) ?? []).includes(
+          'KEYWORD',
+        ) &&
+        !this.related(selected[0], item)
+      )
+        continue;
+      if (
+        selected.some(
+          (chosen) =>
+            chosen.id !== item.id &&
+            this.related(chosen, item) &&
+            normalizeText(chosen.answer ?? '') ===
+              normalizeText(item.answer ?? ''),
+        )
+      )
+        continue;
       const length =
         (item.title?.length ?? 0) +
         (item.content?.length ?? 0) +
@@ -279,9 +335,20 @@ export class KnowledgeRetrievalService {
         const a = items[i];
         const b = items[j];
         if (this.key(a) === this.key(b)) continue;
+        if (!this.related(a, b)) continue;
         const left = normalizeText(a.answer ?? '');
         const right = normalizeText(b.answer ?? '');
         if (left === right) continue;
+        // A changed value in the same keyed assertion is a conflict even when
+        // both versions describe a condition (e.g. free over 500 vs 700).
+        const numericTemplate = (text: string) =>
+          text.replace(/\d+(?:[.,]\d+)*/gu, '#');
+        if (
+          /\d/u.test(left) &&
+          /\d/u.test(right) &&
+          numericTemplate(left) === numericTemplate(right)
+        )
+          return true;
         // Different conditional cases are not competing unconditional facts.
         // Leave their interpretation to grounded answering (or its sentinel).
         const conditional =
@@ -290,46 +357,27 @@ export class KnowledgeRetrievalService {
         // A narrow, same-assertion polarity check, not "same category + close score".
         const pa = this.assertion(left);
         const pb = this.assertion(right);
-        const entityA = a.metadata?.entityKey;
-        const entityB = b.metadata?.entityKey;
-        const sameSubject =
-          entityA && entityB
-            ? Boolean(entityA && entityA === entityB)
-            : Boolean(
-                a.title &&
-                normalizeText(a.title) === normalizeText(b.title ?? ''),
-              );
-        const topicA = a.metadata?.topicKey;
-        const topicB = b.metadata?.topicKey;
-        const sameFactScope =
-          sameSubject && !(topicA && topicB && topicA !== topicB);
-        if (
-          sameFactScope &&
-          pa &&
-          pb &&
-          pa.fact === pb.fact &&
-          pa.negative !== pb.negative
-        )
-          return true;
-        // Same explicitly keyed fact and identical wording except its numeric
-        // value is an unresolved business conflict, not a score tie-break.
-        const sameTopic =
-          (topicA && topicA === topicB) ||
-          this.sharedQuestion(a, b) ||
-          (a.title && normalizeText(a.title) === normalizeText(b.title ?? ''));
-        const numericTemplate = (text: string) =>
-          text.replace(/\d+(?:[.,]\d+)*/gu, '#');
-        if (
-          sameFactScope &&
-          sameTopic &&
-          /\d/u.test(left) &&
-          /\d/u.test(right) &&
-          numericTemplate(left) === numericTemplate(right)
-        )
-          return true;
+        if (pa.fact === pb.fact && pa.negative !== pb.negative) return true;
       }
     }
     return false;
+  }
+
+  private related(a: KnowledgeItem, b: KnowledgeItem): boolean {
+    if (this.key(a) === this.key(b)) return true;
+    const entityA = a.metadata?.entityKey;
+    const entityB = b.metadata?.entityKey;
+    const topicA = a.metadata?.topicKey;
+    const topicB = b.metadata?.topicKey;
+    if (entityA && entityB && entityA !== entityB) return false;
+    if (topicA && topicB && topicA !== topicB) return false;
+    if (entityA && entityB && topicA && topicB) return true;
+    return (
+      this.sharedQuestion(a, b) ||
+      Boolean(
+        a.title && normalizeText(a.title) === normalizeText(b.title ?? ''),
+      )
+    );
   }
 
   private assertion(text: string): { fact: string; negative: boolean } {
@@ -377,8 +425,7 @@ export class KnowledgeRetrievalService {
       this.key(a).localeCompare(this.key(b))
     );
   }
-  /** One summary line plus one line per candidate; "*" marks the items that
-   * were actually handed to the model. */
+  /** "*" marks candidate context. The router may still choose general chat or handoff. */
   private logRetrieval(
     message: string,
     result: KnowledgeRetrievalResult,
@@ -391,7 +438,7 @@ export class KnowledgeRetrievalService {
       `route=${result.route}`,
       `match=${result.matchType}`,
       `candidates=${result.items.length}`,
-      `selected=${result.selectedItems.length}`,
+      `contextCandidates=${result.selectedItems.length}`,
       `fallback=${result.fallbackReason ?? '-'}`,
     ];
     const shown = result.items.slice(0, MAX_LOGGED_CANDIDATES);

@@ -1,5 +1,6 @@
 import type { AiProviderMessage } from '../../../ai-provider/types/ai-provider.types';
 import { ChatContextMessage } from '../types/chat.types';
+import { redactPii } from '../../../utils/text.utils';
 
 const MAX_RECENT_CONTEXT_CHARACTERS = 6_000;
 
@@ -11,12 +12,12 @@ export function toAiProviderMessages(
   const selectedMessages = selectNewestMessagesWithinBudget(recentMessages);
   const messages: AiProviderMessage[] = selectedMessages.map((message) => ({
     role: message.role,
-    text: message.text,
+    text: redactPii(message.text),
   }));
 
   messages.push({
     role: 'user',
-    text: currentInput,
+    text: redactPii(currentInput),
   });
 
   return messages;

@@ -1,6 +1,6 @@
 import { BadGatewayException } from '@nestjs/common';
 
-/** Provider failures that are safe to retry on a separate BullMQ worker. */
+/** Transient provider failures eligible for the provider service's retry loop. */
 export class RetryableAiProviderException extends BadGatewayException {
   readonly retryable = true;
 
@@ -22,7 +22,8 @@ export function isRetryableAiProviderError(error: unknown): boolean {
 /** Detects transient errors returned directly by an SDK or fetch. */
 export function isTransientProviderFailure(error: unknown): boolean {
   if (isRetryableAiProviderError(error)) return true;
-  if (!(error instanceof Error)) return false;
+  // Native fetch/SDK errors can originate in another JS realm (including workers).
+  if (typeof error !== 'object' || error === null) return false;
 
   const candidate = error as Error & {
     status?: unknown;
@@ -56,7 +57,7 @@ export function isTransientProviderFailure(error: unknown): boolean {
     return isTransientProviderFailure(candidate.cause);
   }
 
-  return /(?:^|\D)(?:429|5\d\d)(?:\D|$)|timed?\s*out|timeout|temporar(?:y|ily)/i.test(
-    candidate.message,
+  return /(?:^|\D)(?:429|5\d\d)(?:\D|$)|timed?\s*out|timeout|\baborted\b|temporar(?:y|ily)/i.test(
+    typeof candidate.message === 'string' ? candidate.message : '',
   );
 }

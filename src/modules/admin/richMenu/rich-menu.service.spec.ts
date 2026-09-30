@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { LineRichMenuClient } from './line-rich-menu.client';
+import { createLocalFileStorage } from '../../../infra/storage/testing/local-file-storage';
 import { RichMenuImageService } from './rich-menu-image.service';
 import { RichMenuService } from './rich-menu.service';
 import type { ApplyRichMenuLayoutDto } from './dto/rich-menu.dto';
@@ -92,6 +93,7 @@ function build(channelTenantId: string | null = TENANT) {
   const config = new ConfigService(
     channelTenantId ? { LINE_CHANNEL_TENANT_ID: channelTenantId } : {},
   );
+  const fileStorage = createLocalFileStorage();
 
   return {
     prisma,
@@ -99,8 +101,9 @@ function build(channelTenantId: string | null = TENANT) {
     service: new RichMenuService(
       prisma as unknown as PrismaService,
       lineClient,
-      new RichMenuImageService(),
+      new RichMenuImageService(fileStorage),
       config,
+      fileStorage,
     ),
   };
 }

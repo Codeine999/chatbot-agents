@@ -304,8 +304,8 @@ export class LineWebhookService {
     }
   }
 
-  listConversations() {
-    return this.prisma.lineConversation.findMany({
+  async listConversations() {
+    const conversations = await this.prisma.lineConversation.findMany({
       orderBy: [
         {
           lastMessageAt: 'desc',
@@ -313,11 +313,22 @@ export class LineWebhookService {
         {
           updatedAt: 'desc',
         },
+        {
+          id: 'desc',
+        },
       ],
       include: {
         lineMember: true,
       },
     });
+
+    const waitingAdmin = conversations.filter(
+      (conversation) => conversation.status === 'waiting_admin',
+    );
+    const otherConversations = conversations.filter(
+      (conversation) => conversation.status !== 'waiting_admin',
+    );
+    return [...waitingAdmin, ...otherConversations];
   }
 
   async getConversationMessages(

@@ -57,6 +57,12 @@ export class GeminiAiProvider implements AiProviderAdapter {
         config: {
           systemInstruction: request.systemInstruction,
           temperature: request.temperature,
+          ...(request.responseJsonSchema
+            ? {
+                responseMimeType: 'application/json',
+                responseJsonSchema: request.responseJsonSchema,
+              }
+            : {}),
           maxOutputTokens:
             request.maxOutputTokens ?? DEFAULT_AI_MAX_OUTPUT_TOKENS,
           httpOptions: {

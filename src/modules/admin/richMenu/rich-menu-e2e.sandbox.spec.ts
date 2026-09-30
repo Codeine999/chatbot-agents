@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import sharp from 'sharp';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { LineRichMenuClient } from './line-rich-menu.client';
+import { createLocalFileStorage } from '../../../infra/storage/testing/local-file-storage';
 import { RichMenuImageService } from './rich-menu-image.service';
 import { RichMenuReplyService } from './rich-menu-reply.service';
 import { RichMenuReplyCacheService } from '../../chatbot/menu/rich-menu-reply-cache.service';
@@ -58,7 +59,8 @@ describeIfDb('rich menu end to end (real database, stubbed LINE)', () => {
     prisma = new PrismaService(
       new ConfigService({ DATABASE_URL: process.env.DATABASE_URL }),
     );
-    images = new RichMenuImageService();
+    const fileStorage = createLocalFileStorage();
+    images = new RichMenuImageService(fileStorage);
     replies = new RichMenuReplyService(
       prisma,
       // The bot's in-memory copy is not part of what this spec checks.
@@ -69,6 +71,7 @@ describeIfDb('rich menu end to end (real database, stubbed LINE)', () => {
       {} as LineRichMenuClient,
       images,
       new ConfigService({}),
+      fileStorage,
     );
   });
 

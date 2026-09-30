@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import type { ConfigService } from '@nestjs/config';
+import type { PrismaService } from '../../../../prisma/prisma.service';
 
 import {
   AnswerPatternService,
@@ -41,10 +43,13 @@ describe('AnswerPatternService', () => {
   };
 
   beforeEach(() => {
-    service = new AnswerPatternService(prisma as any, config as any);
+    service = new AnswerPatternService(
+      prisma as unknown as PrismaService,
+      config as unknown as ConfigService,
+    );
   });
 
-  it('should give full-message keyword score of 5', () => {
+  it('gives a positive BM25 score for an exact keyword term', () => {
     const patterns = [
       makePattern({
         keywords: ['ราคา'],
@@ -54,6 +59,6 @@ describe('AnswerPatternService', () => {
     const result = service.findMatchesFromPatterns('ราคา', patterns);
 
     expect(result).toHaveLength(1);
-    expect(result[0].score).toBe(5);
+    expect(result[0].score).toBeGreaterThan(0);
   });
 });

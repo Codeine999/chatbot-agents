@@ -107,7 +107,7 @@ Outbound
 
 AiUsageEvent.id คือหนึ่ง billed call ไม่ใช่หนึ่ง LINE message ลูกค้าอาจได้รับหนึ่งคำตอบที่เสียหลาย calls หรือ exact/template ที่ไม่เสีย AI เลย
 
-Generation hash รวม provider/model/request/context ที่ส่งจริง จึงอาจเปลี่ยนเมื่อ retry โหลด history/settings ใหม่ ไม่ใช่ immutable whole-turn plan ส่วน embedding key ไม่รวม model ไม่ควรเปลี่ยน embedding configuration กลางการกู้ turn แล้วคาดว่า replay เป็น vector ของ model ใหม่
+Generation hash รวม provider/model/request/context และ responseJsonSchema (เมื่อระบุ) จึงอาจเปลี่ยนเมื่อ retry โหลด history/settings ใหม่ ไม่ใช่ immutable whole-turn plan ส่วน embedding key ไม่รวม model ไม่ควรเปลี่ยน embedding configuration กลางการกู้ turn แล้วคาดว่า replay เป็น vector ของ model ใหม่
 
 ## 4. Routing และ output policies
 
@@ -121,13 +121,19 @@ Core text flow อัปเดต 13 กันยายน 2026: [implementation
 | Registration ปิด | คืน unavailable; active registration ถูก clear เมื่อพยายามต่อ |
 | Exact conflict | handoff ไม่เลือกคำตอบขัดกันแบบสุ่ม |
 | Safe approved-question exact, scoped, no conflict | DIRECT stored answer / REWRITE one generation |
-| Eligible lexical/vector candidates → RRF ranking | RAG: 1 generation, สูงสุด 3 contexts / 12,000 characters |
+| Thai BM25/vector candidates ผ่าน noise floor → RRF ranking | แยก AP/Micro lexical + vector เป็น 3 lists; lexical/hybrid RAG: 1 generation, สูงสุด 3 contexts / 12,000 characters; ไม่เติม unrelated vector-only neighbours |
+| Vector-only RAG candidates | classifier ก่อน: GENERAL → general answer, BUSINESS → grounded answer; classifier error/budget → handoff; สูงสุด 2 generation calls |
+| คำถามห้องว่าง/สต็อก/ยอดเงิน/สถานะปัจจุบัน | ผ่าน retrieval ตามปกติ; ไม่มี live API หรือ guard ก่อนค้น คำตอบ DIRECT ส่งตามข้อความที่ผู้ดูแลเขียนไว้ ส่วน RAG ถูกกำกับไม่ให้ยืนยันค่าปัจจุบันจาก KB |
 | Low confidence | Classifier only; BUSINESS → static handoff (1 call), GENERAL → answerGeneral (2 calls) |
-| RAG ตอบ INSUFFICIENT_CONTEXT | static handoff; ห้ามกลับ classifier |
-| Business / fallback ที่ต้อง staff | requireAdmin + waiting_admin + notification; AI/RAG ยังทำงาน |
+| RAG คืน JSON INSUFFICIENT_CONTEXT หรือ output/หลักฐานอ้างอิงไม่ถูกต้อง | static handoff; ห้ามกลับ classifier |
+| ทุก AI fallback รวม provider error, output ผิด, งบหมด และ image ไม่ปลอดภัย | requestAdmin + waiting_admin + notification เมื่อสถานะเปลี่ยน; SYSTEM/CLEAR; AI/RAG ยังทำงานและ registration คงอยู่ |
 | Image | โหลด LINE media; billed analysis ตาม image policy; unsafe/invalid → fallback |
 | Sticker | semantic intent/template ที่รองรับ; ไม่บังคับ embedding ทุก sticker |
 | External image | ข้อความไม่รองรับ; ไม่ส่งภาพนี้ไป AI |
+
+Grounded evidence contract (27 กันยายน 2026): แต่ละ `ragContext` item มี `ref: "SOURCE:ID"` ให้โมเดลคัดลอกไปยัง `evidenceIds`; validator รับ bare ID เพื่อรองรับ output เดิมเฉพาะเมื่อระบุ selected item ได้รายการเดียวเท่านั้น ID นอก selected context, source ผิด, citation ว่าง หรือ bare ID กำกวมยังต้อง fallback/handoff การอ้างอิงที่ถูกต้องไม่ได้รับรองว่าข้อเท็จจริงในคำตอบครบถ้วน ดู [ผลตรวจ audit และ fallback](chatbot-fallback-verification-2026-09-27.md)
+
+Coverage check (30 กันยายน 2026): JSON ของ grounded answer มี `askedAbout` (สิ่งที่ลูกค้าถาม) และ `directlyAnswered` นำหน้า `decision`; ระบบรับ `ANSWER` เฉพาะเมื่อ `directlyAnswered === true` ถ้าหลักฐานพูดถึงเพียงสิ่งทดแทน เช่น ถามร้านอาหารมื้อเย็นแต่มีแค่รูมเซอร์วิส หรือไม่ส่งค่านี้มา จะ fallback + handoff และ log `reason=NOT_DIRECTLY_ANSWERED`
 
 Chatbot ตรวจ human control ใน text/image/sticker แล้ว แต่ LINE image download เกิดใน webhook service ก่อนเข้า chatbot gate จึงอย่าใช้ “หยุด AI” แปลว่าไม่มี HTTP media call เลย
 
@@ -136,7 +142,7 @@ contextPolicy:
 - EXCLUDE: ส่งคำตอบได้แต่ไม่เพิ่ม AI context
 - CLEAR: clear ตอนสร้าง response ก่อน persist delivery ไม่ clear ซ้ำจาก delayed repair
 
-Redis key chat:context:conversationId เก็บ 3 turns, TTL 30 นาที, redaction password/account/phone และตัดข้อความสูงสุด 4,000 ตัวอักษร การอ่านไม่ต่อ TTL โหลดล้มคืน []; append ล้มคืน false โดยไม่ throw
+Redis key chat:context:conversationId เก็บ 3 turns, TTL 30 นาที, redaction password/account/phone/email/เลข13หลัก และตัดข้อความสูงสุด 4,000 ตัวอักษร การอ่านไม่ต่อ TTL โหลดล้มคืน []; append ล้มคืน false โดยไม่ throw
 
 ## 5. Retry และ recovery ตาม state จริง
 
@@ -181,6 +187,8 @@ flowchart TD
 
 Customer ขอ staff หรือ business fallback → DB waiting_admin / requireAdmin=true → create adminNotifications → emit ADMIN_NOTIFICATION socket /admin → frontend เปิด conversation จาก metadata.conversationId; ยังไม่ mute และไม่ทับ registration
 
+GET /api/line/conversations และ GET /api/conversations คืนห้อง `waiting_admin` ก่อนห้องสถานะอื่น โดยแต่ละกลุ่มเรียง `lastMessageAt` ล่าสุดก่อน (`updatedAt` และ `id` ใช้ตัดสินเมื่อเวลาเท่ากัน)
+
 Admin ส่งข้อความด้วย clientRequestId → durable PUSH → ก่อนส่งจริงตั้ง Redis chat:control:<lineUserId>=ADMIN, TTL AUTO_MUTE_WHEN_REPLY (default 10m) → เมื่อ LINE accept จะเปลี่ยน waiting_admin เป็น open แบบ atomic กับ delivery ACCEPTED แล้วบันทึก ADMIN history. Push attempt ใหม่ตั้ง TTL ใหม่เต็มระยะ ไม่บวกสะสม; push ที่ยังไม่ accepted จะไม่เปิด waiting_admin. Key หมดอายุจะกลับ AI; POST /api/line/conversations/:conversationId/resume-bot ปลด mute ก่อนเวลา, เปิด conversation และ clear context โดยไม่ลบ registration. Automatic PUSH ไม่ตั้ง mute; queued automatic replies ถูกระงับเมื่อพบ mute.
 
 Notification read state กับ conversation unread/history เป็นคนละข้อมูล อย่าถือว่า mark notification read คือ delivery accepted หรือ customer read receipt
@@ -197,3 +205,5 @@ Source ที่ใช้:
 - [UserSessionService](../src/modules/chatbot/user-session.service.ts)
 - [LoadContextService](../src/modules/chatbot/context/load-context.service.ts)
 - [Schemas](../prisma/schema.prisma)
+
+Routing update 27 กันยายน 2026: เลขเมนู 1/2/3 ใช้ได้เมื่อไม่มี history/active flow หรือหลัง RULE menu แบบเลข; ตัวเลขกลางบทสนทนาเป็นข้อมูลตอบคำถามและ active registration รับเลขตาม flow. Gemini grounded generation เปิด native JSON schema; citation validation ยังบังคับ และ provider อื่นคงใช้ prompt/validator. query และ message/history ถูก redact ก่อนส่ง AI. รายละเอียดและข้อจำกัดอยู่ใน [ผลแก้ fallback](chatbot-fallback-verification-2026-09-27.md).

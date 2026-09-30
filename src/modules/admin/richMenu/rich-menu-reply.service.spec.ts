@@ -59,7 +59,9 @@ describe('RichMenuReplyService', () => {
     await service.list(TENANT, {} as never);
 
     expect(prisma.richMenuReply.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ tenantId: TENANT }) }),
+      expect.objectContaining({
+        where: expect.objectContaining({ tenantId: TENANT }),
+      }),
     );
   });
 
@@ -69,7 +71,9 @@ describe('RichMenuReplyService', () => {
     await service.list(null, {} as never);
 
     expect(prisma.richMenuReply.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ tenantId: null }) }),
+      expect.objectContaining({
+        where: expect.objectContaining({ tenantId: null }),
+      }),
     );
   });
 

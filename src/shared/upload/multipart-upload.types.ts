@@ -19,9 +19,3 @@ export interface ParseMultipartOptions {
   notMultipartMessage?: string;
   invalidMultipartMessage?: string;
 }
-
-export interface StoreUploadOptions {
-  uploadDirectory: string;
-  publicUrlPrefix: string;
-  mimeToExtension: Readonly<Record<string, string>>;
-}

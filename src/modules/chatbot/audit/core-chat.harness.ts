@@ -168,10 +168,36 @@ export function buildHarness(options: HarnessOptions = {}) {
 
   // --- provider boundary ----------------------------------------------------
   const generations = [...(options.generations ?? [])];
-  const generate = jest.fn(() => {
+  const generate = jest.fn((request: { systemInstruction?: string }) => {
     const text = generations.shift();
     if (text === undefined) {
       throw new Error('harness: provider called more times than scripted');
+    }
+    // Older audit fixtures script answer text. Represent that answer using the
+    // grounded response contract while keeping classifier/general replies raw.
+    if (
+      request.systemInstruction?.includes('"decision":"ANSWER"') &&
+      !text.trim().startsWith('{') &&
+      text !== 'INSUFFICIENT_CONTEXT.'
+    ) {
+      const evidence = request.systemInstruction.match(
+        /<ragContext>\n([\s\S]*?)\n<\/ragContext>/u,
+      );
+      const items = evidence
+        ? (JSON.parse(evidence[1]) as { source: string; id: string }[])
+        : [];
+      return Promise.resolve({
+        text: JSON.stringify(
+          text === 'INSUFFICIENT_CONTEXT'
+            ? { decision: 'INSUFFICIENT_CONTEXT', answer: '', evidenceIds: [] }
+            : {
+                directlyAnswered: true,
+                decision: 'ANSWER',
+                answer: text,
+                evidenceIds: items.map((item) => `${item.source}:${item.id}`),
+              },
+        ),
+      });
     }
     return Promise.resolve({ text });
   });

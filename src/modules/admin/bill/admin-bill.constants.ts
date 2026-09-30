@@ -13,4 +13,5 @@ export const BILL_SLIP_ALLOWED_EXTENSIONS = [
   '.webp',
 ] as const;
 
-export const BILL_SLIP_UPLOAD_URL_PREFIX = '/uploads/billing';
+/** Storage folder for payment slips; legacy rows live at `/uploads/billing/`. */
+export const BILL_SLIP_UPLOAD_FOLDER = 'billing';

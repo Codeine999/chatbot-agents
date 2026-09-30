@@ -216,6 +216,42 @@ describe('Low-confidence classification', () => {
 });
 
 describe('Grounded answering', () => {
+  it('does not answer a fee question from a return policy that omits fees', async () => {
+    const harness = buildHarness({
+      patterns: [
+        pattern({
+          id: 'returns',
+          keywords: ['คืนสินค้า'],
+          answer: 'คืนสินค้าได้ภายใน 7 วัน',
+        }),
+      ],
+      generations: [
+        '{"decision":"INSUFFICIENT_CONTEXT","answer":"","evidenceIds":[]}',
+      ],
+    });
+    const response = await harness.chatbot.handleTextMessage(
+      ask('คืนสินค้ามีค่าธรรมเนียมเท่าไร'),
+    );
+    expect(harness.ragContext().map((item) => item.id)).toContain('returns');
+    expect(response.source).toBe('SYSTEM');
+    expect(harness.spies.conversationUpdateMany).toHaveBeenCalled();
+  });
+
+  it('rejects a model answer citing evidence outside the selected context', async () => {
+    const harness = buildHarness({
+      patterns: [
+        pattern({ id: 'fee', keywords: ['ค่าส่ง'], answer: 'ค่าส่ง 40 บาท' }),
+      ],
+      generations: [
+        '{"decision":"ANSWER","answer":"ค่าส่ง 40 บาท","evidenceIds":["ANSWER_PATTERN:other"]}',
+      ],
+    });
+    const response = await harness.chatbot.handleTextMessage(
+      ask('ค่าส่งเท่าไร'),
+    );
+    expect(response.source).toBe('SYSTEM');
+  });
+
   it('the insufficient-context sentinel is converted into a fallback plus an admin handoff', async () => {
     const harness = buildHarness({
       patterns: [
@@ -233,7 +269,7 @@ describe('Grounded answering', () => {
     expect(harness.spies.conversationUpdateMany).toHaveBeenCalled();
   });
 
-  it('observes the sentinel leaking to the customer when the model adds any punctuation', async () => {
+  it('fails closed when the provider returns malformed grounded output', async () => {
     const harness = buildHarness({
       patterns: [
         pattern({ id: 'p-1', keywords: ['ค่าส่ง'], answer: 'ค่าส่ง 40 บาท' }),
@@ -245,9 +281,10 @@ describe('Grounded answering', () => {
       ask('ค่าส่งเท่าไหร่'),
     );
 
-    expect(response.text).toBe('INSUFFICIENT_CONTEXT.');
-    expect(response.source).toBe('KNOWLEDGE');
-    expect(response.contextPolicy).toBe('INCLUDE');
+    expect(response.text).toBe(
+      'ขออภัยครับ ตอนนี้ยังไม่สามารถตอบคำถามนี้ได้ เดี๋ยวส่งต่อให้แอดมินช่วยตรวจสอบให้นะครับ',
+    );
+    expect(response.source).toBe('SYSTEM');
   });
 
   it('observes a provider failure promising an admin in the reply text without requesting one', async () => {

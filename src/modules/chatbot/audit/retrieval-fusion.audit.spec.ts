@@ -160,7 +160,7 @@ describe('Stage 3: MicroKnowledge keyword matching and fusion', () => {
     expect(harness.ragContext().map((item) => item.id)).toEqual(['p-small']);
   });
 
-  it('observes only three contexts reaching the LLM, so curated patterns can be crowded out by micro facts', async () => {
+  it('hands at most three top-ranked contexts to the LLM', async () => {
     const harness = buildHarness({
       patterns: [
         pattern({
@@ -193,7 +193,7 @@ describe('Stage 3: MicroKnowledge keyword matching and fusion', () => {
 
     const ids = harness.ragContext().map((item) => item.id);
     expect(ids).toHaveLength(3);
-    expect(ids).not.toContain('p-curated');
+    expect(ids).toContain('p-curated');
   });
 });
 
@@ -225,7 +225,7 @@ describe('Relevance gating', () => {
     expect(response.source).toBe('SYSTEM');
   });
 
-  it('observes Thai substring keyword matching producing a false positive', async () => {
+  it('does not match หมอน as a substring of หาหมอนะ', async () => {
     const harness = buildHarness({
       patterns: [
         pattern({
@@ -240,7 +240,9 @@ describe('Relevance gating', () => {
 
     await harness.chatbot.handleTextMessage(ask('นอนไม่หลับควรไปหาหมอนะ'));
 
-    expect(harness.ragContext().map((item) => item.id)).toContain('p-pillow');
+    expect(harness.ragContext().map((item) => item.id)).not.toContain(
+      'p-pillow',
+    );
   });
 
   it('observes a conflict between two low-ranked candidates escalating the whole turn to an admin', async () => {

@@ -101,6 +101,23 @@ describe('KnowledgeRetrievalService — ทางลัดตอบตรง', (
     expect(semanticSearch).toHaveBeenCalled();
   });
 
+  it('keeps an exact REWRITE FAQ even when its BM25 score is below the candidate floor', async () => {
+    const { service } = makeService({
+      database: [
+        directItem({
+          id: 'faq-low-idf',
+          renderMode: 'REWRITE',
+          metadata: { safeDirect: true, exactMatch: true, rawScore: 0.01 },
+        }),
+      ],
+    });
+    const result = await service.retrieve('ส่งฟรีไหม');
+    expect(result.route).toBe('RAG');
+    expect(result.selectedItems.map((item) => item.id)).toEqual([
+      'faq-low-idf',
+    ]);
+  });
+
   it('คำถามต่อเนื่องที่ถูกเติมรุ่นให้ ไม่ใช่คำถามที่ลูกค้าพิมพ์เอง จึงห้ามตอบตรง', async () => {
     const { service, cacheMatches } = makeService({
       cache: [directItem({ id: 'faq-4' })],
@@ -199,7 +216,7 @@ describe('KnowledgeRetrievalService — ด่านกรองก่อนน�
   });
 
   it('คะแนนคำค้นต่ำกว่าพื้นสัญญาณรบกวน ไม่ถูกนำไปจัดอันดับ', async () => {
-    const noisy = makeItem({ id: 'noisy', metadata: { rawScore: 2 } });
+    const noisy = makeItem({ id: 'noisy', metadata: { rawScore: 0.05 } });
     const { service } = makeService({ database: [noisy] });
 
     expect((await service.retrieve('ค่าส่งเท่าไร')).items).toEqual([]);
@@ -326,6 +343,64 @@ describe('KnowledgeRetrievalService — ข้อมูลขัดแย้ง'
       metadata: { rawScore: 5, entityKey: 'model-a', ...metadata },
     });
 
+  it('does not let unrelated low-ranked conflicts veto selected shipping evidence', async () => {
+    const { service } = makeService({
+      database: [
+        makeItem({
+          id: 'shipping',
+          title: 'ค่าจัดส่ง',
+          answer: 'ค่าส่ง 40 บาท',
+          metadata: { rawScore: 9, entityKey: 'store', topicKey: 'shipping' },
+        }),
+        makeItem({
+          id: 'delivery',
+          title: 'จัดส่ง',
+          answer: 'ส่งทั่วประเทศ',
+          metadata: { rawScore: 8, entityKey: 'store', topicKey: 'delivery' },
+        }),
+        makeItem({
+          id: 'tracking',
+          title: 'ติดตามพัสดุ',
+          answer: 'มีเลขติดตาม',
+          metadata: { rawScore: 7, entityKey: 'store', topicKey: 'tracking' },
+        }),
+        makeItem({
+          id: 'hours-a',
+          title: 'เวลาทำการ',
+          answer: 'เปิดทำการ 9 โมง',
+          metadata: { rawScore: 2, entityKey: 'store', topicKey: 'hours' },
+        }),
+        makeItem({
+          id: 'hours-b',
+          title: 'เวลาทำการ',
+          answer: 'เปิดทำการ 10 โมง',
+          metadata: { rawScore: 1, entityKey: 'store', topicKey: 'hours' },
+        }),
+      ],
+    });
+    const result = await service.retrieve('ค่าส่งเท่าไร');
+    expect(result.route).toBe('RAG');
+    expect(result.selectedItems.map((item) => item.id)).toEqual([
+      'shipping',
+      'delivery',
+      'tracking',
+    ]);
+  });
+
+  it('checks a related fact below the evidence limit before answering', async () => {
+    const { service } = makeService({
+      micro: [
+        fact('price-a', 'ราคา 500 บาท', { rawScore: 9, topicKey: 'price' }),
+        fact('price-b', 'ราคา 800 บาท', { rawScore: 0.2, topicKey: 'price' }),
+        fact('other-1', 'สีแดง', { rawScore: 8, topicKey: 'colour' }),
+        fact('other-2', 'ไซซ์ M', { rawScore: 7, topicKey: 'size' }),
+      ],
+    });
+    expect(
+      (await service.retrieve('เสื้อรุ่น A ราคาเท่าไร')).fallbackReason,
+    ).toBe('CONFLICTING_CANDIDATES');
+  });
+
   it('ข้อเท็จจริงเดียวกันแต่กลับขั้ว (ได้/ไม่ได้) = ขัดแย้ง ห้ามตอบ', async () => {
     const { service } = makeService({
       micro: [fact('a', 'ซักเครื่องได้'), fact('b', 'ซักเครื่องไม่ได้')],
@@ -347,6 +422,18 @@ describe('KnowledgeRetrievalService — ข้อมูลขัดแย้ง'
     });
 
     expect((await service.retrieve('ค่าส่งเท่าไร')).fallbackReason).toBe(
+      'CONFLICTING_CANDIDATES',
+    );
+  });
+
+  it('detects a changed threshold in the same conditional policy', async () => {
+    const { service } = makeService({
+      micro: [
+        fact('a', 'ส่งฟรีเมื่อซื้อครบ 500 บาท', { topicKey: 'free-shipping' }),
+        fact('b', 'ส่งฟรีเมื่อซื้อครบ 700 บาท', { topicKey: 'free-shipping' }),
+      ],
+    });
+    expect((await service.retrieve('ซื้อครบเท่าไรส่งฟรี')).fallbackReason).toBe(
       'CONFLICTING_CANDIDATES',
     );
   });

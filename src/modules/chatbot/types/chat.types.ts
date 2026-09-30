@@ -47,6 +47,8 @@ export type LowConfidenceAnalysis = Readonly<{
   classification: LowConfidenceClassification;
   confidence: number;
   reason?: string;
+  /** Budget, provider or validation failure; must never authorize generation. */
+  failed?: boolean;
 }>;
 
 export type KnowledgeMatchType =
@@ -153,7 +155,6 @@ export type KnowledgeAnswerContext = AiRequestContext &
 export type AiAnswerResult = Readonly<{
   text: string;
   isFallback: boolean;
-  insufficientContext?: boolean;
 }>;
 
 export type KnowledgeItem = {

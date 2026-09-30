@@ -6,29 +6,22 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { join } from 'node:path';
 import {
   CreditTopupStatus,
   LedgerType,
   Prisma,
 } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { FileStorageService } from '../../../infra/storage/file-storage.service';
 import { CompanyService } from '../company/company.service';
 import {
   BILL_SLIP_MIME_TO_EXTENSION,
-  BILL_SLIP_UPLOAD_URL_PREFIX,
+  BILL_SLIP_UPLOAD_FOLDER,
 } from './admin-bill.constants';
 import { CreateTopupDto } from './dto/top-up.dto';
 import { CalculateCreditDto } from './dto/calculate-credit.dto';
 import { GetBillHistoryQueryDto } from './dto/get-history.dto';
-import { MultipartUploadService } from '../../../shared/upload/multipart-upload.service';
 
-const BILL_SLIP_UPLOAD_DIR = join(process.cwd(), 'uploads', 'billing');
-const BILL_SLIP_STORE_OPTIONS = {
-  uploadDirectory: BILL_SLIP_UPLOAD_DIR,
-  publicUrlPrefix: BILL_SLIP_UPLOAD_URL_PREFIX,
-  mimeToExtension: BILL_SLIP_MIME_TO_EXTENSION,
-} as const;
 const SERIALIZABLE_RETRY_LIMIT = 3;
 const BILL_HISTORY_PAGE_SIZE = 8;
 
@@ -44,7 +37,7 @@ export class AdminBillService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly companyService: CompanyService,
-    private readonly multipartUploadService: MultipartUploadService,
+    private readonly fileStorage: FileStorageService,
   ) {}
 
   async getExchangeRate() {
@@ -107,13 +100,22 @@ export class AdminBillService {
       rate.creditsPerThb,
     );
     const companyId = await this.companyService.getCompanyId();
-    const slipImage = await this.multipartUploadService.store(
-      dto.slip,
-      BILL_SLIP_STORE_OPTIONS,
-    );
+    const extension = BILL_SLIP_MIME_TO_EXTENSION[dto.slip.mimetype];
+    if (!extension) {
+      throw new BadRequestException('Unsupported upload type');
+    }
+
+    // A payment slip is private: it is only ever handed out as a signed URL.
+    const slipImage = await this.fileStorage.upload({
+      visibility: 'private',
+      folder: BILL_SLIP_UPLOAD_FOLDER,
+      body: dto.slip.buffer,
+      contentType: dto.slip.mimetype,
+      extension,
+    });
 
     try {
-      return await this.prisma.creditTopupHistory.create({
+      const topup = await this.prisma.creditTopupHistory.create({
         data: {
           companyId,
           requestedById,
@@ -130,17 +132,16 @@ export class AdminBillService {
           },
         },
       });
+
+      return await this.withSlipUrl(topup);
     } catch (error) {
-      await this.multipartUploadService.delete(
-        slipImage,
-        BILL_SLIP_STORE_OPTIONS,
-      );
+      await this.fileStorage.remove(slipImage, BILL_SLIP_UPLOAD_FOLDER);
       throw error;
     }
   }
 
   async confirmTopup(topupId: string, approvedById: string) {
-    return this.runSerializable(async (tx) => {
+    const result = await this.runSerializable(async (tx) => {
       const claimed = await tx.creditTopupHistory.updateMany({
         where: {
           id: topupId,
@@ -210,6 +211,9 @@ export class AdminBillService {
         wallet,
       };
     });
+
+    // Signed outside the transaction; the slip is not part of the accounting.
+    return { ...result, topup: await this.withSlipUrl(result.topup) };
   }
 
   async rejectTopup(topupId: string, rejectedById: string) {
@@ -240,7 +244,7 @@ export class AdminBillService {
       );
     }
 
-    return this.prisma.creditTopupHistory.findUniqueOrThrow({
+    const topup = await this.prisma.creditTopupHistory.findUniqueOrThrow({
       where: { id: topupId },
       include: {
         requestedBy: {
@@ -251,6 +255,8 @@ export class AdminBillService {
         },
       },
     });
+
+    return this.withSlipUrl(topup);
   }
 
   async getHistory(query: GetBillHistoryQueryDto) {
@@ -290,7 +296,7 @@ export class AdminBillService {
     ]);
 
     return {
-      items,
+      items: await Promise.all(items.map((item) => this.withSlipUrl(item))),
       pagination: {
         page: query.page,
         limit: BILL_HISTORY_PAGE_SIZE,
@@ -300,6 +306,17 @@ export class AdminBillService {
         hasNextPage: skip + items.length < total,
       },
     };
+  }
+
+  /**
+   * Swaps the stored slip reference for a URL the dashboard can open: a
+   * short-lived signed URL for an R2 slip, the old public path for a legacy one.
+   */
+  private async withSlipUrl<T extends { slipImage: string }>(
+    topup: T,
+  ): Promise<T> {
+    const slipImage = await this.fileStorage.url(topup.slipImage);
+    return { ...topup, slipImage: slipImage ?? topup.slipImage };
   }
 
   private async findActiveExchangeRate() {

@@ -16,13 +16,22 @@ export const MAX_ANALYTICS_BUCKETS = 1000;
 export const DEFAULT_ANALYTICS_YEAR_SPAN = 5;
 
 /**
- * Half-open UTC window the repository queries with: `[from, toExclusive)`.
- * `to` is a calendar day, so the caller's last day is included in full.
+ * Timezone every bucket is cut in. The business and the dashboard both run on
+ * Thai time, and the dashboard builds its axis in local time; cutting in UTC
+ * pushed everything between 00:00 and 07:00 onto the previous day.
+ */
+export const ANALYTICS_TIMEZONE = 'Asia/Bangkok';
+
+/**
+ * Half-open window of calendar days in `timeZone`: `[from, toExclusive)`.
+ * `to` is a calendar day, so the caller's last day is included in full. The
+ * repository converts these to UTC instants, which is how rows are stored.
  */
 export type AnalyticsRange = {
   interval: AnalyticsInterval;
-  from: Date;
-  toExclusive: Date;
+  from: string;
+  toExclusive: string;
+  timeZone: string;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -33,6 +42,17 @@ function formatUtcDay(date: Date): string {
     String(date.getUTCMonth() + 1).padStart(2, '0'),
     String(date.getUTCDate()).padStart(2, '0'),
   ].join('-');
+}
+
+/** Calendar day of an instant in the reporting timezone, as `YYYY-MM-DD`. */
+function formatReportingDay(date: Date): string {
+  // en-CA formats as ISO `YYYY-MM-DD`.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: ANALYTICS_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
 }
 
 /**
@@ -48,17 +68,17 @@ export function resolveAnalyticsQueryDefaults(
   now = new Date(),
 ): { interval: AnalyticsInterval; from: string; to: string } {
   const interval = query.interval ?? 'day';
-  const today = formatUtcDay(now);
-  const year = now.getUTCFullYear();
+  const today = formatReportingDay(now);
+  const year = Number(today.slice(0, 4));
 
   let defaultFrom: string;
   switch (interval) {
     case 'hour':
-      // Hourly charts are intentionally limited to the current UTC day.
+      // Hourly charts are intentionally limited to the current day.
       defaultFrom = today;
       break;
     case 'day':
-      defaultFrom = `${year}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+      defaultFrom = `${today.slice(0, 7)}-01`;
       break;
     case 'month':
       defaultFrom = `${year}-01-01`;
@@ -75,7 +95,7 @@ export function resolveAnalyticsQueryDefaults(
   };
 }
 
-/** Midnight UTC of a `YYYY-MM-DD` string — the app stores every instant in UTC. */
+/** A `YYYY-MM-DD` string as a UTC Date, used only for calendar arithmetic. */
 function parseUtcDay(day: string): Date {
   const [year, month, date] = day.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, date));
@@ -105,7 +125,7 @@ export function countAnalyticsBuckets(
   }
 }
 
-/** Turns a validated query into the half-open UTC window the SQL runs on. */
+/** Turns a validated query into the half-open day window the SQL runs on. */
 export function toAnalyticsRange(query: {
   interval: AnalyticsInterval;
   from: string;
@@ -113,16 +133,21 @@ export function toAnalyticsRange(query: {
 }): AnalyticsRange {
   return {
     interval: query.interval,
-    from: parseUtcDay(query.from),
-    toExclusive: new Date(parseUtcDay(query.to).getTime() + DAY_MS),
+    from: query.from,
+    // Pure calendar arithmetic, so a UTC Date is only a day counter here.
+    toExclusive: formatUtcDay(
+      new Date(parseUtcDay(query.to).getTime() + DAY_MS),
+    ),
+    timeZone: ANALYTICS_TIMEZONE,
   };
 }
 
 /**
  * `from`/`to` stay strings rather than `z.coerce.date()`: a `Date` in a request
  * DTO cannot be represented in the OpenAPI document this app publishes at boot.
- * When absent, their defaults depend on the requested chart granularity:
- * hour=today, day=this month, month=this year, year=the last five years.
+ * Both are calendar days in `ANALYTICS_TIMEZONE`. When absent, their defaults
+ * depend on the requested chart granularity: hour=today, day=this month,
+ * month=this year, year=the last five years.
  */
 export const getAdminAnalyticsQuerySchema = z
   .object({
