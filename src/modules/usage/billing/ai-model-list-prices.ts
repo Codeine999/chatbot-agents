@@ -117,33 +117,6 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
     cachedInputUsdPerMillTokens: 0.01,
   },
 
-  // --- MaxPlus ----------------------------------------------------------
-  // Model ids come from `GET https://api.maxplus-ai.cc/v1/models` (channel
-  // `gpt-native-up`). Reseller rates are not published per model, so all of
-  // them bill at the same tier as the configured Gemini default
-  // (`gemini-3.1-flash-lite`) until MaxPlus publishes its own list price.
-  {
-    provider: 'MAXPLUS',
-    model: 'gpt-5.6-sol',
-    inputUsdPerMillTokens: 0.25,
-    outputUsdPerMillTokens: 1.5,
-    cachedInputUsdPerMillTokens: 0.025,
-  },
-  {
-    provider: 'MAXPLUS',
-    model: 'gpt-5.6-terra',
-    inputUsdPerMillTokens: 0.2,
-    outputUsdPerMillTokens: 1,
-    cachedInputUsdPerMillTokens: 0.025,
-  },
-  {
-    provider: 'MAXPLUS',
-    model: 'gpt-5.5',
-    inputUsdPerMillTokens: 0.2,
-    outputUsdPerMillTokens: 0.5,
-    cachedInputUsdPerMillTokens: 0.025,
-  },
-
   // --- OpenAI -----------------------------------------------------------
   {
     provider: 'OPENAI',
@@ -218,6 +191,81 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
     cacheWriteUsdPerMillTokens: 1.25,
   },
 
+  // --- OpenRouter --------------------------------------------------------
+  // Verified 2026-10-02: official Standard prices, exact OpenRouter model IDs.
+  // Qwen uses Alibaba Model Studio's Singapore / International prices:
+  // https://www.alibabacloud.com/help/en/model-studio/model-pricing
+  // Gemini context-storage charges are per token-hour, not cache-write tokens.
+  // Gemini 3.8 Flash-Lite TTS is audio-output and absent from OpenRouter's
+  // catalog; do not expose it through the text-generation adapter.
+  {
+    provider: 'OPENROUTER',
+    model: 'openai/gpt-6-luna',
+    inputUsdPerMillTokens: 0.1,
+    outputUsdPerMillTokens: 0.5,
+    cachedInputUsdPerMillTokens: 0.01,
+    cacheWriteUsdPerMillTokens: 0.125,
+    longContext: {
+      thresholdTokens: 272_000,
+      inputMultiplier: 2,
+      outputMultiplier: 1.5,
+      cachedInputMultiplier: 2,
+      cacheWriteMultiplier: 2,
+    },
+  },
+  {
+    provider: 'OPENROUTER',
+    model: 'google/gemini-3.5-flash-lite',
+    inputUsdPerMillTokens: 0.3,
+    outputUsdPerMillTokens: 2.5,
+    cachedInputUsdPerMillTokens: 0.03,
+  },
+  {
+    provider: 'OPENROUTER',
+    model: 'anthropic/claude-sonnet-5.5',
+    inputUsdPerMillTokens: 2,
+    outputUsdPerMillTokens: 10,
+    cachedInputUsdPerMillTokens: 0.2,
+    cacheWriteUsdPerMillTokens: 2.5,
+  },
+  {
+    provider: 'OPENROUTER',
+    model: 'anthropic/claude-opus-5.5',
+    inputUsdPerMillTokens: 4,
+    outputUsdPerMillTokens: 20,
+    cachedInputUsdPerMillTokens: 0.2,
+    cacheWriteUsdPerMillTokens: 5,
+  },
+  {
+    provider: 'OPENROUTER',
+    model: 'openai/gpt-6.1-sol',
+    inputUsdPerMillTokens: 2,
+    outputUsdPerMillTokens: 10,
+    cachedInputUsdPerMillTokens: 0.1,
+    cacheWriteUsdPerMillTokens: 2.5,
+    longContext: {
+      thresholdTokens: 272_000,
+      inputMultiplier: 2,
+      outputMultiplier: 1.5,
+      cachedInputMultiplier: 2,
+      cacheWriteMultiplier: 2,
+    },
+  },
+  {
+    provider: 'OPENROUTER',
+    model: 'qwen/qwen3.8-omni-flash',
+    inputUsdPerMillTokens: 0.15,
+    outputUsdPerMillTokens: 0.47,
+    cachedInputUsdPerMillTokens: 0.016,
+  },
+  {
+    provider: 'OPENROUTER',
+    model: 'google/gemini-3.7-flash',
+    inputUsdPerMillTokens: 0.75,
+    outputUsdPerMillTokens: 3.75,
+    cachedInputUsdPerMillTokens: 0.075,
+  },
+
   // --- Embeddings (input-only) -----------------------------------------
   // Billed per input token with no output; `GEMINI_EMBEDDING_MODEL` selects
   // which one the knowledge base writes and searches with.
@@ -231,7 +279,8 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
   {
     provider: 'GEMINI',
     model: 'gemini-embedding-2',
-    inputUsdPerMillTokens: 0.15,
+    // Standard text input: https://ai.google.dev/gemini-api/docs/pricing#gemini-embedding-2
+    inputUsdPerMillTokens: 0.2,
     outputUsdPerMillTokens: 0,
     inputOnly: true,
   },

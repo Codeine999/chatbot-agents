@@ -24,7 +24,7 @@ export const AI_PROVIDER_LABELS = {
   GEMINI: 'Google Gemini',
   OPENAI: 'OpenAI',
   ANTHROPIC: 'Anthropic Claude',
-  MAXPLUS: 'MaxPlus AI',
+  OPENROUTER: 'OpenRouter',
 } as const satisfies Readonly<Record<AiProviderName, string>>;
 
 export const AI_PROVIDER_TEXT_MODELS = {
@@ -52,5 +52,13 @@ export const AI_PROVIDER_TEXT_MODELS = {
     'claude-sonnet-5',
     'claude-haiku-4-5-20251001',
   ],
-  MAXPLUS: ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.5'],
+  OPENROUTER: [
+    'openai/gpt-6-luna',
+    'google/gemini-3.5-flash-lite',
+    'anthropic/claude-sonnet-5.5',
+    'anthropic/claude-opus-5.5',
+    'openai/gpt-6.1-sol',
+    'qwen/qwen3.8-omni-flash',
+    'google/gemini-3.7-flash',
+  ],
 } as const satisfies Readonly<Record<AiProviderName, readonly string[]>>;

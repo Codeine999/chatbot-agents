@@ -2,7 +2,7 @@ export const AI_PROVIDER_NAMES = [
   'GEMINI',
   'OPENAI',
   'ANTHROPIC',
-  'MAXPLUS',
+  'OPENROUTER',
 ] as const;
 
 export const AI_PROVIDER_SCOPES = ['USER', 'ADMIN'] as const;

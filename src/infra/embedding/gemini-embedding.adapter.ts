@@ -17,7 +17,7 @@ import {
   toTokenCount,
 } from '../../ai-provider/utils/token-usage.utils';
 
-const DEFAULT_EMBEDDING_MODEL = 'gemini-embedding-001';
+const DEFAULT_EMBEDDING_MODEL = 'gemini-embedding-2';
 
 @Injectable()
 export class GeminiEmbeddingAdapter implements EmbeddingAdapter {

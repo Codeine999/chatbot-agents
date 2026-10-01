@@ -65,6 +65,7 @@ export class AiProviderSettingsService {
 
     if (
       existing &&
+      isAiProviderName(existing.provider) &&
       this.catalogService.isConfiguredModel(existing.provider, existing.model)
     ) {
       return this.toRuntimeSetting(existing);
@@ -136,12 +137,15 @@ export class AiProviderSettingsService {
 
   private toRuntimeSetting(setting: {
     scope: string;
-    provider: AiProviderName;
+    provider: string;
     model: string;
     updatedAt: Date;
   }): AiProviderRuntimeSetting {
     if (!isAiProviderScope(setting.scope)) {
       throw new Error(`Unsupported global AI provider scope=${setting.scope}`);
+    }
+    if (!isAiProviderName(setting.provider)) {
+      throw new Error(`Unsupported AI provider=${setting.provider}`);
     }
 
     return {

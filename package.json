@@ -49,6 +49,7 @@
     "fastify-raw-body": "^5.0.0",
     "ioredis": "^5.11.1",
     "nestjs-zod": "^5.4.0",
+    "openai": "^7.25.0",
     "pg": "^8.21.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

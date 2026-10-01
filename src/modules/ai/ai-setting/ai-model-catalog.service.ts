@@ -72,9 +72,10 @@ export class AiModelCatalogService {
       ? configuredProvider
       : (this.getCatalog().find((item) => item.available)?.provider ??
         'GEMINI');
-    const configuredModel = this.configService
-      .get<string>(`AI_${scope}_MODEL`)
-      ?.trim();
+    const configuredModel =
+      !configuredProvider || isAiProviderName(configuredProvider)
+        ? this.configService.get<string>(`AI_${scope}_MODEL`)?.trim()
+        : undefined;
     const model = configuredModel || this.getModels(provider)[0];
 
     if (!model) {

@@ -41,6 +41,8 @@ flowchart TD
 
 Diagram greeting edge ไป GENERAL ใช้เฉพาะ greeting/acknowledgment; menu/cancel/contact มี static branch ไม่เรียกโมเดล
 
+ข้อความทั้งข้อความที่ขอถามแต่ยังไม่บอกเรื่อง (เช่น "สอบถาม", "ขอสอบถามหน่อยครับ", "สวัสดีค่ะ สอบถามหน่อยค่ะ") เป็น RULE `GENERAL_QUESTION` → `START_AI_CHAT` → template "ได้เลยครับ ต้องการสอบถามเรื่องอะไรครับ" ไม่ค้นความรู้ ไม่เรียกโมเดล และไม่ requestAdmin; ถ้ามีหัวข้อต่อท้าย (เช่น "สอบถามห้องว่าง") ยังเข้า retrieval ตามปกติ คำกริยาขอ/ถาม (สอบถาม ถาม ขอ อยาก รบกวน) อยู่ใน BM25 function words จึงทำให้ FAQ เป็น candidate ด้วยตัวเองไม่ได้
+
 | ขั้น | Service entry | Input → output / side effects |
 |---|---|---|
 | HTTP | `LineController.handleWebhook` | `{destination,events[]}` → `{ok:true}`; raw HMAC checked, ingress Redis limit, queue jobId=webhookEventId; body ปัจจุบันเป็น TS type ไม่ใช่ runtime Zod DTO |
@@ -64,6 +66,7 @@ REPLY ใช้ token เมื่อ deadline timestamp+50s ยังไม่�
 |---|---:|---:|
 | Exact approved DIRECT (cache/DB) | 0 | 0 |
 | Greeting/acknowledgment | 0 | 1 |
+| Inquiry opener ไม่มีหัวข้อ ("สอบถาม") | 0 | 0 |
 | Exact preset renderMode=REWRITE | 1 | 1; unified retrieval รวม MicroKnowledge |
 | Lexical/hybrid RAG | 1 | 1 |
 | Vector-only → BUSINESS | 1 | 2: classifier แล้ว grounded answer |
@@ -292,7 +295,7 @@ Source: [ChatbotService](../src/modules/chatbot/chatbot.service.ts), [IntentRout
 | Function | รับเข้า → ทำงาน/เรียกต่อ → คืนผล |
 |---|---|
 | handleTextMessage | ChatRequest → isMuted, get session, trim/length gate → router.resolve → switch action → ChatResponse |
-| RuleIntentService.detect | text → deterministic menu/keyword rules → {intent,confidence,source:'RULE',reason}; ไม่เรียก DB/provider |
+| RuleIntentService.detect | text → deterministic menu/keyword rules + whole-message inquiry opener (GENERAL_QUESTION 0.95) → {intent,confidence,source:'RULE',reason}; ไม่เรียก DB/provider |
 | IntentRouterService.resolve | input/session/history/usage IDs → cancel → active workflow boundary → greeting → high-confidence rule → retrieval; missing info→CLARIFY, conflict/error→CONTACT_ADMIN, DIRECT/RAG→ANSWER_KNOWLEDGE, LOW→resolveLowConfidence |
 | resolveLowConfidence | input/history/usage IDs → classifyLowConfidence → GENERAL_QUESTION; BUSINESS + vector-only RAG evidence → ANSWER_KNOWLEDGE; BUSINESS ไม่มีหลักฐานหรือ classifier failed → CONTACT_ADMIN |
 | retrievalSource | retrieval.matchType + selected metadata → EMBEDDING/DATABASE/CACHE source |
@@ -401,6 +404,10 @@ Knowledge admin controllers delegate list/count/create/update/remove/reindex; mu
 - buildAnswerPatternDocument/buildMicroKnowledgeDocument รวมข้อความตาม field order คงที่ก่อน embedding; micro เพิ่ม entityKey/topicKey
 
 ## 9. Function flow: provider, embedding และ accounting
+
+MaxPlus ถูกถอดจาก adapter registry, model catalog และ pricing seed แล้ว ค่า `MAXPLUS` ใน database enum และ migration เดิมคงไว้สำหรับประวัติ usage/accounting การตั้งค่าเดิมที่ชี้ไป provider นี้จะใช้ default selection ที่รองรับเมื่อโหลดใหม่ ตรวจ `AI_USER_PROVIDER`/`AI_ADMIN_PROVIDER` และรุ่นที่ตั้งไว้ก่อน deploy
+
+OpenRouter เป็น generation adapter เพิ่มเติม โดยอ่าน `OPEN_ROUTER_KEY` จาก env, ใช้ `AI_OPENROUTER_MODELS` เป็นรายการรุ่นที่เลือกได้ และเก็บ provider/model ที่เลือกจริงใน `AiProviderSetting` เดิมแยก USER/ADMIN ก่อนเรียก provider ต้องมี `AiModelPricing` ของ `OPENROUTER` กับ model ID นั้น รายละเอียดการเปิดใช้และ billing caveats อยู่ที่ [OpenRouter provider](openrouter-provider.md)
 
 Source: [provider](../src/modules/ai/ai-provider.service.ts), [embedding](../src/modules/ai/embeding/embedding.service.ts), [billing](../src/modules/usage/billing/ai-billing.service.ts), [credit](../src/modules/usage/credit-point/credit.service.ts)
 

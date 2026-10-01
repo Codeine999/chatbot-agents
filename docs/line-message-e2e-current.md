@@ -109,6 +109,8 @@ AiUsageEvent.id คือหนึ่ง billed call ไม่ใช่หนึ
 
 Generation hash รวม provider/model/request/context และ responseJsonSchema (เมื่อระบุ) จึงอาจเปลี่ยนเมื่อ retry โหลด history/settings ใหม่ ไม่ใช่ immutable whole-turn plan ส่วน embedding key ไม่รวม model ไม่ควรเปลี่ยน embedding configuration กลางการกู้ turn แล้วคาดว่า replay เป็น vector ของ model ใหม่
 
+OpenRouter generation uses `max_tokens` and retains `response_format: json_schema` with `provider.require_parameters: true` for grounded answers. The adapter omits unsupported `temperature` for OpenAI GPT-5/6 models so strict routing does not exclude all endpoints. SDK retries are disabled; `AiProviderService` owns bounded retries, and permanent 404 failures keep the existing safe fallback.
+
 ## 4. Routing และ output policies
 
 Core text flow อัปเดต 13 กันยายน 2026: [implementation และ call-count tests](core-text-reply-refactor.md)
@@ -207,3 +209,19 @@ Source ที่ใช้:
 - [Schemas](../prisma/schema.prisma)
 
 Routing update 27 กันยายน 2026: เลขเมนู 1/2/3 ใช้ได้เมื่อไม่มี history/active flow หรือหลัง RULE menu แบบเลข; ตัวเลขกลางบทสนทนาเป็นข้อมูลตอบคำถามและ active registration รับเลขตาม flow. Gemini grounded generation เปิด native JSON schema; citation validation ยังบังคับ และ provider อื่นคงใช้ prompt/validator. query และ message/history ถูก redact ก่อนส่ง AI. รายละเอียดและข้อจำกัดอยู่ใน [ผลแก้ fallback](chatbot-fallback-verification-2026-09-27.md).
+
+### Embedding model and pricing (2026-10-02)
+
+The default embedding model is `gemini-embedding-2`; an explicit
+`GEMINI_EMBEDDING_MODEL` still takes precedence. Dimensions remain 1536.
+Standard text input is USD 0.20 per million tokens, with no output charge,
+per [Google's official pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-embedding-2).
+The catalog converts this into THB cost and credits using the configured
+exchange rate, active credit exchange rate, and markup. This path does not use
+Batch pricing or multimodal input prices. Deleted pricing must be republished;
+editing the catalog alone does not restore a database row. Existing active
+prices are preserved by default seeding.
+
+When moving from a different embedding model, reindex both answer-pattern and
+micro-knowledge vectors before serving retrieval with the new model. Equal
+vector dimensions do not make embeddings from different models compatible.
