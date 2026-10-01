@@ -156,6 +156,7 @@ export class IntentRouterService {
         retrieval,
       );
     }
+
     if (
       retrieval.fallbackReason === 'CONFLICTING_CANDIDATES' ||
       retrieval.fallbackReason === 'RETRIEVAL_ERROR'
@@ -183,6 +184,7 @@ export class IntentRouterService {
         fallbackReason: 'VECTOR_ONLY_CANDIDATES',
       });
     }
+    
     if (retrieval.route !== 'LOW_CONFIDENCE') {
       const decision: RouteDecision = {
         action: 'ANSWER_KNOWLEDGE',

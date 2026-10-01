@@ -1,0 +1,144 @@
+{
+  "date": "2026-10-01",
+  "timezone": "Asia/Bangkok",
+  "gitHead": "21e3d9c660d5972650f29ee5d040c2413220fe8d",
+  "scope": "Current working tree including pre-existing user edits; no production source edits made by this audit",
+  "checks": [
+    {
+      "command": "bun run test --runInBand --testPathPatterns=modules/chatbot",
+      "exitCode": 1,
+      "summary": {
+        "numTotalTests": 177,
+        "numPassedTests": 162,
+        "numFailedTests": 15,
+        "numTotalTestSuites": 16,
+        "numPassedTestSuites": 10,
+        "numFailedTestSuites": 6
+      },
+      "failures": [
+        {
+          "file": "modules/chatbot/audit/core-chat-e2e.audit.spec.ts",
+          "title": "observes a provider failure promising an admin in the reply text without requesting one"
+        },
+        {
+          "file": "modules/chatbot/audit/core-chat-e2e.audit.spec.ts",
+          "title": "observes history and the current message being sent twice: once in the prompt, once as messages"
+        },
+        {
+          "file": "modules/chatbot/audit/core-chat-e2e.audit.spec.ts",
+          "title": "observes an image classified as business returning a fallback without an admin handoff"
+        },
+        {
+          "file": "modules/chatbot/audit/core-rag-review-2026-09-24.audit.spec.ts",
+          "title": "observes identical answers consuming all evidence slots and dropping a complementary fact"
+        },
+        {
+          "file": "modules/chatbot/audit/core-rag-review-2026-09-24.audit.spec.ts",
+          "title": "observes the same row from vector search replacing lexical content during fusion"
+        },
+        {
+          "file": "modules/chatbot/audit/core-rag-review-2026-09-24.audit.spec.ts",
+          "title": "observes registration PII in a how-to digression reaching embedding and generation inputs"
+        },
+        {
+          "file": "modules/chatbot/audit/core-rag-review-2026-09-24.audit.spec.ts",
+          "title": "observes email addresses remaining in stored context after redaction"
+        },
+        {
+          "file": "modules/chatbot/prompt/ai-setting-prompt.composer.spec.ts",
+          "title": "keeps sections deterministic and prevents untrusted tag escape"
+        },
+        {
+          "file": "modules/chatbot/audit/retrieval-fusion.audit.spec.ts",
+          "title": "observes weak vector neighbours turning small talk into a grounded RAG call and an admin handoff"
+        },
+        {
+          "file": "modules/chatbot/knowledge/test/knowledge-retrieval.service.spec.ts",
+          "title": "ส่งหลักฐานให้โมเดลไม่เกิน 3 ชิ้น"
+        },
+        {
+          "file": "modules/chatbot/audit/grounded-evidence.audit.spec.ts",
+          "title": "answers the recorded Thai query without an unnecessary handoff or context clear"
+        },
+        {
+          "file": "modules/chatbot/audit/grounded-evidence.audit.spec.ts",
+          "title": "accepts namespaced references to selected evidence"
+        },
+        {
+          "file": "modules/chatbot/audit/grounded-evidence.audit.spec.ts",
+          "title": "accepts bare references to selected evidence"
+        },
+        {
+          "file": "modules/chatbot/audit/grounded-evidence.audit.spec.ts",
+          "title": "accepts mixed references to selected evidence"
+        },
+        {
+          "file": "modules/chatbot/audit/grounded-evidence.audit.spec.ts",
+          "title": "accepts explicit source references even when bare IDs collide"
+        }
+      ]
+    },
+    {
+      "command": "bun run test --config test/jest-chatbot-audit.json --runInBand",
+      "exitCode": 1,
+      "summary": {
+        "numTotalTests": 80,
+        "numPassedTests": 39,
+        "numFailedTests": 41,
+        "numTotalTestSuites": 1,
+        "numPassedTestSuites": 0,
+        "numFailedTestSuites": 1
+      },
+      "note": "Acceptance probes intentionally remain red for unresolved findings; no case threw a setup/runtime error"
+    },
+    {
+      "command": "bun run build",
+      "exitCode": 0,
+      "output": "$ nest build"
+    },
+    {
+      "command": "bunx tsc --noEmit",
+      "exitCode": 2,
+      "output": "src/modules/chatbot/prompt/ai-setting-prompt.composer.spec.ts(13,7): error TS2353: Object literal may only specify known properties, and 'historyMessages' does not exist in type 'Readonly<{ setting: AiRuntimeSetting; ragContext?: readonly KnowledgeItem[] | undefined; modeRules: string; }>'."
+    },
+    {
+      "command": "bunx eslint 'src/modules/chatbot/**/*.ts' test/audit/chatbot-core-2026-10-01.audit.ts",
+      "exitCode": 1,
+      "output": "src/modules/chatbot/chatbot.service.ts\n  60:38  error  'session' may use Object's default stringification format ('[object Object]') when stringified          @typescript-eslint/no-base-to-string\n  60:38  error  Invalid type \"ConversationSession<Record<string, unknown>> | undefined\" of template literal expression  @typescript-eslint/restrict-template-expressions\n\nsrc/modules/chatbot/context/load-context.service.ts\n  119:29  error  Insert `⏎········`                                                                                                                                                                                    prettier/prettier\n  134:9   error  Replace `·1,·key,·JSON.stringify(turn),·MAX_CONTEXT_TURNS,·CONTEXT_TTL_SEC` with `⏎········1,⏎········key,⏎········JSON.stringify(turn),⏎········MAX_CONTEXT_TURNS,⏎········CONTEXT_TTL_SEC,⏎······`  prettier/prettier\n\nsrc/modules/chatbot/image-analysis.policy.ts\n  45:22  error  Delete `⏎·······`  prettier/prettier\n\nsrc/modules/chatbot/intent-router.service.ts\n  187:1  error  Delete `····`  prettier/prettier\n\nsrc/modules/chatbot/knowledge/knowledge-retrieval.service.ts\n   32:10  error  'isUsableKnowledge' is defined but never used  @typescript-eslint/no-unused-vars\n  133:1   error  Delete `····`                                  prettier/prettier\n\n✖ 8 problems (8 errors, 0 warnings)\n  5 errors and 0 warnings potentially fixable with the `--fix` option."
+    },
+    {
+      "command": "bunx eslint test/audit/chatbot-core-2026-10-01.audit.ts",
+      "exitCode": 0,
+      "output": ""
+    },
+    {
+      "command": "bunx prettier --check test/audit/chatbot-core-2026-10-01.audit.ts test/jest-chatbot-audit.json",
+      "exitCode": 0,
+      "output": "Checking formatting...\nAll matched files use Prettier code style!"
+    }
+  ],
+  "notExecuted": [
+    "Live AI/provider calls",
+    "Live LINE sends",
+    "Real PostgreSQL/pgvector recall tests",
+    "Real Redis/BullMQ distributed ordering and crash recovery",
+    "Full billing ledger/wallet/reservation reconciliation",
+    "Production deployment"
+  ],
+  "networkBoundary": "Synthetic providers and storage; fetch/http/https guards; no unexpected scripted generation calls recorded in core cases",
+  "artifactNotes": "cases.md is a readable snapshot; cases.json is regenerated by the audit suite. Model outputs are scripted fault injection/control responses, not live model measurements.",
+  "artifactValidation": {
+    "localMarkdownLinks": "all targets exist",
+    "caseIds": "80 unique",
+    "caseCounts": {
+      "total": 80,
+      "passed": 39,
+      "failed": 41
+    },
+    "sourceInventory": {
+      "files": 50,
+      "lines": 7696
+    },
+    "gitDiffCheck": "Reports only pre-existing trailing whitespace in intent-router.service.ts:187 and knowledge-retrieval.service.ts:133; user changes preserved"
+  }
+}

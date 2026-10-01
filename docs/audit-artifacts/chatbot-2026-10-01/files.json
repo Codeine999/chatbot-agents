@@ -1,0 +1,302 @@
+[
+  {
+    "path": "src/modules/chatbot/ai-intent-classifier.service.ts",
+    "lines": 80,
+    "sha256": "3619076c5802dfa997558d715b44992ac04d45300292d7b8caeaf310e3278282",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/ai.module.ts",
+    "lines": 32,
+    "sha256": "6146504dfdbdab7c03627e5a124eddffdcbaff09c24deb80b89df97fd1fffd2a",
+    "role": "type / constant / wiring"
+  },
+  {
+    "path": "src/modules/chatbot/aichat.service.ts",
+    "lines": 470,
+    "sha256": "b38fa71735165f9c0b8696befcc90be2086fa4ffa7c5dda85135400c68066ea6",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/audit/core-chat-e2e.audit.spec.ts",
+    "lines": 571,
+    "sha256": "a16ab9c7985a5eb639e540a98934a23a5c4706d961b366805a960cbe0bf20a59",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/audit/core-chat.harness.ts",
+    "lines": 347,
+    "sha256": "c5c981f8ed7f84c161258e9b3f55f47ae74bd5be061287fafa1c3996cf5ba6bc",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/audit/core-rag-review-2026-09-24.audit.spec.ts",
+    "lines": 366,
+    "sha256": "bd15069376f2a0f04653763b39adb9271b1ded15e24e23a77ab79a4df41389cf",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/audit/grounded-evidence.audit.spec.ts",
+    "lines": 127,
+    "sha256": "dc5b6c07e6f32a8775bd2a28ef42977652dfc1b75c014d7e859ea4a7aac4cf61",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/audit/line-ingress.audit.spec.ts",
+    "lines": 127,
+    "sha256": "fa406ac37343d0b589867587d72bf6648cfbbc23049c3b0785e02ef34795c2ca",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/audit/retrieval-fusion.audit.spec.ts",
+    "lines": 312,
+    "sha256": "71d8e0f23fc6dc2a32230bc783e7aa389135b48bbbd9f46d4eb588a4690a4cc6",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/chatbot.module.ts",
+    "lines": 41,
+    "sha256": "ee1b65e13a21439ad3c23448cb990131914eee1b63d2ad0c05df6750b6944974",
+    "role": "type / constant / wiring"
+  },
+  {
+    "path": "src/modules/chatbot/chatbot.service.ts",
+    "lines": 354,
+    "sha256": "a262276b1cd24577d0452093ffac5dc056c29dd938814e99ca86f1fc460ed51e",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/constants/ai-chat.constants.ts",
+    "lines": 30,
+    "sha256": "e1e2cb138d9eff9dd168d5d5d6ecd9122b8ebb66d8f0342ba475bd479a004807",
+    "role": "type / constant / wiring"
+  },
+  {
+    "path": "src/modules/chatbot/constants/knowledge-routing.constants.ts",
+    "lines": 15,
+    "sha256": "e64871b96d8318bdec0c968d5f0a8b07a36baf02f1641f2aed9b094db6c4f5e0",
+    "role": "type / constant / wiring"
+  },
+  {
+    "path": "src/modules/chatbot/constants/low-confidence-classifier.prompt.ts",
+    "lines": 41,
+    "sha256": "c1c19bd94ad4a5efeb9f539b2b745984001b8e5d58d20d95c40a92a568918ab4",
+    "role": "type / constant / wiring"
+  },
+  {
+    "path": "src/modules/chatbot/context/ai-provider-context.ts",
+    "lines": 53,
+    "sha256": "4e270fc9a711bf10cfc6e0803a5c46f60ddd0f594753426374f5ea0d50472a4b",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/context/load-context.service.ts",
+    "lines": 216,
+    "sha256": "3589be8f6d3b97f5fa79cd9a380b786726940a2e2727573d86d41059764d4089",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/image-analysis.policy.ts",
+    "lines": 60,
+    "sha256": "fedae253ebc3ecc8a06ddaf67a10290bf7aebb2d00f102b4daf8e3821ebf0f67",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/intent/intent.maps.ts",
+    "lines": 42,
+    "sha256": "eac2a3b191bfcff0d662ada3d6083162c44781ac82da71878e5fb3e10b390752",
+    "role": "type / constant / wiring"
+  },
+  {
+    "path": "src/modules/chatbot/intent/intent.utils.ts",
+    "lines": 16,
+    "sha256": "2dce8a9daa687644818032857f26a2fe05279f4f295ff68ca14c02f4c061ba93",
+    "role": "type / constant / wiring"
+  },
+  {
+    "path": "src/modules/chatbot/intent-router.service.ts",
+    "lines": 404,
+    "sha256": "6772842fa801242a798826688d32f4f38a2109bc0194a0241090cc35040f9247",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/answer-pattern-cache.service.ts",
+    "lines": 87,
+    "sha256": "5a6aeb57b2cb025682caed623f587e562f83b23cd58aecf634d06569d274b071",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/answer-pattern.service.ts",
+    "lines": 188,
+    "sha256": "d1a1645658f64752de5891af0207fa70b07cbbde028e2f02cd962cffd42ed6b4",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/knowledge-answer.policy.ts",
+    "lines": 11,
+    "sha256": "97aa1509709269e89ace5cae4e2ea6f7cb00177794638ce25c8c4b1cd3c5ba28",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/knowledge-retrieval.service.ts",
+    "lines": 497,
+    "sha256": "8d2ce2e0020afe4cf67da06d4729ef54358e4a01b84479736cf0553d4dcaad35",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/knowledge-scope.ts",
+    "lines": 38,
+    "sha256": "d3961b1af465980fe2295c1efffaff92aa98aa69b6984f119202b1f60330a363",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/micro-knowledge.service.ts",
+    "lines": 33,
+    "sha256": "2a0b9dbaa1c5fd5986f13491d6d9374696ea835e2137fb3793f44ded3e4c4308",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/retrieval-query-planner.service.ts",
+    "lines": 93,
+    "sha256": "7a910f682bb7f0543ff34de4e3e83826c4f0fd7394556473e171fdcde27ce665",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/semantic-search.service.ts",
+    "lines": 112,
+    "sha256": "f400ee0ddaf4011dfdc376ce8085f4d067f0891c6a19bda86bdfb0d6544c81c1",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/test/answer-pattern-cache.service.spec.ts",
+    "lines": 120,
+    "sha256": "751beb7899f28736303f6a6c02bee498c5802a2793e7c5bfc78223b2f79b3b6b",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/test/answer-pattern.service.spec.ts",
+    "lines": 258,
+    "sha256": "f4297295d102813cbe2f4a96488bb62d469fdf167db4b093090f5c086e725827",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/test/knowledge-pattern.service.spec.ts",
+    "lines": 64,
+    "sha256": "1a2b0801b98868a562bd8faa65a90045ebb1b7aad3d1e1598cdf4a9d2b448606",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/test/knowledge-retrieval.service.spec.ts",
+    "lines": 570,
+    "sha256": "826f302bad695af125c967e6c0746e094d4a985192696ea6c755b176fe58af19",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/test/knowledge-scope.spec.ts",
+    "lines": 70,
+    "sha256": "1042d07221e0fe03732d982228cec00789ea0bd0aaf92eeb9b66c99d1e5a7ecf",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/test/knowledge.fixtures.ts",
+    "lines": 63,
+    "sha256": "274d89ec30120f53c9ebf2ec65efdd77f3f19c82b6baecad5809b3c6549828c4",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/test/micro-knowledge.service.spec.ts",
+    "lines": 76,
+    "sha256": "b37fd6ebe7ee2ffb529da679caa8161d9c2022aff30898ad8e6ffcfd374b0849",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/test/retrieval-query-planner.spec.ts",
+    "lines": 131,
+    "sha256": "0052703aa4855e2c7f76999a05f51582e7b51aced21f87fcc4539609e83be0fe",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/test/semantic-search.service.spec.ts",
+    "lines": 151,
+    "sha256": "9c607979b152b68a89bc31193580f27340612c56d725f5830b0ad326297afe1f",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/knowledge/thai-bm25.ts",
+    "lines": 121,
+    "sha256": "b7b0dc815ce2745baa405fb9114830777680e89a1280e02f3b30f2b1a78236ee",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/menu/rich-menu-reply-cache.service.spec.ts",
+    "lines": 162,
+    "sha256": "2c38dccdd8c469bb54707313677ab02af1f6215bccd0fa8d08d4be3641b03026",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/menu/rich-menu-reply-cache.service.ts",
+    "lines": 154,
+    "sha256": "3a7471febb0fcaa09da8ae2f1cbb87c6a16e615a65f6e6a75d5340c1c325d2d8",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/menu/rich-menu-routing.spec.ts",
+    "lines": 134,
+    "sha256": "f1c0ea8e3660c1a4069611ece5697ae8c7033c71ee76d1a11f3f1fedd36e4a73",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/prompt/ai-setting-prompt.composer.spec.ts",
+    "lines": 36,
+    "sha256": "7b508ecdb48b86f5fc184edca0f781e23ac71d733b3cfe6396a44f63d418cdf3",
+    "role": "test / fixture"
+  },
+  {
+    "path": "src/modules/chatbot/prompt/ai-setting-prompt.composer.ts",
+    "lines": 89,
+    "sha256": "42bf807e634a3217eb7ee8386ae085953981ae4aff4420c724cc94762f00b29c",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/reply-template.service.ts",
+    "lines": 192,
+    "sha256": "b8031c65caf7dbf53d794ebb107b602b448edc3b1936f183bd31275ea5a0dc6b",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/rule-intent.service.ts",
+    "lines": 67,
+    "sha256": "5a41d94ff3d099a81aeaf11d15c47907f1282277245ac8fa76472427612efa7c",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/sticker-intent.service.ts",
+    "lines": 89,
+    "sha256": "b15b0848813054931d15aa5cf650724f76dc5559eff5f4b733bbfb7c1a864a80",
+    "role": "production logic"
+  },
+  {
+    "path": "src/modules/chatbot/types/ai-runtime.types.ts",
+    "lines": 14,
+    "sha256": "612fb73783ba1ecce572f039830a726495f2bbe127014795c96fbd9cbb6f505a",
+    "role": "type / constant / wiring"
+  },
+  {
+    "path": "src/modules/chatbot/types/chat.types.ts",
+    "lines": 174,
+    "sha256": "984e295b0afaca32b4441a28aac18d7af245b7c90269b2c2aa31f369a2bfc742",
+    "role": "type / constant / wiring"
+  },
+  {
+    "path": "src/modules/chatbot/types/session.types.ts",
+    "lines": 19,
+    "sha256": "fb8c506f94e7d9419da547b37cb3dbf18ea0a91829a3766f04d448b59614becd",
+    "role": "type / constant / wiring"
+  },
+  {
+    "path": "src/modules/chatbot/user-session.service.ts",
+    "lines": 179,
+    "sha256": "b5a2fd10613acaadada7dd0bfec32abd522fdbecac113b5c9426a8fb3a00985f",
+    "role": "production logic"
+  }
+]

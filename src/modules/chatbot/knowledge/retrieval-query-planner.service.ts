@@ -13,10 +13,7 @@ const PRIVATE_CONTEXT =
 const SOCIAL_MESSAGE =
   /^(?:(?:สวัสดี|หวัดดี|ขอบคุณ|โอเค)(?:ครับ|ค่ะ|คะ)?|ครับ|ค่ะ|คะ|hi|hello|thanks|ok|okay)[!. ]*$/iu;
 
-/** Rewrite a clear follow-up using bounded, already-delivered user history.
- * Ambiguous or private context asks for details rather than searching for a
- * guessed subject. This planner makes no provider call.
- */
+// to tell rag to know about production that user wanna know price
 export function resolveRetrievalQuery(
   input: string,
   history: readonly ChatContextMessage[],

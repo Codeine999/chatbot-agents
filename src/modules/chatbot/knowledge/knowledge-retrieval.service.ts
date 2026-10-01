@@ -130,6 +130,7 @@ export class KnowledgeRetrievalService {
         'CACHE',
       ),
     );
+    
     // A follow-up is not the customer's verbatim approved question.
     const directAllowed = query === message.trim();
     const fastCached = directAllowed ? this.directResult(cached) : undefined;
@@ -223,7 +224,7 @@ export class KnowledgeRetrievalService {
       item.metadata?.tenantId === this.scope.tenantId &&
       item.metadata?.language === this.scope.language &&
       Boolean(item.answer?.trim()) &&
-      isUsableKnowledge(item) &&
+      // isUsableKnowledge(item) &&
       Number.isFinite(item.score)
     );
   }
