@@ -19,6 +19,13 @@ import type { LineAiUsageContext } from '../usage/billing/ai-usage.types';
 /** Enough of the ranking curve to see a tie; [Retrieval] holds the full list. */
 const MAX_LOGGED_SCORES = 5;
 
+// A whole message that only asks to ask ("ขอสอบถามหน่อยครับ") has no topic.
+// Retrieval can only match the verb against stored example questions, so it
+// is answered like a greeting. Tested with spaces removed; prefix words are
+// distinct literals so matching stays linear.
+const INQUIRY_OPENER =
+  /^(?:(?:สวัสดี|หวัดดี|แอดมิน)(?:ครับผม|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า)?)?(?:(?:รบกวน|ขอ|อยาก|จะ|มีเรื่อง){0,4}(?:สอบถาม|ถาม|ปรึกษา)(?:ข้อมูล|เพิ่มเติม)?|มีคำถาม)(?:หน่อย|ด้วย|นิดนึง|นิดหน่อย)?(?:นะ)?(?:ครับผม|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า)?(?:[\p{P}\p{S}]|\u200d|\ufe0f)*$/u;
+
 @Injectable()
 export class IntentRouterService {
   private readonly logger = new Logger(IntentRouterService.name);
@@ -124,6 +131,16 @@ export class IntentRouterService {
       });
     }
 
+    if (INQUIRY_OPENER.test(input.replace(/\s+/gu, ''))) {
+      return this.logDecision(input, {
+        action: 'CONTINUE_AI_CHAT',
+        intent: 'GENERAL_QUESTION',
+        confidence: 1,
+        source: 'RULE',
+        reason: 'whole-message inquiry opener without a topic',
+      });
+    }
+
     if (!ruleKnowledgeDecision && rule.confidence >= 0.9) {
       const decision = fromRule(rule);
 
@@ -174,17 +191,8 @@ export class IntentRouterService {
         retrieval,
       );
     }
-    // Semantic neighbours alone do not establish that this is a business
-    // question. Reuse the existing classifier without discarding Thai
-    // paraphrases whose vocabulary differs from the stored knowledge.
-    if (retrieval.route === 'RAG' && retrieval.matchType === 'EMBEDDING') {
-      return this.resolveLowConfidence({
-        ...params,
-        retrieval,
-        fallbackReason: 'VECTOR_ONLY_CANDIDATES',
-      });
-    }
-    
+    // Retrieval returns RAG only for an exact question or a close vector hit;
+    // weaker candidates come back LOW_CONFIDENCE for the classifier below.
     if (retrieval.route !== 'LOW_CONFIDENCE') {
       const decision: RouteDecision = {
         action: 'ANSWER_KNOWLEDGE',
@@ -257,7 +265,10 @@ export class IntentRouterService {
       );
     }
 
-    if (retrieval?.route === 'RAG' && !analysis.failed) {
+    // Low-confidence candidates do not prove a business question, but once the
+    // classifier says BUSINESS they still ground the answer (paraphrases whose
+    // vocabulary differs from the stored knowledge).
+    if (retrieval?.selectedItems.length && !analysis.failed) {
       return this.logDecision(
         input,
         {
@@ -265,7 +276,7 @@ export class IntentRouterService {
           intent: 'ANSWER_KNOWLEDGE',
           confidence: analysis.confidence,
           source: 'AI',
-          reason: 'vector-only candidates classified as BUSINESS',
+          reason: 'low-confidence candidates classified as BUSINESS',
           resolvedQuery: input,
           retrieval,
         },

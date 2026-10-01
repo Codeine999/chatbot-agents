@@ -129,6 +129,9 @@ export function fakeRedis() {
 export function buildHarness(options: HarnessOptions = {}) {
   const env: Record<string, string> = {
     AUTO_MUTE_WHEN_REPLY: '10m',
+    // Most fixtures are keyword-only (no vector rows), so the vector
+    // confidence gate is off unless a test sets the production threshold.
+    KNOWLEDGE_RAG_MIN_VECTOR_SIMILARITY: '0',
     ...options.env,
   };
   const config = {

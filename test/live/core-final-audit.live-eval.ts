@@ -12,8 +12,8 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { AiProviderService } from '../../src/modules/ai/ai-provider.service';
 import { AiProviderSettingsService } from '../../src/modules/ai/ai-provider-settings.service';
 import { GeminiAiProvider } from '../../src/ai-provider/providers/gemini-ai.provider';
-import { MaxPlusProvider } from '../../src/ai-provider/providers/maxPlus-ai.provider';
 import { OpenAiProvider } from '../../src/ai-provider/providers/openai-ai.provider';
+import { OpenRouterProvider } from '../../src/ai-provider/providers/openrouter-ai.provider';
 import { AnthropicAiProvider } from '../../src/ai-provider/providers/anthropic-ai.provider';
 import { GeminiEmbeddingAdapter } from '../../src/infra/embedding/gemini-embedding.adapter';
 import { AnswerPatternVectorRepository } from '../../src/modules/ai/embeding/answer-pattern-vector.repository';
@@ -21,7 +21,11 @@ import { MicroKnowledgeVectorRepository } from '../../src/modules/ai/embeding/mi
 import { knowledgeScope } from '../../src/modules/chatbot/knowledge/knowledge-scope';
 import { aiSettingTenantId } from '../../src/modules/ai/ai-setting/ai-setting-config';
 import { buildHarness } from '../../src/modules/chatbot/audit/core-chat.harness';
-import type { AiGenerateRequest } from '../../src/ai-provider/types/ai-provider.types';
+import { isAiProviderName } from '../../src/ai-provider/types/ai-provider.types';
+import type {
+  AiGenerateRequest,
+  AiProviderName,
+} from '../../src/ai-provider/types/ai-provider.types';
 import type {
   ChatContextMessage,
   KnowledgeRetrievalResult,
@@ -47,7 +51,7 @@ const out =
   let embedding: GeminiEmbeddingAdapter;
   let fixtures: Parameters<typeof buildHarness>[0];
   let selection: {
-    provider: 'GEMINI' | 'OPENAI' | 'ANTHROPIC' | 'MAXPLUS';
+    provider: AiProviderName;
     model: string;
   };
   const results: unknown[] = [];
@@ -81,11 +85,12 @@ const out =
     ]);
     // Override this audit run only; never change the DB setting.
     const auditProvider = process.env.LIVE_AUDIT_PROVIDER;
-    if (auditProvider && !['GEMINI', 'OPENAI', 'ANTHROPIC', 'MAXPLUS'].includes(auditProvider)) {
-      throw new Error('Invalid LIVE_AUDIT_PROVIDER');
+    const selectedProvider = auditProvider ?? setting.provider;
+    if (!isAiProviderName(selectedProvider)) {
+      throw new Error('Select a supported provider for this live audit');
     }
     selection = {
-      provider: (auditProvider ?? setting.provider) as typeof selection.provider,
+      provider: selectedProvider,
       model: process.env.LIVE_AUDIT_MODEL ?? setting.model,
     };
     fixtures = {
@@ -112,8 +117,8 @@ const out =
       {} as AiProviderSettingsService,
       [
         new GeminiAiProvider(config),
-        new MaxPlusProvider(config),
         new OpenAiProvider(config),
+        new OpenRouterProvider(config),
         new AnthropicAiProvider(config),
       ],
       config,

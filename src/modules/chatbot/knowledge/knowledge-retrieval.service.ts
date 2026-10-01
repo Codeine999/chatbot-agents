@@ -14,6 +14,7 @@ import {
   RRF_RANK_CONSTANT,
   DEFAULT_VECTOR_CANDIDATE_MIN_SIMILARITY,
   DEFAULT_LEXICAL_CANDIDATE_MIN_SCORE,
+  DEFAULT_RAG_MIN_VECTOR_SIMILARITY,
   MAX_RAG_EVIDENCE_CHARACTERS,
 } from '../constants/knowledge-routing.constants';
 import {
@@ -43,6 +44,7 @@ export class KnowledgeRetrievalService {
   private readonly scope: KnowledgeScope;
   private readonly vectorNoiseFloor: number;
   private readonly lexicalNoiseFloor: number;
+  private readonly ragMinVectorSimilarity: number;
 
   constructor(
     private readonly patterns: AnswerPatternService,
@@ -67,6 +69,15 @@ export class KnowledgeRetrievalService {
       .parse(
         config.get('KNOWLEDGE_LEXICAL_CANDIDATE_MIN_SCORE') ??
           DEFAULT_LEXICAL_CANDIDATE_MIN_SCORE,
+      );
+    // Confidence gate on cosine similarity, also never compared with RRF.
+    this.ragMinVectorSimilarity = z.coerce
+      .number()
+      .min(-1)
+      .max(1)
+      .parse(
+        config.get('KNOWLEDGE_RAG_MIN_VECTOR_SIMILARITY') ??
+          DEFAULT_RAG_MIN_VECTOR_SIMILARITY,
       );
   }
 
@@ -130,7 +141,7 @@ export class KnowledgeRetrievalService {
         'CACHE',
       ),
     );
-    
+
     // A follow-up is not the customer's verbatim approved question.
     const directAllowed = query === message.trim();
     const fastCached = directAllowed ? this.directResult(cached) : undefined;
@@ -184,12 +195,27 @@ export class KnowledgeRetrievalService {
         'LOW_CONFIDENCE',
         'CONFLICTING_CANDIDATES',
       );
-    return this.result(
-      ranked,
-      selected,
-      selected.length ? 'RAG' : 'LOW_CONFIDENCE',
-      selected.length ? undefined : 'NO_USABLE_EVIDENCE',
+    if (!selected.length)
+      return this.result(ranked, [], 'LOW_CONFIDENCE', 'NO_USABLE_EVIDENCE');
+    // A shared word ranks a FAQ for "ยังอยู่ไหมคะ" too, so only an approved
+    // exact question or a close vector hit is confident enough to skip the
+    // BUSINESS/GENERAL classifier. Below it the candidates stay selected so a
+    // BUSINESS classification can still ground its answer on them.
+    const topVector = Math.max(
+      0,
+      ...vectors.map((item) => this.raw(item, 'vectorSimilarity')),
     );
+    const confident =
+      selected.some((item) => item.metadata?.exactMatch === true) ||
+      topVector >= this.ragMinVectorSimilarity;
+    return confident
+      ? this.result(ranked, selected, 'RAG')
+      : this.result(
+          ranked,
+          selected,
+          'LOW_CONFIDENCE',
+          'BELOW_MIN_VECTOR_SIMILARITY',
+        );
   }
 
   private directResult(

@@ -50,6 +50,13 @@ const FUNCTION_WORDS = new Set([
   'ใน',
   'จาก',
   'กับ',
+  // Asking/requesting verbs: "อยากสอบถามห้องว่าง" must not make every
+  // "สอบถาม..." message a candidate for that FAQ.
+  'สอบถาม',
+  'ถาม',
+  'ขอ',
+  'อยาก',
+  'รบกวน',
   'is',
   'are',
   'of',

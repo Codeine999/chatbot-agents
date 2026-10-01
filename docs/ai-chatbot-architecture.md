@@ -23,10 +23,10 @@ flowchart TD
   K -->|safe DIRECT preset| L[DIRECT stored answer]
   K -->|no safe DIRECT / REWRITE preset| M[Micro lexical + one query embedding]
   M --> N[Two vector searches + RRF + conflict/evidence checks]
-  N -->|lexical or hybrid evidence| O[AiChatService RAG: one generation]
-  N -->|no evidence or vector-only| P[BUSINESS / GENERAL classifier]
+  N -->|exact question or top vector >= 0.75| O[AiChatService RAG: one generation]
+  N -->|no evidence or top vector < 0.75| P[BUSINESS / GENERAL classifier]
   P -->|GENERAL| Q[AiChatService GENERAL: one generation]
-  P -->|BUSINESS with selected evidence| O
+  P -->|BUSINESS with low-confidence candidates| O
   P -->|BUSINESS without evidence or failed classification| R[requestAdmin + static fallback]
   O -->|insufficient, invalid, error or budget denied| R
   Q -->|error or budget denied| R
@@ -39,9 +39,11 @@ flowchart TD
   T --> U[ACCEPTED then history/context finalization]
 ```
 
-Diagram greeting edge ไป GENERAL ใช้เฉพาะ greeting/acknowledgment; menu/cancel/contact มี static branch ไม่เรียกโมเดล
+Diagram greeting edge ไป GENERAL ใช้เฉพาะ greeting/acknowledgment/inquiry opener; menu/cancel/contact มี static branch ไม่เรียกโมเดล
 
-ข้อความทั้งข้อความที่ขอถามแต่ยังไม่บอกเรื่อง (เช่น "สอบถาม", "ขอสอบถามหน่อยครับ", "สวัสดีค่ะ สอบถามหน่อยค่ะ") เป็น RULE `GENERAL_QUESTION` → `START_AI_CHAT` → template "ได้เลยครับ ต้องการสอบถามเรื่องอะไรครับ" ไม่ค้นความรู้ ไม่เรียกโมเดล และไม่ requestAdmin; ถ้ามีหัวข้อต่อท้าย (เช่น "สอบถามห้องว่าง") ยังเข้า retrieval ตามปกติ คำกริยาขอ/ถาม (สอบถาม ถาม ขอ อยาก รบกวน) อยู่ใน BM25 function words จึงทำให้ FAQ เป็น candidate ด้วยตัวเองไม่ได้
+ข้อความทั้งข้อความที่ขอถามแต่ยังไม่บอกเรื่อง (เช่น "สอบถาม", "ขอสอบถามหน่อยครับ", "สวัสดีค่ะ สอบถามหน่อยค่ะ") ตอบแบบเดียวกับ greeting: `CONTINUE_AI_CHAT` → `answerGeneral` (LLM แต่งประโยค) ไม่ค้นความรู้และไม่ requestAdmin; ถ้ามีหัวข้อต่อท้าย (เช่น "สอบถามห้องว่าง") ยังเข้า retrieval ตามปกติ คำกริยาขอ/ถาม (สอบถาม ถาม ขอ อยาก รบกวน) อยู่ใน BM25 function words จึงทำให้ FAQ เป็น candidate ด้วยตัวเองไม่ได้
+
+Vector confidence gate (ตั้งแต่ 2026-10-02): RAG ข้าม classifier ได้เฉพาะ exact question หรือ vector top ≥ `KNOWLEDGE_RAG_MIN_VECTOR_SIMILARITY` (default 0.75) ต่ำกว่านั้น retrieval คืน `LOW_CONFIDENCE`/`BELOW_MIN_VECTOR_SIMILARITY` โดยเก็บ candidate ไว้ classifier GENERAL → general chat, BUSINESS → grounded answer บน candidate เดิม BM25 ไม่ใช้ตัดสินความมั่นใจเพราะคำเดียวที่ซ้ำ FAQ ก็ได้คะแนนสูง ค่า 0.75 วัดบน gemini-embedding-2 (คุยเล่น 0.56–0.71, คำถาม KB median 0.80) ต้องวัดใหม่เมื่อเปลี่ยน embedding model; `MIN_CONTEXT_SCORE` 0.6 ของ admin embedding diagnostics ยังเป็นค่าเดิม
 
 | ขั้น | Service entry | Input → output / side effects |
 |---|---|---|
@@ -66,11 +68,11 @@ REPLY ใช้ token เมื่อ deadline timestamp+50s ยังไม่�
 |---|---:|---:|
 | Exact approved DIRECT (cache/DB) | 0 | 0 |
 | Greeting/acknowledgment | 0 | 1 |
-| Inquiry opener ไม่มีหัวข้อ ("สอบถาม") | 0 | 0 |
+| Inquiry opener ไม่มีหัวข้อ ("สอบถาม") | 0 | 1 |
 | Exact preset renderMode=REWRITE | 1 | 1; unified retrieval รวม MicroKnowledge |
-| Lexical/hybrid RAG | 1 | 1 |
-| Vector-only → BUSINESS | 1 | 2: classifier แล้ว grounded answer |
-| Vector-only → GENERAL | 1 | 2: classifier แล้ว general answer |
+| RAG, vector top ≥ 0.75 หรือ exact question | 1 | 1 |
+| No evidence หรือ vector top < 0.75 → BUSINESS | 1 | 2: classifier แล้ว grounded answer (หรือ fallback ถ้าไม่มี candidate) |
+| No evidence หรือ vector top < 0.75 → GENERAL | 1 | 2: classifier แล้ว general answer |
 | LOW → BUSINESS | 1 ตามเส้นทางค้นปกติ | 1 classifier |
 | LOW → GENERAL | 1 ตามเส้นทางค้นปกติ | 2: classifier แล้ว answer |
 | Missing reference | 0 | 0, CLARIFY |
@@ -295,9 +297,9 @@ Source: [ChatbotService](../src/modules/chatbot/chatbot.service.ts), [IntentRout
 | Function | รับเข้า → ทำงาน/เรียกต่อ → คืนผล |
 |---|---|
 | handleTextMessage | ChatRequest → isMuted, get session, trim/length gate → router.resolve → switch action → ChatResponse |
-| RuleIntentService.detect | text → deterministic menu/keyword rules + whole-message inquiry opener (GENERAL_QUESTION 0.95) → {intent,confidence,source:'RULE',reason}; ไม่เรียก DB/provider |
-| IntentRouterService.resolve | input/session/history/usage IDs → cancel → active workflow boundary → greeting → high-confidence rule → retrieval; missing info→CLARIFY, conflict/error→CONTACT_ADMIN, DIRECT/RAG→ANSWER_KNOWLEDGE, LOW→resolveLowConfidence |
-| resolveLowConfidence | input/history/usage IDs → classifyLowConfidence → GENERAL_QUESTION; BUSINESS + vector-only RAG evidence → ANSWER_KNOWLEDGE; BUSINESS ไม่มีหลักฐานหรือ classifier failed → CONTACT_ADMIN |
+| RuleIntentService.detect | text → deterministic menu/keyword rules → {intent,confidence,source:'RULE',reason}; ไม่เรียก DB/provider |
+| IntentRouterService.resolve | input/session/history/usage IDs → cancel → active workflow boundary → greeting/inquiry opener → high-confidence rule → retrieval; missing info→CLARIFY, conflict/error→CONTACT_ADMIN, DIRECT/RAG→ANSWER_KNOWLEDGE, LOW→resolveLowConfidence |
+| resolveLowConfidence | input/history/usage IDs → classifyLowConfidence → GENERAL_QUESTION; BUSINESS + low-confidence candidates → ANSWER_KNOWLEDGE; BUSINESS ไม่มีหลักฐานหรือ classifier failed → CONTACT_ADMIN |
 | retrievalSource | retrieval.matchType + selected metadata → EMBEDDING/DATABASE/CACHE source |
 | logDecision | decision/retrieval → diagnostic log แล้วคืน decision เดิม |
 | classifyLowConfidence | input/context → budget.tryConsume; provider.generate ด้วย classifier prompt → strip JSON fence + parse/validate BUSINESS/GENERAL/confidence/reason → analysis; error/budget→BUSINESS confidence0 + failed=true; PendingAiUsageError rethrow |
