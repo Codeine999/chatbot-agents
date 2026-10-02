@@ -22,11 +22,20 @@ export type AiProviderImage = Readonly<{
   data: string;
 }>;
 
+export const AI_REASONING_EFFORTS = ['low', 'medium', 'high'] as const;
+export type AiReasoningEffort = (typeof AI_REASONING_EFFORTS)[number];
+
 export type AiGenerateRequest = Readonly<{
   systemInstruction?: string;
   messages: readonly AiProviderMessage[];
   temperature?: number;
   maxOutputTokens?: number;
+  /**
+   * How much the model may think before answering. Adapters map it where the
+   * selected model supports it and ignore it otherwise. Reasoning tokens count
+   * against maxOutputTokens and are billed as output.
+   */
+  reasoningEffort?: AiReasoningEffort;
   /** Native JSON schema where supported; all callers still validate output. */
   responseJsonSchema?: Readonly<Record<string, unknown>>;
 }>;

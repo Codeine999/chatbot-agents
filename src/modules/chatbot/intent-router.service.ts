@@ -84,9 +84,7 @@ export class IntentRouterService {
         intent: 'CANCEL',
         confidence: 1,
         source: 'RULE',
-        reason:
-          'cancel keyword exits registration only; never releases admin mute',
-      });
+        reason:'cancel keyword exits'});
     }
 
     let ruleKnowledgeDecision: RouteDecision | undefined;
@@ -115,20 +113,6 @@ export class IntentRouterService {
           source: 'SESSION',
           reason: 'active REGISTER session continues current flow',
         });
-    }
-
-    if (
-      /^(?:สวัสดี|หวัดดี|ขอบคุณ|โอเค)(?:ครับ|ค่ะ|คะ|นะครับ|นะคะ)?[!. ]*$|^(?:hi|hello|thanks|thank you|ok|okay)[!. ]*$/iu.test(
-        input,
-      )
-    ) {
-      return this.logDecision(input, {
-        action: 'CONTINUE_AI_CHAT',
-        intent: 'GENERAL_QUESTION',
-        confidence: 1,
-        source: 'RULE',
-        reason: 'whole-message greeting or acknowledgment',
-      });
     }
 
     if (INQUIRY_OPENER.test(input.replace(/\s+/gu, ''))) {

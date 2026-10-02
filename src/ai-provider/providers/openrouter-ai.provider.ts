@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
+import { z } from 'zod';
 import type {
   ChatCompletionContentPart,
   ChatCompletionMessageParam,
@@ -14,10 +15,12 @@ import {
   DEFAULT_AI_MAX_OUTPUT_TOKENS,
   DEFAULT_AI_REQUEST_TIMEOUT_MS,
 } from '../utils/ai-provider.constants';
-import type {
-  AiGenerateResponse,
-  AiProviderGenerateRequest,
-  AiTokenUsage,
+import {
+  AI_REASONING_EFFORTS,
+  type AiGenerateResponse,
+  type AiProviderGenerateRequest,
+  type AiReasoningEffort,
+  type AiTokenUsage,
 } from '../types/ai-provider.types';
 import { normalizeTokenUsage } from '../utils/token-usage.utils';
 import type { AiProviderAdapter } from './ai-provider.interface';
@@ -48,8 +51,19 @@ type OpenRouterResponsePayload = {
 export class OpenRouterProvider implements AiProviderAdapter {
   readonly name = 'OPENROUTER' as const;
   private readonly logger = new Logger(OpenRouterProvider.name);
+  private readonly defaultReasoningEffort: AiReasoningEffort | undefined;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) {
+    // Applies only when the caller sets no effort. Unset keeps the model's
+    // default reasoning.
+    this.defaultReasoningEffort = z
+      .enum(AI_REASONING_EFFORTS)
+      .optional()
+      .parse(
+        configService.get<string>('OPEN_ROUTER_REASONING_EFFORT')?.trim() ||
+          undefined,
+      );
+  }
 
   isConfigured(): boolean {
     return Boolean(this.configService.get<string>('OPEN_ROUTER_KEY')?.trim());
@@ -78,34 +92,29 @@ export class OpenRouterProvider implements AiProviderAdapter {
           this.configService.get<string>('OPEN_ROUTER_REQUEST_TIMEOUT_MS') ??
             DEFAULT_AI_REQUEST_TIMEOUT_MS,
         ),
-        // The shared provider service owns retries.
         maxRetries: 0,
       });
+
       const messages: ChatCompletionMessageParam[] = [
         ...(request.systemInstruction
           ? [{ role: 'system' as const, content: request.systemInstruction }]
           : []),
         ...request.messages.map(
           (message) =>
-            // Preserve OpenRouter's multimodal message format for both roles.
             ({
               role: message.role,
               content: this.toContent(message),
             }) as ChatCompletionMessageParam,
         ),
       ];
-      // OpenRouter extends the OpenAI-compatible body with provider routing.
+
       const body = {
         model: request.model,
         messages,
-        // GPT-5/6 endpoints do not support temperature. With strict routing,
-        // sending it excludes otherwise schema-capable endpoints (HTTP 404).
-        ...(!/^openai\/gpt-[56](?:[.-]|$)/i.test(request.model) &&
-        request.temperature !== undefined
-          ? { temperature: request.temperature }
-          : {}),
+        ...this.temperatureParam(request.model, request.temperature),
         max_tokens: request.maxOutputTokens ?? DEFAULT_AI_MAX_OUTPUT_TOKENS,
         stream: false as const,
+        ...this.reasoningParam(request.reasoningEffort),
         ...(request.responseJsonSchema
           ? {
               response_format: {
@@ -120,8 +129,10 @@ export class OpenRouterProvider implements AiProviderAdapter {
             }
           : {}),
       };
+
       const payload: OpenRouterResponsePayload =
         await client.chat.completions.create(body);
+
       return {
         text: this.extractText(payload),
         provider: this.name,
@@ -129,9 +140,9 @@ export class OpenRouterProvider implements AiProviderAdapter {
         usage: this.toUsage(payload),
         providerRequestId: payload.id,
       };
+
     } catch (error) {
       if (error instanceof BadGatewayException) throw error;
-      // Never log the raw SDK error: upstream messages can echo request data.
       const apiError = error instanceof OpenAI.APIError ? error : undefined;
       const status: unknown = apiError?.status;
       const safeLabel = (value: unknown): string | undefined =>
@@ -180,6 +191,22 @@ export class OpenRouterProvider implements AiProviderAdapter {
       }
       throw new BadGatewayException('OpenRouter generation failed');
     }
+  }
+
+  private temperatureParam(
+    model: string,
+    temperature: number | undefined,
+  ): { temperature?: number } {
+    if (temperature === undefined) return {};
+    if (/^openai\/gpt-[56](?:[.-]|$)/i.test(model)) return {};
+    return { temperature };
+  }
+
+  private reasoningParam(effort: AiReasoningEffort | undefined): {
+    reasoning?: { effort: AiReasoningEffort };
+  } {
+    const resolved = effort ?? this.defaultReasoningEffort;
+    return resolved ? { reasoning: { effort: resolved } } : {};
   }
 
   private toContent(

@@ -42,8 +42,9 @@ export class AiIntentClassifierService {
             context.recentMessages ?? [],
             lowConfidenceClassifierPrompt(input),
           ),
-          temperature: 0,
+          temperature: 0.1,
           maxOutputTokens: 300,
+          reasoningEffort: 'medium',
         },
         context,
       );

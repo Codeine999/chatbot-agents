@@ -390,6 +390,9 @@ export class AiBillingService {
           ...(params.request.responseJsonSchema
             ? [params.request.responseJsonSchema]
             : []),
+          ...(params.request.reasoningEffort
+            ? [{ reasoningEffort: params.request.reasoningEffort }]
+            : []),
         ]),
       )
       .digest('hex')

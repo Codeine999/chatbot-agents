@@ -1,4 +1,9 @@
-import { GoogleGenAI, type Content, type Part } from '@google/genai';
+import {
+  GoogleGenAI,
+  ThinkingLevel,
+  type Content,
+  type Part,
+} from '@google/genai';
 import {
   BadGatewayException,
   Injectable,
@@ -13,6 +18,7 @@ import {
 import {
   AiGenerateResponse,
   AiProviderGenerateRequest,
+  AiReasoningEffort,
   AiTokenUsage,
 } from '../types/ai-provider.types';
 import { normalizeTokenUsage } from '../utils/token-usage.utils';
@@ -28,6 +34,12 @@ type GeminiUsageMetadata = {
   candidatesTokenCount?: number;
   thoughtsTokenCount?: number;
 };
+
+const GEMINI_THINKING_LEVELS = {
+  low: ThinkingLevel.LOW,
+  medium: ThinkingLevel.MEDIUM,
+  high: ThinkingLevel.HIGH,
+} as const satisfies Record<AiReasoningEffort, ThinkingLevel>;
 
 @Injectable()
 export class GeminiAiProvider implements AiProviderAdapter {
@@ -57,6 +69,15 @@ export class GeminiAiProvider implements AiProviderAdapter {
         config: {
           systemInstruction: request.systemInstruction,
           temperature: request.temperature,
+          // thinkingLevel is a Gemini 3 control; 2.5 models use a token budget.
+          ...(request.reasoningEffort && /^gemini-3/i.test(request.model)
+            ? {
+                thinkingConfig: {
+                  thinkingLevel:
+                    GEMINI_THINKING_LEVELS[request.reasoningEffort],
+                },
+              }
+            : {}),
           ...(request.responseJsonSchema
             ? {
                 responseMimeType: 'application/json',

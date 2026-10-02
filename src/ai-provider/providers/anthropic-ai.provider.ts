@@ -77,6 +77,8 @@ export class AnthropicAiProvider implements AiProviderAdapter {
             role: message.role,
             content: this.toContent(message),
           })),
+          // reasoningEffort is ignored: extended thinking needs a budget of at
+          // least 1024 tokens and cannot be combined with temperature.
           temperature: request.temperature,
           max_tokens: request.maxOutputTokens ?? DEFAULT_AI_MAX_OUTPUT_TOKENS,
         }),

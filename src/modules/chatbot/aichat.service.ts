@@ -230,8 +230,9 @@ export class AiChatService {
             modeRules: IMAGE_ANSWER_RULES,
           }),
           messages: providerMessages,
-          temperature: 0,
+          temperature: 0.4,
           maxOutputTokens: AI_GENERATION_CONFIG.maxOutputTokens,
+          reasoningEffort: 'low',
         },
         context,
       );
@@ -321,8 +322,9 @@ export class AiChatService {
         {
           messages,
           systemInstruction,
-          temperature: AI_GENERATION_CONFIG.temperature,
+          temperature: 0.4,
           maxOutputTokens: AI_GENERATION_CONFIG.maxOutputTokens,
+          reasoningEffort: 'low',
         },
         context,
       );
@@ -377,9 +379,10 @@ export class AiChatService {
         {
           messages,
           systemInstruction,
-          temperature: 0,
+          temperature: 0.2,
           responseJsonSchema: GROUNDED_JSON_SCHEMA,
           maxOutputTokens: AI_GENERATION_CONFIG.maxOutputTokens,
+          reasoningEffort: 'medium',
         },
         context,
       );
@@ -459,7 +462,7 @@ export class AiChatService {
       ragContext: params.items,
       modeRules: [
         KNOWLEDGE_RULES,
-        'AnswerPattern เป็นคำตอบที่ผ่านการดูแล; MicroKnowledge เป็นข้อเท็จจริงที่นำมาประกอบกันได้ ไม่จำเป็นต้องคัดลอกทั้งประโยค ตอบประเด็นหลักก่อนและเว้นบรรทัดระหว่างประเด็นอย่างเป็นธรรมชาติ',
+        'AnswerPattern เป็นคำตอบที่ผ่านการดูแล; MicroKnowledge เป็นข้อเท็จจริงที่นำมาประกอบกันได้ เรียบเรียงคำตอบให้เข้ากับคำถามของลูกค้าได้ ไม่จำเป็นต้องคัดลอกทั้งประโยค แต่ห้ามเพิ่มหรือเปลี่ยนข้อเท็จจริง และต้องคงเงื่อนไขหรือข้อจำกัดที่หลักฐานระบุไว้ ตอบประเด็นหลักก่อนและเว้นบรรทัดระหว่างประเด็นอย่างเป็นธรรมชาติ',
         'หลักฐานต้องระบุสิ่งที่ลูกค้าถามโดยตรง (มี ไม่มี ราคา เวลา หรือเงื่อนไขของสิ่งนั้น) จึงตอบได้ และเสริมทางเลือกที่หลักฐานระบุไว้ได้ ถ้าหลักฐานกล่าวถึงเพียงสิ่งอื่นที่ใกล้เคียงหรือใช้แทนกันได้ ให้ใช้ INSUFFICIENT_CONTEXT ห้ามตอบด้วยสิ่งทดแทน เช่น ถามว่าในห้องมีเครื่องชงกาแฟไหม แต่หลักฐานมีแค่กาต้มน้ำ',
         `คืน JSON เท่านั้น: {"askedAbout":"สิ่งที่ลูกค้าถาม","directlyAnswered":true,"decision":"ANSWER","answer":"คำตอบภาษาไทย","evidenceIds":["SOURCE:ID"]} หรือ {"askedAbout":"สิ่งที่ลูกค้าถาม","directlyAnswered":false,"decision":"${INSUFFICIENT_CONTEXT}","answer":"","evidenceIds":[]}`,
         'askedAbout คือสิ่งที่ลูกค้าถามถึงจริง ๆ สั้น ๆ; directlyAnswered เป็น true เฉพาะเมื่อหลักฐานระบุ askedAbout เองโดยตรง ไม่ใช่สิ่งทดแทนหรือบริการอื่นที่ใกล้เคียง',

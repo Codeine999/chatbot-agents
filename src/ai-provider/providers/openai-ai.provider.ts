@@ -80,6 +80,9 @@ export class OpenAiProvider implements AiProviderAdapter {
             content: this.toContent(message),
           })),
           temperature: request.temperature,
+          ...(request.reasoningEffort
+            ? { reasoning: { effort: request.reasoningEffort } }
+            : {}),
           // Keep billing on the standard tier represented by AiModelPricing.
           service_tier: 'default',
           max_output_tokens:
