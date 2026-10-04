@@ -1,6 +1,8 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ChatbotModule } from '../chatbot/chatbot.module';
+import { MessagingModule } from '../events/message/messaging.module';
+import { LineChannelAdapter } from './line-channel.adapter';
 import { CompanyModule } from '../admin/company/company.module';
 import { PipelineModule } from '../pipeline/pipeline.module';
 import { AiProviderModule } from '../ai/ai-provider.module';
@@ -17,6 +19,8 @@ import {
 import { LineService } from './line-reply.service';
 import { LineAdminService } from './admin/line-admin.service';
 import { LineAdminController } from './admin/line-admin.controller';
+import { LineWebhookController } from './line-webhook.controller';
+import { LineWebhookAdapter } from './line-webhook.adapter';
 import { LineSignatureGuard } from './line-signature.guard';
 import { LineWebhookService } from './line-webhook.service';
 import { LineDeliveryService } from './line-delivery.service';
@@ -24,6 +28,7 @@ import { LineDeliveryService } from './line-delivery.service';
 @Module({
   imports: [
     ChatbotModule,
+    MessagingModule,
     CompanyModule,
     PipelineModule,
     AiProviderModule,
@@ -51,6 +56,7 @@ import { LineDeliveryService } from './line-delivery.service';
     }),
   ],
   controllers: [
+    LineWebhookController,
     LineController,
     LineConversationController,
     LineDashboardController,
@@ -60,8 +66,10 @@ import { LineDeliveryService } from './line-delivery.service';
     LineService,
     LineAdminService,
     LineWebhookService,
+    LineChannelAdapter,
     LineDeliveryService,
     LineSignatureGuard,
+    LineWebhookAdapter,
     LineEventsProcessor,
     LineEventsRetryProcessor,
   ],
