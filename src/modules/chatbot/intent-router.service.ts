@@ -19,10 +19,6 @@ import type { LineAiUsageContext } from '../usage/billing/ai-usage.types';
 /** Enough of the ranking curve to see a tie; [Retrieval] holds the full list. */
 const MAX_LOGGED_SCORES = 5;
 
-// A whole message that only asks to ask ("ขอสอบถามหน่อยครับ") has no topic.
-// Retrieval can only match the verb against stored example questions, so it
-// is answered like a greeting. Tested with spaces removed; prefix words are
-// distinct literals so matching stays linear.
 const INQUIRY_OPENER =
   /^(?:(?:สวัสดี|หวัดดี|แอดมิน)(?:ครับผม|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า)?)?(?:(?:รบกวน|ขอ|อยาก|จะ|มีเรื่อง){0,4}(?:สอบถาม|ถาม|ปรึกษา)(?:ข้อมูล|เพิ่มเติม)?|มีคำถาม)(?:หน่อย|ด้วย|นิดนึง|นิดหน่อย)?(?:นะ)?(?:ครับผม|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า)?(?:[\p{P}\p{S}]|\u200d|\ufe0f)*$/u;
 
@@ -67,7 +63,7 @@ export class IntentRouterService {
     const menuDecision = this.resolveRichMenu(postbackData, input);
     if (menuDecision) return this.logDecision(input, menuDecision);
 
-    //detect from rule base first
+    // detect from rule base first
     const rule = this.ruleIntentService.detect(input);
     this.logger.debug(
       logBlock('Rule', [
@@ -84,7 +80,8 @@ export class IntentRouterService {
         intent: 'CANCEL',
         confidence: 1,
         source: 'RULE',
-        reason:'cancel keyword exits'});
+        reason: 'cancel keyword exits',
+      });
     }
 
     let ruleKnowledgeDecision: RouteDecision | undefined;
@@ -142,7 +139,24 @@ export class IntentRouterService {
       conversationId,
       turnId,
       recentMessages,
+      disableProduct:
+        session?.status === 'ACTIVE' && session.flow === 'REGISTER',
     });
+
+    if (retrieval.product)
+      return this.logDecision(
+        input,
+        {
+          action: 'ANSWER_KNOWLEDGE',
+          intent: 'ANSWER_KNOWLEDGE',
+          confidence: 0,
+          source: 'DATABASE',
+          retrieval,
+          resolvedQuery: input,
+          reason: `product plan ${retrieval.product.plan.mode}`,
+        },
+        retrieval,
+      );
 
     if (retrieval.fallbackReason === 'MISSING_USER_INFORMATION') {
       return this.logDecision(
@@ -175,13 +189,11 @@ export class IntentRouterService {
         retrieval,
       );
     }
-    // Retrieval returns RAG only for an exact question or a close vector hit;
-    // weaker candidates come back LOW_CONFIDENCE for the classifier below.
+
     if (retrieval.route !== 'LOW_CONFIDENCE') {
       const decision: RouteDecision = {
         action: 'ANSWER_KNOWLEDGE',
         intent: ruleKnowledgeDecision?.intent ?? 'ANSWER_KNOWLEDGE',
-        // Retrieval rank is diagnostic, not intent confidence.
         confidence: ruleKnowledgeDecision?.confidence ?? 0,
         source:
           ruleKnowledgeDecision?.source ?? this.retrievalSource(retrieval),
@@ -190,6 +202,32 @@ export class IntentRouterService {
         retrieval,
       };
       return this.logDecision(input, decision, retrieval);
+    }
+
+    if (retrieval.plannerIntent === 'KNOWLEDGE') {
+      return this.logDecision(
+        input,
+        retrieval.selectedItems.length
+          ? {
+              action: 'ANSWER_KNOWLEDGE',
+              intent: 'ANSWER_KNOWLEDGE',
+              confidence: 0,
+              source: 'AI',
+              reason: 'product planner classified KNOWLEDGE',
+              resolvedQuery: input,
+              retrieval,
+            }
+          : {
+              action: 'CONTACT_ADMIN',
+              intent: 'CONTACT_ADMIN',
+              confidence: 0,
+              source: 'AI',
+              reason: 'product planner classified KNOWLEDGE without evidence',
+              businessFallback: true,
+              fallbackReason: retrieval.fallbackReason,
+            },
+        retrieval,
+      );
     }
 
     return this.resolveLowConfidence({
@@ -381,6 +419,18 @@ export class IntentRouterService {
         retrieval ? `match=${retrieval.matchType}` : null,
         retrieval ? `candidates=${retrieval.items.length}` : null,
         retrieval ? `contextCandidates=${evidence.length}` : null,
+        retrieval?.product
+          ? `productMode=${retrieval.product.plan.mode}`
+          : null,
+        retrieval?.product
+          ? `productStatus=${retrieval.product.result.status}`
+          : null,
+        retrieval?.product
+          ? `productFailed=${retrieval.product.failed ?? false}`
+          : null,
+        retrieval?.product
+          ? `productChoices=${retrieval.product.result.choices.length}`
+          : null,
         scores.length
           ? `topScores=[${scores.join(', ')}${hiddenScores > 0 ? `, +${hiddenScores}` : ''}]`
           : null,

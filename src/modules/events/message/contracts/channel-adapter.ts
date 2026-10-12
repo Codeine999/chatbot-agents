@@ -31,6 +31,8 @@ export type DeliveryReference = Readonly<{ id: string }>;
 export interface ChannelAdapter<TEvent, TThread extends ConversationThread> {
   findDelivery(event: TEvent): Promise<DeliveryReference | null>;
   saveIncomingEvent(event: TEvent): Promise<TThread | null>;
+  /** Best-effort "working on it" signal. Never awaited by the worker. */
+  indicateProcessing?(event: TEvent): Promise<void>;
   toChatTurn(event: TEvent, thread: TThread): Promise<ChatTurn | null>;
   saveReply(
     event: TEvent,

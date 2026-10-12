@@ -1,5 +1,5 @@
 import { rethrowPendingAiUsage } from '../usage/billing/pending-ai-usage.error';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
 import { AI_GENERATION_CONFIG } from '../../ai-provider/utils/ai-provider.config';
@@ -39,6 +39,7 @@ import {
 } from '../ai/ai-setting/ai-setting-config';
 import { composeAiAnswerPrompt } from './prompt/ai-setting-prompt.composer';
 import { isUsableKnowledge } from './knowledge/knowledge-answer.policy';
+import { ProductAnswerService } from './knowledge/product/product-answer.service';
 
 const IMAGE_ANSWER_RULES = `คุณเป็นระบบจำแนกความปลอดภัยและอธิบายรูปภาพสำหรับแชตลูกค้า
 
@@ -109,6 +110,7 @@ export class AiChatService {
     private readonly aiBudgetService: AiBudgetService,
     private readonly usersAiProviderService: UsersAiProviderService,
     config: ConfigService,
+    @Optional() private readonly productAnswers?: ProductAnswerService,
   ) {
     this.tenantId = aiSettingTenantId(config);
   }
@@ -127,6 +129,14 @@ export class AiChatService {
         turnId: context.turnId,
         recentMessages: context.recentMessages,
       }));
+
+    if (retrieval.product && this.productAnswers) {
+      return this.productAnswers.answer(
+        retrieval,
+        await this.getActiveAiSetting(),
+        context,
+      );
+    }
 
     if (
       retrieval.route === 'DIRECT' &&

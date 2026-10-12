@@ -137,7 +137,7 @@ export class RegistrationFlowService {
     });
 
     try {
-      const auth = await this.registrationService.register(data);
+      const auth = await this.registrationService.registerForLine(data, userId);
 
       //   this.userSessionService.set(userId, {
       //   ...session,

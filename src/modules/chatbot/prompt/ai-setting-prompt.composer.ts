@@ -5,6 +5,8 @@ export type AiAnswerPromptInput = Readonly<{
   setting: AiRuntimeSetting;
   ragContext?: readonly KnowledgeItem[];
   modeRules: string;
+  /** Extra grounded data blocks, escaped like ragContext and never rules. */
+  dataSections?: Readonly<Record<string, unknown>>;
 }>;
 
 const PROMPT_PRECEDENCE = `ลำดับอำนาจของคำสั่ง
@@ -24,6 +26,9 @@ export function composeAiAnswerPrompt(input: AiAnswerPromptInput): string {
     // section('promptVersion', String(setting.promptVersion)),
     section('modeRules', input.modeRules),
     section('ragContext', safeJson(toRagContext(input.ragContext ?? []))),
+    ...Object.entries(input.dataSections ?? {}).map(([name, value]) =>
+      section(name, safeJson(value)),
+    ),
   ].join('\n\n');
 }
 

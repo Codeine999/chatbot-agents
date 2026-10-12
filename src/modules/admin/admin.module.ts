@@ -24,6 +24,7 @@ import { MicroKnowledgeVectorRepository } from '../ai/embeding/micro-knowledge-v
 import { AdminAiSettingController } from './ai-setting/admin-ai-setting.controller';
 import { AdminAiSettingService } from './ai-setting/admin-ai-setting.service';
 import { StorageModule } from '../../infra/storage/storage.module';
+import { AdminProductModule } from './product/admin-product.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { StorageModule } from '../../infra/storage/storage.module';
     AdminAnalyticsModule,
     RichMenuModule,
     StorageModule,
+    AdminProductModule,
   ],
   controllers: [
     AdminController,

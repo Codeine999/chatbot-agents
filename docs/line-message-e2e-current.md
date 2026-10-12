@@ -6,13 +6,43 @@
 
 อัปเดต retrieval follow-up 24 กันยายน 2026: `resolveRetrievalQuery` ใช้ context ที่โหลดไว้สูงสุด 3 turns เพื่อเติมหัวข้อจากข้อความผู้ใช้ล่าสุดให้คำถามอ้างอิง เช่น “โปรโมชั่นส่งฟรีมีไหม” → “อันนี้ใช้ถึงวันไหน” หรือ “สนใจโรงแรมริมทะเล” → “โรงแรมนี้ราคาเท่าไร” หากไม่มีหัวข้อที่ใช้ได้ หรือประวัติคลุมเครือ/มีข้อมูลส่วนตัว จะคืน `MISSING_USER_INFORMATION` ก่อนค้น knowledge แล้ว router ตอบ `CLARIFY` เมื่อผู้ใช้ระบุหัวข้อในข้อความถัดไป ระบบรวมกับคำถามเดิมจาก context เพื่อค้นอีกครั้ง โดยไม่มีการเรียกโมเดลในขั้นวาง query นี้
 
+อัปเดตโครงสร้าง 4 ตุลาคม 2026: worker ยังเรียก `LineWebhookService.processEvent`
+แต่ facade ส่งต่อเข้า `MessageProcessorService` ใน `MessagingModule` โดยใช้
+`LineChannelAdapter` สำหรับ inbound persistence, แปลง payload/media และ persist/deliver
+คำตอบ `ChatbotService`, billing และ delivery state machine เดิมยังใช้งานต่อ
+ดู [ขอบเขต adapter และข้อจำกัดปัจจุบัน](messaging-channel-adapters.md)
+ภาพด้านล่างแสดง logical flow; ขั้นตอนของ W แบ่งทำงานผ่าน facade/processor/adapter ดังกล่าว
+
+อัปเดต ingress 5 ตุลาคม 2026: `POST /api/line/webhooks` ย้าย handler ไป
+`LineWebhookController` และส่งต่อ `LineWebhookAdapter.receive` เพื่อตรวจ payload,
+จำกัด ingress และ enqueue ก่อนคืน 200; malformed supported events คืน 400 และ
+unsupported types ถูกข้าม `LineController` ดูแล admin routes เดิม worker/claim/
+retry/delivery ใช้เส้นทางเดิม ไม่มี external application endpoint ในชุดนี้
+
+อัปเดต catalog foundation 5 ตุลาคม 2026: เพิ่ม [Product/Commerce Phase 1](product-commerce-phase1.md)
+แบบ opt-in `PRODUCT_CATALOG_ENABLED` (default false) ตอนนี้มี admin catalog APIs
+และ atomic LINE registration identity hook: เมื่อเปิด flag RegistrationFlowService
+ใช้ registerForLine เพื่อสร้าง Member และผูก LineMember/Customer/ChannelIdentity
+ใน transaction เดียวก่อน clear session; ปิด flag ใช้ register เดิมและไม่อ่าน catalog/customer
+สถานะ ณ Phase 1 ยังไม่มี Product RAG; วันที่ 6 ตุลาคม 2026 เพิ่ม [Phase 2–3 Product RAG](product-commerce-phase2-3.md) แบบ opt-in PRODUCT_RAG_ENABLED/PRODUCT_SEMANTIC_ENABLED: single retrieval entry → exact หรือ LLM planner → lexical/vector → live Product/variant/inventory evidence → AiChat fact rendering พร้อม CommerceTurn replay และ LLM สูงสุด 3 calls เฉพาะ critical correction ในครั้งที่ 3 catalogRefs เก็บ IDs ใน context หลัง delivery ACCEPTED ใช้ clear/TTL เดิม ยังไม่มี checkout/payment image intake ข้อความที่ไม่มี product signal และ FAQ ตอบได้มั่นใจจะไม่ผ่าน planner/product search (ดู routing gate ในเอกสาร Phase 2–3)
+
+อัปเดต latency 9 ตุลาคม 2026: หลังบันทึก inbound แล้ว worker เรียก
+`LineChannelAdapter.indicateProcessing` แบบไม่รอผล เพื่อเรียก LINE
+`POST /v2/bot/chat/loading/start` (แสดงสถานะกำลังพิมพ์) เฉพาะแชต 1:1 ที่เป็น
+text/image/sticker/postback และไม่ติด Redis admin mute; LINE ลบ indicator เองเมื่อ
+ข้อความถัดไปของบอทมาถึง ไม่นับเป็น message quota ความล้มเหลวถูก log แล้วข้าม
+ไม่กระทบ claim/retry/delivery `LINE_LOADING_SECONDS` (5–60 ทีละ 5, default 30,
+0 = ปิด) ค่าที่ไม่ถูกต้องทำให้ boot ล้ม พร้อมกันนี้ LLM planner, product answer และ
+low-confidence classifier เปลี่ยน `reasoningEffort` จาก `medium` เป็น `low`
+(grounded KB answer ยังคง `medium`)
+
 ## 1. Request → response sequence
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant L as LINE Platform
-    participant H as Fastify / LineController
+    participant H as Fastify / LineWebhookController
     participant Q as BullMQ
     participant W as LineEventsProcessor
     participant DB as PostgreSQL
@@ -22,7 +52,7 @@ sequenceDiagram
     participant R as Redis context
 
     L->>H: POST /api/line/webhooks + signature
-    H->>H: verify raw body + ingress limit
+    H->>H: verify raw body + adapter validate + ingress limit
     alt overload
         H-->>L: 503
     else accepted ingress
@@ -36,6 +66,7 @@ sequenceDiagram
         W->>D: deliver / finalize เดิม
     else ต้องสร้าง response
         W->>DB: dedupe inbound + member/conversation/history
+        W--)L: loading animation (best effort, ไม่รอผล)
         W->>R: load 3 delivered turns
         W->>B: text/image/sticker + thread identity
         B->>R: ตรวจ Redis admin mute (waiting_admin ยังให้ AI ตอบ)

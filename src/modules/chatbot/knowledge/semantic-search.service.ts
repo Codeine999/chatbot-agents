@@ -8,6 +8,7 @@ import { KnowledgeItem } from '../types/chat.types';
 import { MicroKnowledgeVectorRepository } from '../../ai/embeding/micro-knowledge-vector.repository';
 import { knowledgeScope, KnowledgeScope } from './knowledge-scope';
 import { logBlock, logSafeText, redactPii } from '../../../utils/text.utils';
+import type { EmbeddingResult } from '../../../infra/embedding/embedding-adapter.interface';
 
 @Injectable()
 export class SemanticSearchService {
@@ -26,11 +27,11 @@ export class SemanticSearchService {
   async search(
     input: string,
     context: EmbeddingUsageContext = {},
+    prepared?: EmbeddingResult,
   ): Promise<KnowledgeItem[]> {
-    const embedding = await this.embeddingService.embedQuery(
-      redactPii(input),
-      context,
-    );
+    const embedding =
+      prepared ??
+      (await this.embeddingService.embedQuery(redactPii(input), context));
 
     this.logger.debug(
       logBlock('SemanticSearch', [

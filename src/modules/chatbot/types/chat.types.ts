@@ -68,6 +68,9 @@ export type KnowledgeRetrievalResult = Readonly<{
   topScores: readonly number[];
   scoreGap: number | null;
   fallbackReason?: string;
+  product?: ProductWorkflow;
+  /** The product planner already classified this turn as a store question. */
+  plannerIntent?: 'KNOWLEDGE';
 }>;
 
 export type RouteDecision = {
@@ -98,6 +101,7 @@ export type ChatContextMessage = Readonly<{
   text: string;
   source: 'USER' | ChatResponseSource;
   createdAt: number;
+  catalogRefs?: readonly CatalogRef[];
 }>;
 
 export type ChatContextPolicy = 'INCLUDE' | 'EXCLUDE' | 'CLEAR';
@@ -106,6 +110,7 @@ export type ChatResponse = Readonly<{
   text: string;
   source: ChatResponseSource;
   contextPolicy: ChatContextPolicy;
+  catalogRefs?: readonly CatalogRef[];
 }>;
 
 export type ChatRequest = LineAiUsageContext &
@@ -155,10 +160,11 @@ export type KnowledgeAnswerContext = AiRequestContext &
 export type AiAnswerResult = Readonly<{
   text: string;
   isFallback: boolean;
+  catalogRefs?: readonly CatalogRef[];
 }>;
 
 export type KnowledgeItem = {
-  source: 'ANSWER_PATTERN' | 'MICRO_KNOWLEDGE';
+  source: 'ANSWER_PATTERN' | 'MICRO_KNOWLEDGE' | 'PRODUCT';
   id: string;
   title?: string;
   category?: string | null;
@@ -172,3 +178,7 @@ export type KnowledgeItem = {
 
 import type { AiProviderImage } from '../../../ai-provider/types/ai-provider.types';
 import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
+import type {
+  CatalogRef,
+  ProductWorkflow,
+} from '../../products/search/product-search.types';

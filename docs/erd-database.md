@@ -3,6 +3,30 @@
 > Source: `prisma/schema.prisma` (PostgreSQL, Prisma 7) — verified against the schema on 2026-08-15.
 > Companion docs: [architecture.html](./architecture.html) (browsable ERD + endpoint reference) · [ai-chatbot-architecture.md](./ai-chatbot-architecture.md) · [service-flow.md](./service-flow.md) · [line-message-e2e-current.md](./line-message-e2e-current.md)
 
+อัปเดต additive catalog/identity 5 ตุลาคม 2026: [Phase 1 schema/migration](product-commerce-phase1.md) เพิ่มโมเดลต่อไปนี้ ส่วน ERD หลักด้านล่างเป็น snapshot เดิม ยังไม่รวม commerce orders/payments ของแผน phases ถัดไป
+
+```mermaid
+erDiagram
+    Company ||--o{ Customer : owns
+    Member o|--o{ Customer : verified_member_link
+    Customer ||--o{ ChannelIdentity : authenticated_identity
+    Customer ||--o{ AccountLinkChallenge : single_use_proof
+    Customer o|--o{ LineMember : optional_link
+    Company ||--o{ Product : owns
+    Product ||--|{ ProductVariant : variants
+    ProductVariant ||--o| InventoryBalance : tracks_stock
+    ProductVariant ||--o{ InventoryMovement : append_only_audit
+    Company ||--o{ ProductCatalogCommand : durable_command
+    AdminMember ||--o{ ProductCatalogCommand : actor
+    ProductCatalogCommand ||--o| InventoryMovement : originating_adjustment
+```
+
+Product/Customer ใช้ companyId non-null และ tenantId=null ใน standalone Child records อ้าง parent ด้วย composite FK companyId; code/SKU/request identities unique ต่อ company มี CHECK onHand>=reserved>=0 และ Decimal(12,2)/THB เฉพาะ commerce ใหม่ LineMember.customerId optional FK RESTRICT ส่วน Member mapping ใช้ (companyId, memberId) unique และ legacy LINE Member FK เพิ่มแบบ NOT VALID สำหรับ audit orphan records ก่อน validate
+
+อัปเดต 6 ตุลาคม 2026: [Product RAG Phase 2–3](product-commerce-phase2-3.md) เพิ่ม ProductVector (vector1536/model/searchRevision), ProductIndexJob (durable document/hash/state/lease), CommerceTurn (company/namespace/event unique + redacted snapshot/provider/model/retrieval/response), CommerceLlmCall (turn/slot และ turn/ordinal unique, CHECK ordinal 1–3; ordinal3 ต้อง critical repair) Product vector/job ใช้ composite FK company ส่วน CommerceTurn อ้าง Company/LineMember/LineConversation ด้วย RESTRICT และ service verify authenticated thread ก่อนสร้าง ไม่มี Order/Payment ใหม่ใน migration นี้
+
+อัปเดต 7 ตุลาคม 2026: [store-defined fields](product-attributes.md) เพิ่ม ProductAttributeDefinition (Company 1–N; unique (companyId, key); enums ProductAttributeScope/Type/Status; CHECK key slug, variantOption เฉพาะ VARIANT, options เฉพาะ SELECT/MULTI_SELECT) ค่ายังอยู่ใน Product.attributes/ProductVariant.attributes (JSONB) ไม่มี FK ระดับค่า service ตรวจค่ากับนิยามใน transaction เดียวกับการบันทึก
+
 ## Entity-Relationship Diagram
 
 ```mermaid

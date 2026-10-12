@@ -123,6 +123,8 @@ model Company {
   id          String @id @default(uuid()) @db.Uuid
   name        String @db.VarChar(255)
   companyType String @default("other") @db.VarChar(100)
+  productBusinessType String? @db.VarChar(30)
+  productPresetCategories String[] @default([])
   image       String @default("") @db.VarChar(500)
 
   messagesSentPeriod String @default("") @db.VarChar(7)
@@ -135,6 +137,11 @@ model Company {
   adminMembers      AdminMember[]
   richMenuTemplates RichMenuTemplate[]
   richMenuReplies   RichMenuReply[]
+
+  customers       Customer[]
+  products        Product[]
+  catalogCommands ProductCatalogCommand[]
+  commerceTurns CommerceTurn[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -268,6 +275,9 @@ model LineMember {
   memberId String? @db.Uuid
   member   Member? @relation(fields: [memberId], references: [uuid], onDelete: SetNull)
 
+  customerId String?   @db.Uuid
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
   lineUserId    String  @unique
   displayName   String
   pictureUrl    String?
@@ -281,8 +291,10 @@ model LineMember {
 
   conversation  LineConversation?
   chatHistories LineChatHistory[]
+  commerceTurns CommerceTurn[]
 
   @@index([memberId])
+  @@index([customerId])
   @@index([lastActiveAt])
   @@map("lineMember")
 }
@@ -299,6 +311,7 @@ model LineConversation {
   updatedAt       DateTime            @updatedAt
   lineMember      LineMember          @relation(fields: [lineMemberId], references: [id])
   chatHistories   LineChatHistory[]
+  commerceTurns CommerceTurn[]
 
   @@index([lastMessageAt])
   @@index([status])

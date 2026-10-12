@@ -23,7 +23,7 @@ export function thaiTerms(text: string): string[] {
 
 // Keep relation/negation/question words in BM25 scoring, but they cannot
 // establish relevance on their own (nor can an isolated number).
-const FUNCTION_WORDS = new Set([
+export const FUNCTION_WORDS: ReadonlySet<string> = new Set([
   'เป็น',
   'ยัง',
   'ไง',
@@ -69,7 +69,18 @@ const FUNCTION_WORDS = new Set([
   'not',
 ]);
 
-function frequencies(record: KnowledgeRecord): Map<string, number> {
+export type Bm25Record = Pick<
+  KnowledgeRecord,
+  | 'keywords'
+  | 'questionExamples'
+  | 'title'
+  | 'intentKey'
+  | 'category'
+  | 'description'
+  | 'answer'
+>;
+
+function frequencies(record: Bm25Record): Map<string, number> {
   const fields: readonly [string, number][] = [
     [record.keywords.join(' '), 4],
     [record.questionExamples.join(' '), 3],
@@ -90,7 +101,7 @@ function frequencies(record: KnowledgeRecord): Map<string, number> {
 /** BM25 ranks a bounded, already tenant/language-filtered collection. */
 export function bm25Scores(
   query: string,
-  records: readonly KnowledgeRecord[],
+  records: readonly Bm25Record[],
 ): number[] {
   const terms = [...new Set(thaiTerms(query))];
   if (!terms.length || !records.length) return records.map(() => 0);

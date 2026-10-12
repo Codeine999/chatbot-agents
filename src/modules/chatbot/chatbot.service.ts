@@ -12,6 +12,7 @@ import {
   ChatResponseSource,
   ImageChatRequest,
   StickerChatRequest,
+  AiAnswerResult,
 } from './types/chat.types';
 import { StickerIntentService } from './sticker-intent.service';
 import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
@@ -49,6 +50,7 @@ export class ChatbotService {
       turnId,
       postbackData,
     } = request;
+    
     const input = text.trim();
     const usage = { userId, lineMemberId, conversationId, turnId };
 
@@ -204,12 +206,16 @@ export class ChatbotService {
           retrieval: decision.retrieval,
         });
 
-        return this.aiResponse(result, 'KNOWLEDGE', userId);
+        return this.aiResponse(
+          result,
+          decision.retrieval?.product?.plan.mode === 'GENERAL'
+            ? 'AI'
+            : 'KNOWLEDGE',
+          userId,
+        );
       }
 
       case 'RICH_MENU_REPLY': {
-        // The tenant wrote this answer for this button. It is sent verbatim:
-        // no AI call, no retrieval, nothing to spend and nothing to invent.
         if (!decision.richMenuReply) {
           return this.response(
             this.replyTemplateService.defaultMessage(
@@ -319,7 +325,7 @@ export class ChatbotService {
   }
 
   private async aiResponse(
-    result: { text: string; isFallback: boolean },
+    result: AiAnswerResult,
     source: 'AI' | 'KNOWLEDGE',
     userId: string,
   ): Promise<ChatResponse> {
@@ -327,7 +333,10 @@ export class ChatbotService {
       await this.userSessionService.requestAdmin(userId);
       return this.response(result.text, 'SYSTEM', 'CLEAR');
     }
-    return this.response(result.text, source, 'INCLUDE');
+    return {
+      ...this.response(result.text, source, 'INCLUDE'),
+      ...(result.catalogRefs ? { catalogRefs: result.catalogRefs } : {}),
+    };
   }
 
   private async contactAdminResponse(

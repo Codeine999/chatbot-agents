@@ -1,0 +1,45 @@
+/// Durable, redacted Product RAG snapshot. No checkout/payment mutations.
+model CommerceTurn {
+  id String @id @default(uuid()) @db.Uuid
+  companyId String @db.Uuid
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  tenantId String? @db.Uuid
+  connectionKey String @db.VarChar(100)
+  externalEventId String @db.VarChar(255)
+  lineMemberId String @db.Uuid
+  lineMember LineMember @relation(fields: [lineMemberId], references: [id], onDelete: Restrict)
+  conversationId String @db.Uuid
+  conversation LineConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  provider String @db.VarChar(30)
+  model String @db.VarChar(100)
+  input Json
+  plan Json?
+  retrieval Json?
+  response Json?
+  leaseOwner String? @db.Uuid
+  leaseUntil DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  calls CommerceLlmCall[]
+
+  @@unique([companyId, connectionKey, externalEventId])
+  @@index([conversationId, createdAt])
+  @@map("commerceTurns")
+}
+
+/// At most three durable LLM operations per turn, including failed/invalid calls.
+model CommerceLlmCall {
+  id String @id @default(uuid()) @db.Uuid
+  turnId String @db.Uuid
+  turn CommerceTurn @relation(fields: [turnId], references: [id], onDelete: Restrict)
+  slot String @db.VarChar(30)
+  ordinal Int
+  request Json
+  result Json?
+  failed Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([turnId, slot])
+  @@unique([turnId, ordinal])
+  @@map("commerceLlmCalls")
+}

@@ -1,0 +1,11 @@
+# Typed variant business details
+
+Apply the migration before deploying the regenerated client and API. All detail rows use the composite variant/company FK with RESTRICT deletes, preserving tenant ownership and audit references. No SKU, product/variant ID, price, inventory, command, usage or ledger data is renamed or removed.
+
+Existing color/size/condition, portion/spice_level and hotel fields are copied from variant JSON where their types and bounds fit the new columns. Original JSON is kept during migration; out-of-range or incompatible values are not truncated or rounded. Reads prefer non-null typed values and fall back to legacy JSON. API writes for the selected FASHION/RESTAURANT/HOTEL business persist typed columns and remove the written business keys from JSON in the same transaction. Other custom fields and business rows remain. Hotel roomArea is a decimal string in the API; maxGuests is an integer. Changing business never deletes the old business row.
+
+POST/PATCH variant payloads accept fashion, restaurant or hotel objects only for the selected business. Existing attributes payloads remain compatible and map recognized fields into typed storage when that business is selected. Detail PATCH updates only provided columns; omitted detail fields are retained. Null detail objects/values are rejected. Price is supported on the base variant and takes precedence over legacy priceOverride/basePrice; omitted price retains existing inheritance. Moving parent SKU/trackStock or removing legacy prices is outside this migration.
+
+Search, planner options, grounded answer evidence and embedding documents project typed columns through the existing ACTIVE/searchable/aiVisible definitions. Detail changes increment the parent search revision; reindex uses the usual durable jobs and billing gates.
+
+Rollback: stop API/index workers and copy non-null typed values back into the matching variant JSON keys (spiceLevel -> spice_level, bedType -> bed_type, maxGuests -> max_guests, roomArea -> room_area), retaining newer custom keys. Use a compensating migration, increment affected product search revisions and reindex. Preserve the tables until rollback/backfill is verified; dropping them before copying would lose newly written detail values. Never alter command/ledger history.

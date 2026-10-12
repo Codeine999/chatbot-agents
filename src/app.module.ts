@@ -16,6 +16,7 @@ import { RateLimitModule } from './modules/usage/rate-limit/rate-limit.module';
 import { AbuseModule } from './modules/abuse/abuse.module';
 import { AuthModule } from './modules/admin/auth/auth.module';
 import { AiProviderModule } from './modules/ai/ai-provider.module';
+import { ProductsModule } from './modules/products/products.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { AiProviderModule } from './modules/ai/ai-provider.module';
     AuthModule,
     PrismaModule,
     AiProviderModule,
+    ProductsModule,
 
     BullModule.forRootAsync({
       inject: [ConfigService],

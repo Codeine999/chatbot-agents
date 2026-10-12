@@ -38,6 +38,10 @@ export class EmbeddingService {
     private readonly billingService: AiBillingService,
   ) {}
 
+  get model(): string {
+    return this.adapter.model;
+  }
+
   embedQuery(
     text: string,
     context: EmbeddingUsageContext = {},

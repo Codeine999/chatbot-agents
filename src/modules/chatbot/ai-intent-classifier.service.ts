@@ -44,7 +44,7 @@ export class AiIntentClassifierService {
           ),
           temperature: 0.1,
           maxOutputTokens: 300,
-          reasoningEffort: 'medium',
+          reasoningEffort: 'low',
         },
         context,
       );

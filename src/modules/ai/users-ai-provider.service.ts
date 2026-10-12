@@ -8,6 +8,7 @@ import {
 import {
   AiGenerateRequest,
   AiGenerateResponse,
+  AiProviderName,
 } from '../../ai-provider/types/ai-provider.types';
 import { AiBillingService } from '../usage/billing/ai-billing.service';
 
@@ -19,11 +20,23 @@ export class UsersAiProviderService {
     private readonly billingService: AiBillingService,
   ) {}
 
+  async selection(): Promise<{ provider: AiProviderName; model: string }> {
+    const { provider, model } = await this.settingsService.get('USER');
+    return { provider, model };
+  }
+
   async generate(
     request: AiGenerateRequest,
     context: LineAiUsageContext = {},
+    pinned?: {
+      provider: AiProviderName;
+      model: string;
+      operationKey: string;
+      beforeCall?: () => Promise<void>;
+    },
   ): Promise<AiGenerateResponse> {
-    const { provider, model } = await this.settingsService.get('USER');
+    const { provider, model } =
+      pinned ?? (await this.settingsService.get('USER'));
 
     return this.billingService.runBilled({
       kind: 'LINE_AI_REPLY',
@@ -34,7 +47,11 @@ export class UsersAiProviderService {
       lineMemberId: context.lineMemberId,
       conversationId: context.conversationId,
       turnId: context.turnId,
-      call: () => this.aiProviderService.generateWith(provider, model, request),
+      idempotencyKey: pinned?.operationKey,
+      call: async () => {
+        await pinned?.beforeCall?.();
+        return this.aiProviderService.generateWith(provider, model, request);
+      },
     });
   }
 }
