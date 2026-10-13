@@ -1,4 +1,5 @@
 import { rethrowPendingAiUsage } from '../usage/billing/pending-ai-usage.error';
+import { rethrowInsufficientCredit } from '../usage/credit-point/insufficient-credit.exception';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
@@ -258,6 +259,7 @@ export class AiChatService {
       return { text: analysis.answer, isFallback: false };
     } catch (error) {
       rethrowPendingAiUsage(error);
+      rethrowInsufficientCredit(error);
       this.logger.error('AI image analysis failed', error as Error);
       return { text: setting.fallbackMessage, isFallback: true };
     }
@@ -344,6 +346,7 @@ export class AiChatService {
         : { text: fallbackMessage, isFallback: true };
     } catch (error) {
       rethrowPendingAiUsage(error);
+      rethrowInsufficientCredit(error);
       this.logger.error('AI generation failed', error as Error);
       return { text: fallbackMessage, isFallback: true };
     }
@@ -457,6 +460,7 @@ export class AiChatService {
       return { text, isFallback: false };
     } catch (error) {
       rethrowPendingAiUsage(error);
+      rethrowInsufficientCredit(error);
       this.logger.error('RAG answer generation failed', error as Error);
       return { text: setting.fallbackMessage, isFallback: true };
     }

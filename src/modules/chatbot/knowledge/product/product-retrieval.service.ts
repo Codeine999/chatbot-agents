@@ -28,6 +28,7 @@ import { toAiProviderMessages } from '../../context/ai-provider-context';
 import { redactPii } from '../../../../utils/text.utils';
 import { stripJsonCodeFence } from '../../../../utils/json.utils';
 import { rethrowPendingAiUsage } from '../../../usage/billing/pending-ai-usage.error';
+import { rethrowInsufficientCredit } from '../../../usage/credit-point/insufficient-credit.exception';
 import { Prisma, type CommerceTurn } from '../../../../generated/prisma/client';
 import type { CommerceScope } from '../../../commerce/types/commerce-scope';
 
@@ -379,6 +380,7 @@ export class ProductRetrievalService {
           }
         } catch (error) {
           rethrowPendingAiUsage(error);
+          rethrowInsufficientCredit(error);
           if (result.status !== 'FOUND')
             result = { status: 'UNAVAILABLE', evidence: [], choices: [] };
         }

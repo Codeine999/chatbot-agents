@@ -19,6 +19,7 @@ import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service'
 import { logBlock, logSafeText } from '../../utils/text.utils';
 import { isRegistrationEnabled } from '../registration/registration-feature';
 import { CLARIFY_MESSAGE } from './constants/knowledge-routing.constants';
+import { InsufficientCreditException } from '../usage/credit-point/insufficient-credit.exception';
 
 @Injectable()
 export class ChatbotService {
@@ -41,6 +42,14 @@ export class ChatbotService {
   }
 
   async handleTextMessage(request: ChatRequest): Promise<ChatResponse> {
+    try {
+      return await this.answerText(request);
+    } catch (error) {
+      return this.withoutCredit(error, request);
+    }
+  }
+
+  private async answerText(request: ChatRequest): Promise<ChatResponse> {
     const {
       userId,
       text,
@@ -257,17 +266,21 @@ export class ChatbotService {
     if (await this.userSessionService.isMuted(request.userId)) {
       return this.response('', 'SYSTEM', 'EXCLUDE');
     }
-    return this.aiResponse(
-      await this.aiChatService.answerImage(request.image, {
-        userId: request.userId,
-        lineMemberId: request.lineMemberId,
-        conversationId: request.conversationId,
-        turnId: request.turnId,
-        recentMessages: request.recentMessages,
-      }),
-      'AI',
-      request.userId,
-    );
+    try {
+      return await this.aiResponse(
+        await this.aiChatService.answerImage(request.image, {
+          userId: request.userId,
+          lineMemberId: request.lineMemberId,
+          conversationId: request.conversationId,
+          turnId: request.turnId,
+          recentMessages: request.recentMessages,
+        }),
+        'AI',
+        request.userId,
+      );
+    } catch (error) {
+      return this.withoutCredit(error, request);
+    }
   }
 
   //  Image Handle Sticker
@@ -322,6 +335,28 @@ export class ChatbotService {
     contextPolicy: ChatContextPolicy,
   ): ChatResponse {
     return { text, source, contextPolicy };
+  }
+
+  /**
+   * An unfunded wallet stops every AI call before a provider is contacted.
+   * Nothing was answered: send no reply (no fallback, no admin handoff) and
+   * log the reason. Any other error keeps propagating.
+   */
+  private withoutCredit(
+    error: unknown,
+    request: Pick<ChatRequest, 'userId' | 'conversationId' | 'turnId'>,
+  ): ChatResponse {
+    if (!(error instanceof InsufficientCreditException)) throw error;
+    this.logger.error(
+      logBlock('AiCredit', [
+        'no reply sent: AI credit is insufficient',
+        `user=${request.userId}`,
+        `conversation=${request.conversationId ?? '-'}`,
+        `turn=${request.turnId ?? '-'}`,
+        `reason=${JSON.stringify(error.message)}`,
+      ]),
+    );
+    return this.response('', 'SYSTEM', 'EXCLUDE');
   }
 
   private async aiResponse(

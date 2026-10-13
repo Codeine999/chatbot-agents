@@ -2,6 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
 import { rethrowPendingAiUsage } from '../../usage/billing/pending-ai-usage.error';
+import { rethrowInsufficientCredit } from '../../usage/credit-point/insufficient-credit.exception';
 import {
   logBlock,
   logSafeText,
@@ -155,8 +156,11 @@ export class KnowledgeRetrievalService {
         return (await call()).filter((item) => this.eligible(item));
       } catch (error) {
         rethrowPendingAiUsage(error);
+        rethrowInsufficientCredit(error);
         failed = true;
-        this.logger.warn(`${label} knowledge retrieval failed`);
+        this.logger.warn(
+          `${label} knowledge retrieval failed (${error instanceof Error ? error.name : 'unknown error'})`,
+        );
         return [];
       }
     };

@@ -36,6 +36,18 @@ text/image/sticker/postback และไม่ติด Redis admin mute; LINE �
 low-confidence classifier เปลี่ยน `reasoningEffort` จาก `medium` เป็น `low`
 (grounded KB answer ยังคง `medium`)
 
+อัปเดตเครดิต 14 ตุลาคม 2026: เมื่อ billing ปฏิเสธการจองเพราะเครดิตไม่พอ
+(`InsufficientCreditException` ยอดคงเหลือหลังจองต้องมากกว่า `MIN_AI_BALANCE_CREDIT`
+ขั้นต่ำ 20) ทุก AI call ในแชต LINE ได้แก่ embedding ค้น knowledge, classifier,
+general/grounded/image answer และ product planner/answer จะไม่ fallback อีก
+`ChatbotService` คืนคำตอบว่าง (`SYSTEM`/`EXCLUDE`) จึงไม่มี LineDelivery ไม่ส่งข้อความ
+ไม่ `requestAdmin` และไม่เปลี่ยน conversation เป็น `waiting_admin` พร้อม log
+`ERROR [ChatbotService] [AiCredit] no reply sent` ระบุ user/conversation/turn และเหตุผล
+ข้อความลูกค้ายังบันทึกและเพิ่ม unread ตามปกติ ไม่มี reservation/usage/ledger เกิดขึ้น
+และ CommerceLlmCall ไม่ถูกตั้ง `failed` จึงเรียกใหม่ได้เมื่อเติมเครดิต ส่วน error อื่น
+(provider, timeout, budget rate limit) คง fallback + handoff เดิม และ log
+`… knowledge retrieval failed (<ErrorName>)`
+
 ## 1. Request → response sequence
 
 ```mermaid
@@ -159,7 +171,8 @@ Core text flow อัปเดต 13 กันยายน 2026: [implementation
 | คำถามห้องว่าง/สต็อก/ยอดเงิน/สถานะปัจจุบัน | ผ่าน retrieval ตามปกติ; ไม่มี live API หรือ guard ก่อนค้น คำตอบ DIRECT ส่งตามข้อความที่ผู้ดูแลเขียนไว้ ส่วน RAG ถูกกำกับไม่ให้ยืนยันค่าปัจจุบันจาก KB |
 | Low confidence | Classifier only; BUSINESS → static handoff (1 call), GENERAL → answerGeneral (2 calls) |
 | RAG คืน JSON INSUFFICIENT_CONTEXT หรือ output/หลักฐานอ้างอิงไม่ถูกต้อง | static handoff; ห้ามกลับ classifier |
-| ทุก AI fallback รวม provider error, output ผิด, งบหมด และ image ไม่ปลอดภัย | requestAdmin + waiting_admin + notification เมื่อสถานะเปลี่ยน; SYSTEM/CLEAR; AI/RAG ยังทำงานและ registration คงอยู่ |
+| ทุก AI fallback รวม provider error, output ผิด, AI rate budget หมด และ image ไม่ปลอดภัย | requestAdmin + waiting_admin + notification เมื่อสถานะเปลี่ยน; SYSTEM/CLEAR; AI/RAG ยังทำงานและ registration คงอยู่ |
+| เครดิต wallet ไม่พอ (`InsufficientCreditException`) | ไม่ตอบลูกค้า ไม่ handoff; log `[AiCredit]` พร้อมเหตุผล; ไม่มี provider call หรือ usage |
 | Image | โหลด LINE media; billed analysis ตาม image policy; unsafe/invalid → fallback |
 | Sticker | semantic intent/template ที่รองรับ; ไม่บังคับ embedding ทุก sticker |
 | External image | ข้อความไม่รองรับ; ไม่ส่งภาพนี้ไป AI |

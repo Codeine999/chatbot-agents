@@ -1,4 +1,5 @@
 import { rethrowPendingAiUsage } from '../usage/billing/pending-ai-usage.error';
+import { rethrowInsufficientCredit } from '../usage/credit-point/insufficient-credit.exception';
 import { Injectable, Logger } from '@nestjs/common';
 import { UsersAiProviderService } from '../ai/users-ai-provider.service';
 import { AiBudgetService } from '../usage/rate-limit/ai-budget.service';
@@ -62,6 +63,7 @@ export class AiIntentClassifierService {
         .parse(parsed);
     } catch (error) {
       rethrowPendingAiUsage(error);
+      rethrowInsufficientCredit(error);
       this.logger.warn(
         `low-confidence BUSINESS/GENERAL classification failed: ` +
           `${

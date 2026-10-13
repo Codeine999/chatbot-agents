@@ -9,6 +9,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { UsersAiProviderService } from '../ai/users-ai-provider.service';
 import { AiBudgetService } from '../usage/rate-limit/ai-budget.service';
 import { rethrowPendingAiUsage } from '../usage/billing/pending-ai-usage.error';
+import { rethrowInsufficientCredit } from '../usage/credit-point/insufficient-credit.exception';
 import {
   isAiProviderName,
   type AiGenerateRequest,
@@ -256,6 +257,8 @@ export class CommerceTurnService {
       );
     } catch (error) {
       rethrowPendingAiUsage(error);
+      // Nothing was reserved or sent; leave the slot retryable once the wallet is funded.
+      rethrowInsufficientCredit(error);
       // Do not mark a DB persistence failure as provider failure: billing replay recovers on retry.
       if (
         error instanceof Prisma.PrismaClientKnownRequestError ||
