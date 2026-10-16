@@ -7,7 +7,7 @@ import {
 import type { AnswerPattern } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
-import { knowledgeScope, KnowledgeScope } from './knowledge-scope';
+import { knowledgeScope, KnowledgeScope } from './utils/knowledge-scope';
 
 /** Full records let a cache hit continue without another answer lookup. */
 export type AnswerPatternCacheEntry = AnswerPattern;

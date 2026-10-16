@@ -2,20 +2,20 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AnswerPattern } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { KnowledgeItem } from '../types/chat.types';
+import { KnowledgeItem } from '../shared/types/chat.types';
 import {
   logBlock,
   logSafeText,
   normalizeText,
 } from '../../../utils/text.utils';
-import { MAX_RETRIEVAL_CANDIDATES } from '../constants/knowledge-routing.constants';
+import { MAX_RETRIEVAL_CANDIDATES } from '../shared/knowledge-routing.constants';
 import {
   inKnowledgeScope,
   knowledgeScope,
   KnowledgeScope,
-} from './knowledge-scope';
-import { bm25Scores } from './thai-bm25';
-import { isUsableKnowledge } from './knowledge-answer.policy';
+} from './utils/knowledge-scope';
+import { bm25Scores } from './utils/thai-bm25';
+import { isUsableKnowledge } from './utils/knowledge-answer.policy';
 
 const MAX_PATTERNS_SCANNED = 500;
 

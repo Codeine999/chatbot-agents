@@ -19,7 +19,7 @@ import type {
 } from './dto/line-admin.dto';
 import { LineDeliveryService } from './line-delivery.service';
 import { randomUUID } from 'node:crypto';
-import { UserSessionService } from '../chatbot/user-session.service';
+import { UserSessionService } from '../users/session/user-session.service';
 
 @Injectable()
 export class LineWebhookService {

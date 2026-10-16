@@ -12,7 +12,7 @@ import { MicroKnowledgeVectorRepository } from '../../ai/embeding/micro-knowledg
 import {
   knowledgeScope,
   KnowledgeScope,
-} from '../../chatbot/knowledge/knowledge-scope';
+} from '../../chatbot/knowledge/utils/knowledge-scope';
 import {
   CreateAdminMicroKnowledgeDto,
   UpdateAdminMicroKnowledgeDto,

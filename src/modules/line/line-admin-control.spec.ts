@@ -5,7 +5,7 @@ import { LoadContextService } from '../chatbot/context/load-context.service';
 import { LineService } from './line-reply.service';
 import { LineAdminService } from './admin/line-admin.service';
 import { LineDeliveryService } from './line-delivery.service';
-import { UserSessionService } from '../chatbot/user-session.service';
+import { UserSessionService } from '../users/session/user-session.service';
 import { RichMenuReplyCacheService } from '../chatbot/menu/rich-menu-reply-cache.service';
 
 describe('admin resume endpoint service', () => {

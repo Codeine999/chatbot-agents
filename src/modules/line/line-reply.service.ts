@@ -7,6 +7,7 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { z } from 'zod';
 import type { AiProviderImage } from '../../ai-provider/types/ai-provider.types';
 import { RateLimitService } from '../usage/rate-limit/rate-limit.service';
 import { CompanyService } from '../admin/company/company.service';
@@ -46,6 +47,7 @@ export class LineService {
   private readonly globalReplyLimitPerSec: number;
   private readonly httpTimeoutMs: number;
   private readonly maxImageBytes: number;
+  private readonly loadingSeconds: number;
 
   constructor(
     private readonly configService: ConfigService,
@@ -61,6 +63,42 @@ export class LineService {
     this.maxImageBytes = Number(
       configService.get('LINE_AI_IMAGE_MAX_BYTES') ?? 8 * 1024 * 1024,
     );
+    // LINE accepts 5–60 in steps of 5; 0 turns the indicator off.
+    this.loadingSeconds = z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(60)
+      .multipleOf(5)
+      .parse(configService.get('LINE_LOADING_SECONDS') ?? 30);
+  }
+
+  /**
+   * Shows the typing indicator in a one-on-one chat. LINE clears it when the
+   * next bot message arrives. It is not a message and uses no message quota.
+   */
+  async startLoading(chatId: string): Promise<void> {
+    if (!this.loadingSeconds) return;
+
+    const response = await fetch(
+      'https://api.line.me/v2/bot/chat/loading/start',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.getAccessToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chatId,
+          loadingSeconds: this.loadingSeconds,
+        }),
+        signal: AbortSignal.timeout(this.httpTimeoutMs),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`LINE loading animation HTTP ${response.status}`);
+    }
   }
 
   async getImageContent(messageId: string): Promise<AiProviderImage> {

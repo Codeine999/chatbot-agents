@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
 import { rethrowPendingAiUsage } from '../../usage/billing/pending-ai-usage.error';
+import { rethrowInsufficientCredit } from '../../usage/credit-point/insufficient-credit.exception';
 import {
   logBlock,
   logSafeText,
@@ -16,27 +17,34 @@ import {
   DEFAULT_LEXICAL_CANDIDATE_MIN_SCORE,
   DEFAULT_RAG_MIN_VECTOR_SIMILARITY,
   MAX_RAG_EVIDENCE_CHARACTERS,
-} from '../constants/knowledge-routing.constants';
+} from '../shared/knowledge-routing.constants';
 import {
   ChatContextMessage,
   KnowledgeItem,
   KnowledgeMatchType,
   KnowledgeRetrievalResult,
-} from '../types/chat.types';
+} from '../shared/types/chat.types';
 import { AnswerPatternCacheService } from './answer-pattern-cache.service';
 import { AnswerPatternService } from './answer-pattern.service';
 import { MicroKnowledgeService } from './micro-knowledge.service';
 import { SemanticSearchService } from './semantic-search.service';
 import { resolveRetrievalQuery } from './retrieval-query-planner.service';
-import { knowledgeScope, KnowledgeScope } from './knowledge-scope';
+import { knowledgeScope, KnowledgeScope } from './utils/knowledge-scope';
 import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
-import { isUsableKnowledge } from './knowledge-answer.policy';
+import { isUsableKnowledge } from './utils/knowledge-answer.policy';
+import { ProductRetrievalService } from './product/product-retrieval.service';
+import type { EmbeddingResult } from '../../../infra/embedding/embedding-adapter.interface';
 
 /** Enough rows to explain the winner without burying the flow. */
 const MAX_LOGGED_CANDIDATES = 5;
 
 type RetrievalContext = LineAiUsageContext &
-  Readonly<{ recentMessages?: readonly ChatContextMessage[] }>;
+  Readonly<{
+    recentMessages?: readonly ChatContextMessage[];
+    disableProduct?: boolean;
+    embedding?: EmbeddingResult;
+    forceGrounded?: boolean;
+  }>;
 
 @Injectable()
 export class KnowledgeRetrievalService {
@@ -52,6 +60,7 @@ export class KnowledgeRetrievalService {
     private readonly semantic: SemanticSearchService,
     private readonly micro: MicroKnowledgeService,
     config: ConfigService,
+    @Optional() private readonly products?: ProductRetrievalService,
   ) {
     this.scope = knowledgeScope(config);
     // Candidate/noise thresholds only. Never compare these against RRF scores.
@@ -86,7 +95,26 @@ export class KnowledgeRetrievalService {
     message: string,
     context: RetrievalContext = {},
   ): Promise<KnowledgeRetrievalResult> {
-    const result = await this.runRetrieval(message, context);
+    // The product gate may need the legacy result first; compute (and bill) it once.
+    let legacy: Promise<KnowledgeRetrievalResult> | undefined;
+    const runLegacy = () => (legacy ??= this.runRetrieval(message, context));
+    const product = !context.disableProduct
+      ? await this.products?.retrieveProduct(
+          message,
+          context,
+          (query, embedding, forceGrounded) =>
+            this.runRetrieval(query, {
+              ...context,
+              turnId: context.turnId
+                ? `product-policy:${context.turnId}`
+                : undefined,
+              embedding,
+              forceGrounded,
+            }),
+          runLegacy,
+        )
+      : undefined;
+    const result = product ?? (await runLegacy());
     this.logRetrieval(message, result);
     return result;
   }
@@ -128,8 +156,11 @@ export class KnowledgeRetrievalService {
         return (await call()).filter((item) => this.eligible(item));
       } catch (error) {
         rethrowPendingAiUsage(error);
+        rethrowInsufficientCredit(error);
         failed = true;
-        this.logger.warn(`${label} knowledge retrieval failed`);
+        this.logger.warn(
+          `${label} knowledge retrieval failed (${error instanceof Error ? error.name : 'unknown error'})`,
+        );
         return [];
       }
     };
@@ -143,7 +174,7 @@ export class KnowledgeRetrievalService {
     );
 
     // A follow-up is not the customer's verbatim approved question.
-    const directAllowed = query === message.trim();
+    const directAllowed = query === message.trim() && !context.forceGrounded;
     const fastCached = directAllowed ? this.directResult(cached) : undefined;
     if (fastCached) return fastCached;
 
@@ -159,7 +190,13 @@ export class KnowledgeRetrievalService {
 
     const [micro, semantic] = await Promise.all([
       read('micro lexical', () => this.micro.findMatches(query)),
-      read('semantic', () => this.semantic.search(query, context)),
+      read('semantic', () =>
+        this.semantic.search(
+          query,
+          context,
+          query === message.trim() ? context.embedding : undefined,
+        ),
+      ),
     ]);
     const lexical = [...database, ...micro].filter(
       (item) =>
@@ -467,6 +504,14 @@ export class KnowledgeRetrievalService {
       `candidates=${result.items.length}`,
       `contextCandidates=${result.selectedItems.length}`,
       `fallback=${result.fallbackReason ?? '-'}`,
+      ...(result.product
+        ? [
+            `productMode=${result.product.plan.mode}`,
+            `productStatus=${result.product.result.status}`,
+            `productFailed=${result.product.failed ?? false}`,
+            `productChoices=${result.product.result.choices.length}`,
+          ]
+        : []),
     ];
     const shown = result.items.slice(0, MAX_LOGGED_CANDIDATES);
     const candidates = shown.flatMap((item, index) => {

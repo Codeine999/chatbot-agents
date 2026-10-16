@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { UserSessionService } from '../chatbot/user-session.service';
-import { ReplyTemplateService } from '../chatbot/reply-template.service';
+import { UserSessionService } from '../users/session/user-session.service';
+import { ReplyTemplateService } from './answer/answer-template.service';
 import { RegistrationFlowService } from '../registration/registration-flow.service';
-import { AiChatService } from './aichat.service';
-import { IntentRouterService } from './intent-router.service';
+import { AiChatService } from './answer/answer.service';
+import { IntentRouterService } from './intent/intent-router.service';
 import {
   ChatContextPolicy,
   ChatRequest,
@@ -12,12 +12,14 @@ import {
   ChatResponseSource,
   ImageChatRequest,
   StickerChatRequest,
-} from './types/chat.types';
-import { StickerIntentService } from './sticker-intent.service';
+  AiAnswerResult,
+} from './shared/types/chat.types';
+import { StickerIntentService } from './intent/sticker-intent.service';
 import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
 import { logBlock, logSafeText } from '../../utils/text.utils';
 import { isRegistrationEnabled } from '../registration/registration-feature';
-import { CLARIFY_MESSAGE } from './constants/knowledge-routing.constants';
+import { CLARIFY_MESSAGE } from './shared/knowledge-routing.constants';
+import { InsufficientCreditException } from '../usage/credit-point/insufficient-credit.exception';
 
 @Injectable()
 export class ChatbotService {
@@ -40,6 +42,14 @@ export class ChatbotService {
   }
 
   async handleTextMessage(request: ChatRequest): Promise<ChatResponse> {
+    try {
+      return await this.answerText(request);
+    } catch (error) {
+      return this.withoutCredit(error, request);
+    }
+  }
+
+  private async answerText(request: ChatRequest): Promise<ChatResponse> {
     const {
       userId,
       text,
@@ -49,6 +59,7 @@ export class ChatbotService {
       turnId,
       postbackData,
     } = request;
+
     const input = text.trim();
     const usage = { userId, lineMemberId, conversationId, turnId };
 
@@ -204,12 +215,16 @@ export class ChatbotService {
           retrieval: decision.retrieval,
         });
 
-        return this.aiResponse(result, 'KNOWLEDGE', userId);
+        return this.aiResponse(
+          result,
+          decision.retrieval?.product?.plan.mode === 'GENERAL'
+            ? 'AI'
+            : 'KNOWLEDGE',
+          userId,
+        );
       }
 
       case 'RICH_MENU_REPLY': {
-        // The tenant wrote this answer for this button. It is sent verbatim:
-        // no AI call, no retrieval, nothing to spend and nothing to invent.
         if (!decision.richMenuReply) {
           return this.response(
             this.replyTemplateService.defaultMessage(
@@ -251,17 +266,21 @@ export class ChatbotService {
     if (await this.userSessionService.isMuted(request.userId)) {
       return this.response('', 'SYSTEM', 'EXCLUDE');
     }
-    return this.aiResponse(
-      await this.aiChatService.answerImage(request.image, {
-        userId: request.userId,
-        lineMemberId: request.lineMemberId,
-        conversationId: request.conversationId,
-        turnId: request.turnId,
-        recentMessages: request.recentMessages,
-      }),
-      'AI',
-      request.userId,
-    );
+    try {
+      return await this.aiResponse(
+        await this.aiChatService.answerImage(request.image, {
+          userId: request.userId,
+          lineMemberId: request.lineMemberId,
+          conversationId: request.conversationId,
+          turnId: request.turnId,
+          recentMessages: request.recentMessages,
+        }),
+        'AI',
+        request.userId,
+      );
+    } catch (error) {
+      return this.withoutCredit(error, request);
+    }
   }
 
   //  Image Handle Sticker
@@ -318,8 +337,30 @@ export class ChatbotService {
     return { text, source, contextPolicy };
   }
 
+  /**
+   * An unfunded wallet stops every AI call before a provider is contacted.
+   * Nothing was answered: send no reply (no fallback, no admin handoff) and
+   * log the reason. Any other error keeps propagating.
+   */
+  private withoutCredit(
+    error: unknown,
+    request: Pick<ChatRequest, 'userId' | 'conversationId' | 'turnId'>,
+  ): ChatResponse {
+    if (!(error instanceof InsufficientCreditException)) throw error;
+    this.logger.error(
+      logBlock('AiCredit', [
+        'no reply sent: AI credit is insufficient',
+        `user=${request.userId}`,
+        `conversation=${request.conversationId ?? '-'}`,
+        `turn=${request.turnId ?? '-'}`,
+        `reason=${JSON.stringify(error.message)}`,
+      ]),
+    );
+    return this.response('', 'SYSTEM', 'EXCLUDE');
+  }
+
   private async aiResponse(
-    result: { text: string; isFallback: boolean },
+    result: AiAnswerResult,
     source: 'AI' | 'KNOWLEDGE',
     userId: string,
   ): Promise<ChatResponse> {
@@ -327,7 +368,10 @@ export class ChatbotService {
       await this.userSessionService.requestAdmin(userId);
       return this.response(result.text, 'SYSTEM', 'CLEAR');
     }
-    return this.response(result.text, source, 'INCLUDE');
+    return {
+      ...this.response(result.text, source, 'INCLUDE'),
+      ...(result.catalogRefs ? { catalogRefs: result.catalogRefs } : {}),
+    };
   }
 
   private async contactAdminResponse(

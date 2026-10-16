@@ -10,3 +10,9 @@ export class InsufficientCreditException extends HttpException {
     super(message, HttpStatus.PAYMENT_REQUIRED);
   }
 }
+
+// An unfunded wallet is not a provider or retrieval failure; the LINE chat
+// entry point decides the reply (none), so callers must not fall back on it.
+export function rethrowInsufficientCredit(error: unknown): void {
+  if (error instanceof InsufficientCreditException) throw error;
+}

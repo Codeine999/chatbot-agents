@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   LineChatMessageType,
   LineChatSender,
@@ -6,7 +6,7 @@ import {
 } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RichMenuReplyCacheService } from '../chatbot/menu/rich-menu-reply-cache.service';
-import type { ChatResponse } from '../chatbot/types/chat.types';
+import type { ChatResponse } from '../chatbot/shared/types/chat.types';
 import type {
   ChannelAdapter,
   ChatTurn,
@@ -20,6 +20,7 @@ import { LineService } from './line-reply.service';
 import { LINE_EVENT_MAX_AGE_MS } from './line-events.queue';
 import { LineAdminService } from './admin/line-admin.service';
 import { LineDeliveryService } from './line-delivery.service';
+import { UserSessionService } from '../users/session/user-session.service';
 
 type IncomingLineChatMessage = {
   messageType: LineChatMessageType;
@@ -45,13 +46,38 @@ export class LineChannelAdapter implements ChannelAdapter<
   LineWebhookEvent,
   SavedIncomingEvent
 > {
+  private readonly logger = new Logger(LineChannelAdapter.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly lineService: LineService,
     private readonly lineAdminService: LineAdminService,
     private readonly deliveryService: LineDeliveryService,
     private readonly richMenuReplies: RichMenuReplyCacheService,
+    private readonly sessions: UserSessionService,
   ) {}
+
+  async indicateProcessing(event: LineWebhookEvent): Promise<void> {
+    // LINE shows the indicator only in one-on-one chats, and only turns that
+    // toChatTurn() hands to the chatbot will be answered.
+    if (event.source?.type !== 'user') return;
+    if (
+      event.type !== 'postback' &&
+      !(
+        event.type === 'message' &&
+        ['text', 'image', 'sticker'].includes(event.message.type)
+      )
+    )
+      return;
+
+    try {
+      // An admin-muted chat gets no automatic answer, so do not promise one.
+      if (await this.sessions.isMuted(event.source.userId)) return;
+      await this.lineService.startLoading(event.source.userId);
+    } catch (error) {
+      this.logger.warn(`LINE loading animation skipped: ${String(error)}`);
+    }
+  }
 
   async findDelivery(event: LineWebhookEvent) {
     return this.prisma.lineDelivery.findUnique({

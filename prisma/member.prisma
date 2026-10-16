@@ -11,6 +11,7 @@ model Member {
   createdAt     DateTime      @default(now())
   payments      UserPayment[]
   lineMembers   LineMember[]
+  customers     Customer[]
 
   @@index([createdAt])
   @@map("member")

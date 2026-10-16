@@ -4,7 +4,7 @@ import { LoadContextService } from '../../chatbot/context/load-context.service';
 import type {
   ChatContextMessage,
   ChatResponse,
-} from '../../chatbot/types/chat.types';
+} from '../../chatbot/shared/types/chat.types';
 import type {
   ChannelAdapter,
   ChatTurn,
@@ -32,6 +32,9 @@ export class MessageProcessorService {
 
     const thread = await adapter.saveIncomingEvent(event);
     if (!thread) return;
+
+    // A typing indicator must never delay or fail the turn.
+    void adapter.indicateProcessing?.(event).catch(() => undefined);
 
     const recentMessages = await this.context.load(thread.conversationId);
     const turn = await adapter.toChatTurn(event, thread);

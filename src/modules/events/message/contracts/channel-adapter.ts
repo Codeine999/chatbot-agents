@@ -3,7 +3,7 @@ import type {
   ChatResponse,
   ImageChatRequest,
   StickerChatRequest,
-} from '../../../chatbot/types/chat.types';
+} from '../../../chatbot/shared/types/chat.types';
 
 /** Worker-local input, after channel authentication and inbound persistence.
  * Never accept this contract directly from an HTTP request. Identity and
@@ -31,6 +31,8 @@ export type DeliveryReference = Readonly<{ id: string }>;
 export interface ChannelAdapter<TEvent, TThread extends ConversationThread> {
   findDelivery(event: TEvent): Promise<DeliveryReference | null>;
   saveIncomingEvent(event: TEvent): Promise<TThread | null>;
+  /** Best-effort "working on it" signal. Never awaited by the worker. */
+  indicateProcessing?(event: TEvent): Promise<void>;
   toChatTurn(event: TEvent, thread: TThread): Promise<ChatTurn | null>;
   saveReply(
     event: TEvent,

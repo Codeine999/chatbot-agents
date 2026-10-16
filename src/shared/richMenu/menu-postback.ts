@@ -1,4 +1,4 @@
-import { CHAT_INTENTS, type ChatIntent } from '../../modules/chatbot/types/chat.types';
+import { CHAT_INTENTS, type ChatIntent } from '../../modules/chatbot/shared/types/chat.types';
 
 export type MenuPostback =
   | { kind: 'intent'; intent: ChatIntent }

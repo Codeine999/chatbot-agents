@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
@@ -8,6 +9,10 @@ import * as bcrypt from 'bcrypt';
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CompleteRegisterSessionData } from './types/register-session.types';
+import { CustomerIdentityService } from '../users/customers/customer-identity.service';
+import { CommerceFeatureService } from '../commerce/commerce-feature.service';
+import { CommerceScopeService } from '../commerce/commerce-scope.service';
+import type { CommerceScope } from '../commerce/types/commerce-scope';
 
 export interface RegisterMemberResult {
   username: string;
@@ -16,10 +21,39 @@ export interface RegisterMemberResult {
 
 @Injectable()
 export class RegistrationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly identities: CustomerIdentityService,
+    private readonly commerceFeatures: CommerceFeatureService,
+    private readonly commerceScopes: CommerceScopeService,
+  ) {}
 
   async register(
     data: CompleteRegisterSessionData,
+  ): Promise<RegisterMemberResult> {
+    return this.createMember(data);
+  }
+
+  /** Called only by the verified LINE chat flow; public registration keeps its old contract. */
+  async registerForLine(
+    data: CompleteRegisterSessionData,
+    lineUserId: string,
+  ): Promise<RegisterMemberResult> {
+    if (!this.commerceFeatures.catalogEnabled) return this.register(data);
+    try {
+      const scope = await this.commerceScopes.forLineDeployment();
+      return await this.createMember(data, { scope, lineUserId });
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        'สมัครสมาชิกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+      );
+    }
+  }
+
+  private async createMember(
+    data: CompleteRegisterSessionData,
+    link?: { scope: CommerceScope; lineUserId: string },
   ): Promise<RegisterMemberResult> {
     await this.assertUniqueMemberData(data);
 
@@ -29,18 +63,33 @@ export class RegistrationService {
       const hashedPassword = await bcrypt.hash(password, 10);
 
       try {
-        await this.prisma.member.create({
-          data: {
-            username,
-            password: hashedPassword,
-            firstname: data.firstName,
-            lastname: data.lastName,
-            phone: data.phoneNumber,
-            bankname: data.bankName,
-            banknumber: data.bankAccount,
-            statusaccount: 'pending',
-          },
-        });
+        const memberData = {
+          username,
+          password: hashedPassword,
+          firstname: data.firstName,
+          lastname: data.lastName,
+          phone: data.phoneNumber,
+          bankname: data.bankName,
+          banknumber: data.bankAccount,
+          statusaccount: 'pending',
+        };
+        if (link) {
+          await this.prisma.$transaction(async (tx) => {
+            const member = await tx.member.create({ data: memberData });
+            await this.identities.linkRegisteredLine(
+              tx,
+              link.scope,
+              {
+                channel: 'LINE',
+                connectionKey: this.commerceFeatures.lineConnectionKey,
+                externalUserId: link.lineUserId,
+              },
+              member.uuid,
+            );
+          });
+        } else {
+          await this.prisma.member.create({ data: memberData });
+        }
 
         return {
           username,

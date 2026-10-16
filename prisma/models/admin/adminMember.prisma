@@ -24,7 +24,9 @@ model AdminMember {
 
   sentLineMessages LineChatHistory[]
 
-  richMenuTemplates RichMenuTemplate[]
+  richMenuTemplates  RichMenuTemplate[]
+  catalogCommands    ProductCatalogCommand[]
+  inventoryMovements InventoryMovement[]
 
   requestedCreditTopupHistories CreditTopupHistory[] @relation("CreditTopupRequestedBy")
   approvedCreditTopupHistories  CreditTopupHistory[] @relation("CreditTopupApprovedBy")

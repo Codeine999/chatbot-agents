@@ -1,0 +1,180 @@
+{
+  "date": "2026-10-11T20:40:00.599Z",
+  "model": "openai/gpt-6-luna",
+  "fixtureProducts": 13,
+  "boundaries": {
+    "adminHTTP": "real",
+    "chatHTTP": "test-only loopback adapter to MessageProcessor",
+    "database": "disposable PostgreSQL/pgvector",
+    "redis": "disposable",
+    "ai": "forbidden",
+    "line": "simulated",
+    "billing": "real services, synthetic wallet"
+  },
+  "results": [],
+  "checks": [
+    {
+      "name": "HTTP admin endpoint requires JWT",
+      "pass": true
+    },
+    {
+      "name": "same-variant constraints cannot mix black M and white L",
+      "pass": true
+    },
+    {
+      "name": "price-only DETAIL searches the catalog without a subject",
+      "pass": false,
+      "error": "\nInvalid `prisma.$queryRaw()` invocation:\n\n\nRaw query failed. Code: `42P10`. Message: `ORDER BY position 0 is not in select list`"
+    },
+    {
+      "name": "option-only DETAIL searches the catalog without a subject",
+      "pass": false,
+      "error": "\nInvalid `prisma.$queryRaw()` invocation:\n\n\nRaw query failed. Code: `42P10`. Message: `ORDER BY position 0 is not in select list`"
+    },
+    {
+      "name": "ambiguity can be resolved by variant constraints",
+      "pass": false,
+      "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'MISSING_INPUT'\n- 'FOUND'\n"
+    },
+    {
+      "name": "stock adjustment retry creates one movement",
+      "pass": true
+    },
+    {
+      "name": "stale stock version returns conflict",
+      "pass": true
+    },
+    {
+      "name": "oversell stock adjustment returns conflict",
+      "pass": true
+    },
+    {
+      "name": "product creation idempotency is preserved",
+      "pass": true
+    },
+    {
+      "name": "PATCH only fashion.color preserves meta brand/material/tags",
+      "pass": false,
+      "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ undefined\n- 'stussy'\n"
+    },
+    {
+      "name": "empty subject/ambiguous input does not produce SQL error",
+      "pass": false,
+      "error": "\nInvalid `prisma.$queryRaw()` invocation:\n\n\nRaw query failed. Code: `42P10`. Message: `ORDER BY position 0 is not in select list`"
+    },
+    {
+      "name": "known category COUNT includes records without a matching Thai alias",
+      "pass": false,
+      "error": "Expected values to be strictly equal:\n\n5 !== 6\n"
+    },
+    {
+      "name": "stock QUANTITY question cannot render status-only answer",
+      "pass": false,
+      "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'Stussy Box Logo มีสินค้าคงเหลือ ณ เวลาตรวจสอบ'\n- undefined\n"
+    },
+    {
+      "name": "renderer rejects unsupported authenticity prose",
+      "pass": false,
+      "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'Stussy Box Logo รับรองของแท้แน่นอนค่ะ'\n- undefined\n"
+    },
+    {
+      "name": "index document respects category applicability of fields",
+      "pass": false,
+      "error": "t-shirt material indexed although only enabled for shirt"
+    },
+    {
+      "name": "foreign company mutation is rejected",
+      "pass": true
+    },
+    {
+      "name": "archive removes product from search and preserves movements",
+      "pass": true
+    },
+    {
+      "name": "HOTEL API persists typed fields and Decimal room area",
+      "pass": true
+    },
+    {
+      "name": "HOTEL numeric filters and amenities hydrate correct evidence",
+      "pass": true
+    },
+    {
+      "name": "HOTEL planner exposes exactly the chosen business fields",
+      "pass": true
+    },
+    {
+      "name": "old Fashion rows do not appear in HOTEL catalog list",
+      "pass": false,
+      "error": "old clothing still returned under HOTEL business"
+    },
+    {
+      "name": "wrong-business variant payload is rejected by API",
+      "pass": true
+    },
+    {
+      "name": "business changed after PLAN is rejected",
+      "pass": true
+    },
+    {
+      "name": "HOTEL price and stock are authoritative DB facts",
+      "pass": true
+    },
+    {
+      "name": "RESTAURANT options/negative allergen filter use the same variant",
+      "pass": true
+    },
+    {
+      "name": "missing allergen facts do not satisfy NOT_CONTAINS",
+      "pass": true
+    },
+    {
+      "name": "Restaurant evidence excludes Fashion/Hotel fields",
+      "pass": true
+    },
+    {
+      "name": "GENERAL planner fields follow preset and generic answer prompt",
+      "pass": true
+    },
+    {
+      "name": "GENERAL all declared fields persist, filter and reach evidence",
+      "pass": true
+    },
+    {
+      "name": "ELECTRONICS planner fields follow preset and generic answer prompt",
+      "pass": true
+    },
+    {
+      "name": "ELECTRONICS all declared fields persist, filter and reach evidence",
+      "pass": true
+    },
+    {
+      "name": "FOOD planner fields follow preset and generic answer prompt",
+      "pass": true
+    },
+    {
+      "name": "FOOD all declared fields persist, filter and reach evidence",
+      "pass": true
+    },
+    {
+      "name": "BEAUTY planner fields follow preset and generic answer prompt",
+      "pass": true
+    },
+    {
+      "name": "BEAUTY all declared fields persist, filter and reach evidence",
+      "pass": true
+    },
+    {
+      "name": "switching back restores Fashion fields and excludes Hotel detail",
+      "pass": true
+    },
+    {
+      "name": "index document omits price and stock",
+      "pass": true
+    },
+    {
+      "name": "foreign company cannot read or mutate products",
+      "pass": true
+    }
+  ],
+  "warnings": []
+}

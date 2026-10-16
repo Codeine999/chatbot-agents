@@ -1,0 +1,270 @@
+{
+  "source": "product-test-70d17d67/results.json",
+  "note": "Reverification of the same saved live outputs. No new model calls. Initial assertions falsely accepted substring 500 in 4500 and generic fallback as clarification; category completeness was checked explicitly. Fit case is an unhelpful clarification, not a proven false guarantee.",
+  "passed": 32,
+  "total": 40,
+  "results": [
+    {
+      "id": "F01",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F02",
+      "initialPass": true,
+      "pass": false,
+      "problems": [
+        "catalog list is incomplete"
+      ]
+    },
+    {
+      "id": "F03",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F04",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F05",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F06",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F07",
+      "initialPass": false,
+      "pass": false,
+      "problems": [
+        "status expected FOUND, got MISSING_INPUT",
+        "wrong/missing product",
+        "answer missing 2500",
+        "answer missing 2700",
+        "answer missing numeric fact 2500",
+        "answer missing numeric fact 2700"
+      ]
+    },
+    {
+      "id": "F08",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F09",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F10",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F11",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F12",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F13",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F14",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F15",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F16",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F17",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F18",
+      "initialPass": false,
+      "pass": false,
+      "problems": [
+        "answer missing cotton"
+      ]
+    },
+    {
+      "id": "F19",
+      "initialPass": false,
+      "pass": false,
+      "problems": [
+        "status expected FOUND, got MISSING_INPUT",
+        "wrong/missing product"
+      ]
+    },
+    {
+      "id": "F20",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F21",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F22",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F23",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F24",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F25",
+      "initialPass": false,
+      "pass": false,
+      "problems": [
+        "count expected 5, got 4"
+      ]
+    },
+    {
+      "id": "F26",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F27",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F28",
+      "initialPass": true,
+      "pass": false,
+      "problems": [
+        "answer missing numeric fact 500"
+      ]
+    },
+    {
+      "id": "F29",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F30",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F31",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F32",
+      "initialPass": true,
+      "pass": false,
+      "problems": [
+        "insufficient input became UNAVAILABLE instead of clarification"
+      ]
+    },
+    {
+      "id": "F33",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F34",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F35",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F36",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F37",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F38",
+      "initialPass": false,
+      "pass": false,
+      "problems": [
+        "fit uncertainty not explained; no false guarantee observed"
+      ]
+    },
+    {
+      "id": "F39",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    },
+    {
+      "id": "F40",
+      "initialPass": true,
+      "pass": true,
+      "problems": []
+    }
+  ]
+}

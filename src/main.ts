@@ -78,6 +78,7 @@ async function bootstrap() {
     allowedHeaders: [
       'Content-Type',
       'Authorization',
+      'Idempotency-Key',
       'ngrok-skip-browser-warning',
     ],
     credentials: true,

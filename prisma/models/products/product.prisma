@@ -1,0 +1,199 @@
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model Product {
+  id             String        @id @default(uuid()) @db.Uuid
+  companyId      String        @db.Uuid
+  company        Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  name           String        @db.VarChar(255)
+  aliases        String[]      @default([]) // ชื่อเรียกอื่นของสินค้า ภาษาคน
+  description    String        @default("") @db.Text
+  category       String?       @db.VarChar(100)
+  language       String        @default("th") @db.VarChar(10)
+  status         ProductStatus @default(DRAFT)
+
+  presetVersion  Int           @default(1) // version
+  revision       Int           @default(1)
+  searchRevision Int           @default(1)
+
+  active        Boolean  @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  variants ProductVariant[]
+  vector   ProductVector?
+  indexJobs ProductIndexJob[]
+
+  @@unique([id, companyId])
+  @@index([companyId, status, createdAt, id])
+  @@map("products")
+}
+
+model ProductVector {
+  productId String @id @db.Uuid
+  companyId String @db.Uuid
+  product Product @relation(fields: [productId, companyId], references: [id, companyId], onDelete: Restrict)
+  embedding Unsupported("vector(1536)")
+  embeddingModel String @db.VarChar(100)
+  searchRevision Int
+  contentHash String @db.VarChar(64)
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([companyId, embeddingModel])
+  @@unique([productId, companyId])
+  @@map("productVectors")
+}
+
+model ProductIndexJob {
+  id String @id @default(uuid()) @db.Uuid
+  companyId String @db.Uuid
+  productId String @db.Uuid
+  product Product @relation(fields: [productId, companyId], references: [id, companyId], onDelete: Restrict)
+  searchRevision Int
+  embeddingModel String @db.VarChar(100)
+  contentHash String @db.VarChar(64)
+  document String @db.Text
+  state String @default("PENDING") @db.VarChar(20)
+  attempts Int @default(0)
+  leaseOwner String? @db.Uuid
+  leaseUntil DateTime?
+  lastErrorCode String? @db.VarChar(100)
+  retryAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, searchRevision, embeddingModel])
+  @@index([state, retryAt, leaseUntil])
+  @@map("productIndexJobs")
+}
+
+model ProductVariant {
+  id            String   @id @default(uuid()) @db.Uuid
+  companyId     String   @db.Uuid
+  productId     String   @db.Uuid
+  product       Product  @relation(fields: [productId, companyId], references: [id, companyId], onDelete: Restrict)
+  sku           String   @db.VarChar(100)
+  price Decimal? @db.Decimal(12, 2)
+  compareAtPrice Decimal? @db.Decimal(12, 2)
+
+  inventory InventoryBalance?
+  movements InventoryMovement[]
+  fashion FashionVariant?
+  restaurant RestaurantVariant?
+  hotel HotelVariant?
+
+  meta Json @default("{}")
+  trackStock Boolean @default(true)
+  currency String @default("THB") @db.VarChar(3)
+
+  version       Int      @default(1)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([id, companyId])
+  @@unique([companyId, sku])
+  @@index([productId, companyId, active])
+  @@map("productVariants")
+}
+
+model FashionVariant {
+  variantId String @id @db.Uuid
+  companyId String @db.Uuid
+  variant ProductVariant @relation(fields: [variantId, companyId], references: [id, companyId], onDelete: Restrict)
+  color String? @db.VarChar(100)
+  size String? @db.VarChar(100)
+  condition String? @db.VarChar(100)
+
+  @@unique([variantId, companyId])
+  @@index([companyId])
+  @@map("fashionVariants")
+}
+
+model RestaurantVariant {
+  variantId String @id @db.Uuid
+  companyId String @db.Uuid
+  variant ProductVariant @relation(fields: [variantId, companyId], references: [id, companyId], onDelete: Restrict)
+  portion String? @db.VarChar(100)
+  spiceLevel String? @db.VarChar(100)
+
+  @@unique([variantId, companyId])
+  @@index([companyId])
+  @@map("restaurantVariants")
+}
+
+model HotelVariant {
+  variantId String @id @db.Uuid
+  companyId String @db.Uuid
+  variant ProductVariant @relation(fields: [variantId, companyId], references: [id, companyId], onDelete: Restrict)
+  bedType String? @db.VarChar(100)
+  maxGuests Int?
+  roomArea Decimal? @db.Decimal(10, 2)
+
+  @@unique([variantId, companyId])
+  @@index([companyId])
+  @@map("hotelVariants")
+}
+
+model InventoryBalance {
+  id        String         @id @default(uuid()) @db.Uuid
+  companyId String         @db.Uuid
+  variantId String         @unique @db.Uuid
+  variant   ProductVariant @relation(fields: [variantId, companyId], references: [id, companyId], onDelete: Restrict)
+  onHand    Int            @default(0)
+  reserved  Int            @default(0)
+  version   Int            @default(1)
+  updatedAt DateTime       @updatedAt
+
+  @@unique([variantId, companyId])
+  @@index([companyId])
+  @@map("inventoryBalances")
+}
+
+/// One immutable command outcome per company/requestId. Written in the mutation transaction.
+model ProductCatalogCommand {
+  id           String      @id @default(uuid()) @db.Uuid
+  companyId    String      @db.Uuid
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  tenantId     String?     @db.Uuid
+  requestId    String      @db.Uuid
+  actorAdminId String      @db.Uuid
+  actor        AdminMember @relation(fields: [actorAdminId], references: [id], onDelete: Restrict)
+  action       String      @db.VarChar(50)
+  fingerprint  String      @db.VarChar(64)
+  result       Json
+  createdAt    DateTime    @default(now())
+
+  movement InventoryMovement?
+
+  @@unique([id, companyId])
+  @@unique([companyId, requestId])
+  @@index([companyId, createdAt])
+  @@map("productCatalogCommands")
+}
+
+/// Append-only stock audit, including its originating idempotent admin command.
+model InventoryMovement {
+  id            String                @id @default(uuid()) @db.Uuid
+  companyId     String                @db.Uuid
+  variantId     String                @db.Uuid
+  variant       ProductVariant        @relation(fields: [variantId, companyId], references: [id, companyId], onDelete: Restrict)
+  commandId     String                @unique @db.Uuid
+  command       ProductCatalogCommand @relation(fields: [commandId, companyId], references: [id, companyId], onDelete: Restrict)
+  actorAdminId  String                @db.Uuid
+  actor         AdminMember           @relation(fields: [actorAdminId], references: [id], onDelete: Restrict)
+  deltaOnHand   Int
+  deltaReserved Int                   @default(0)
+  onHandAfter   Int
+  reservedAfter Int
+  reason        String                @db.VarChar(500)
+  operationKey  String                @unique @db.VarChar(150)
+  createdAt     DateTime              @default(now())
+
+  @@unique([commandId, companyId])
+  @@index([variantId, companyId, createdAt])
+  @@map("inventoryMovements")
+}

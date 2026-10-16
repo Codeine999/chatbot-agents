@@ -1,0 +1,376 @@
+{
+  "verificationDate": "2026-10-11",
+  "schemaChecks": [
+    {
+      "parent": "Company",
+      "child": "Customer",
+      "fields": [
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Member",
+      "child": "Customer",
+      "fields": [
+        "memberId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Customer",
+      "child": "ChannelIdentity",
+      "fields": [
+        "customerId",
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Customer",
+      "child": "LineMember",
+      "fields": [
+        "customerId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Member",
+      "child": "LineMember",
+      "fields": [
+        "memberId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "LineMember",
+      "child": "LineConversation",
+      "fields": [
+        "lineMemberId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "LineMember",
+      "child": "LineChatHistory",
+      "fields": [
+        "lineMemberId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "LineConversation",
+      "child": "LineChatHistory",
+      "fields": [
+        "conversationId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AdminMember",
+      "child": "LineChatHistory",
+      "fields": [
+        "sentByAdminId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Company",
+      "child": "CommerceTurn",
+      "fields": [
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "LineMember",
+      "child": "CommerceTurn",
+      "fields": [
+        "lineMemberId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "LineConversation",
+      "child": "CommerceTurn",
+      "fields": [
+        "conversationId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "CommerceTurn",
+      "child": "CommerceLlmCall",
+      "fields": [
+        "turnId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AnswerPattern",
+      "child": "AnswerPatternVector",
+      "fields": [
+        "answerPatternId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "MicroKnowledge",
+      "child": "MicroKnowledgeVector",
+      "fields": [
+        "microKnowledgeId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Company",
+      "child": "Product",
+      "fields": [
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Company",
+      "child": "ProductAttributeDefinition",
+      "fields": [
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Product",
+      "child": "ProductVariant",
+      "fields": [
+        "productId",
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Product",
+      "child": "ProductVector",
+      "fields": [
+        "productId",
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Product",
+      "child": "ProductIndexJob",
+      "fields": [
+        "productId",
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "ProductVariant",
+      "child": "InventoryBalance",
+      "fields": [
+        "variantId",
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "ProductVariant",
+      "child": "InventoryMovement",
+      "fields": [
+        "variantId",
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Company",
+      "child": "ProductCatalogCommand",
+      "fields": [
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "ProductCatalogCommand",
+      "child": "InventoryMovement",
+      "fields": [
+        "commandId",
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AdminMember",
+      "child": "ProductCatalogCommand",
+      "fields": [
+        "actorAdminId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AdminMember",
+      "child": "InventoryMovement",
+      "fields": [
+        "actorAdminId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Company",
+      "child": "CreditWallet",
+      "fields": [
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Company",
+      "child": "AiUsageEvent",
+      "fields": [
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "CreditWallet",
+      "child": "CreditBudget",
+      "fields": [
+        "walletId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "CreditWallet",
+      "child": "CreditReservation",
+      "fields": [
+        "walletId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "CreditBudget",
+      "child": "CreditReservation",
+      "fields": [
+        "budgetId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "CreditWallet",
+      "child": "CreditLedger",
+      "fields": [
+        "walletId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AiUsageEvent",
+      "child": "CreditLedger",
+      "fields": [
+        "usageEventId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AiModelPricing",
+      "child": "AiUsageEvent",
+      "fields": [
+        "pricingId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AdminMember",
+      "child": "AiUsageEvent",
+      "fields": [
+        "adminMemberId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "Company",
+      "child": "CreditTopupHistory",
+      "fields": [
+        "companyId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "CreditExchangeRate",
+      "child": "CreditTopupHistory",
+      "fields": [
+        "exchangeRateId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "CreditPackagePrice",
+      "child": "CreditTopupHistory",
+      "fields": [
+        "packagePriceId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AdminMember",
+      "child": "AdminChatRoom",
+      "fields": [
+        "adminMemberId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AdminMember",
+      "child": "AdminChatRequest",
+      "fields": [
+        "adminMemberId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AdminChatRoom",
+      "child": "AdminChatMessage",
+      "fields": [
+        "roomId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AdminChatRoom",
+      "child": "AdminChatRequest",
+      "fields": [
+        "roomId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AdminChatMessage",
+      "child": "AdminChatRequest",
+      "fields": [
+        "userMessageId"
+      ],
+      "matchesPrisma": true
+    },
+    {
+      "parent": "AdminChatMessage",
+      "child": "AdminChatRequest",
+      "fields": [
+        "assistantMessageId"
+      ],
+      "matchesPrisma": true
+    }
+  ],
+  "displayedFieldsVerified": 220,
+  "browser": {
+    "renderedSvgCount": 15,
+    "tabsVerified": 16,
+    "offlineScriptErrors": 0,
+    "viewports": [
+      1500,
+      390
+    ]
+  },
+  "runtimeApplicationTests": "not run; documentation-only artifact",
+  "productionDeployment": "not verified"
+}

@@ -5,8 +5,10 @@ import {
   ChatContextMessage,
   ChatResponse,
   ChatResponseSource,
-} from '../types/chat.types';
+} from '../shared/types/chat.types';
 import { redactPii } from '../../../utils/text.utils';
+import type { CatalogRef } from '../../products/search/product-search.types';
+import { z } from 'zod';
 
 const CONTEXT_KEY_PREFIX = 'chat:context:';
 const CONTEXT_TTL_SEC = 30 * 60;
@@ -21,6 +23,7 @@ type StoredChatTurn = {
   userText: string;
   assistantText: string;
   assistantSource: ChatResponseSource;
+  catalogRefs?: readonly CatalogRef[];
 };
 
 export type AppendContextTurnParams = Readonly<{
@@ -70,6 +73,7 @@ export class LoadContextService {
             text: turn.assistantText,
             source: turn.assistantSource,
             createdAt: turn.createdAt,
+            catalogRefs: this.catalogRefs(turn.catalogRefs),
           },
         );
       }
@@ -110,13 +114,15 @@ export class LoadContextService {
       userText,
       assistantText,
       assistantSource: response.source,
+      catalogRefs: this.catalogRefs(response.catalogRefs),
     };
 
     const key = this.contextKey(conversationId);
 
     try {
       // Delivery repair can replay a turn; keep it once and preserve event order.
-      await this.redis.eval(`
+      await this.redis.eval(
+        `
         local turns = {}
         local incoming = cjson.decode(ARGV[1])
         for _, raw in ipairs(redis.call('LRANGE', KEYS[1], 0, -1)) do
@@ -131,7 +137,13 @@ export class LoadContextService {
         end
         redis.call('EXPIRE', KEYS[1], ARGV[3])
         return 1
-      `, 1, key, JSON.stringify(turn), MAX_CONTEXT_TURNS, CONTEXT_TTL_SEC);
+      `,
+        1,
+        key,
+        JSON.stringify(turn),
+        MAX_CONTEXT_TURNS,
+        CONTEXT_TTL_SEC,
+      );
 
       return true;
     } catch (error) {
@@ -160,6 +172,22 @@ export class LoadContextService {
 
   private contextKey(conversationId: string): string {
     return `${CONTEXT_KEY_PREFIX}${conversationId}`;
+  }
+
+  private catalogRefs(value: unknown): CatalogRef[] | undefined {
+    const parsed = z
+      .array(
+        z
+          .object({
+            companyId: z.string().uuid(),
+            productId: z.string().uuid(),
+            variantId: z.string().uuid().optional(),
+          })
+          .strict(),
+      )
+      .max(12)
+      .safeParse(value);
+    return parsed.success ? parsed.data : undefined;
   }
 
   private prepareText(value: string): string {

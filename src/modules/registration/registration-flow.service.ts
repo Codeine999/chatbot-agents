@@ -7,8 +7,8 @@ import {
 import {
   ConversationSession,
   UserSessionService,
-} from '../chatbot/user-session.service';
-import { ReplyTemplateService } from '../chatbot/reply-template.service';
+} from '../users/session/user-session.service';
+import { ReplyTemplateService } from '../chatbot/answer/answer-template.service';
 import { RegistrationService } from './registration.service';
 import { RegisterParser } from './utils/register.parser';
 import { RegisterValidator } from './utils/register.validator';
@@ -137,7 +137,7 @@ export class RegistrationFlowService {
     });
 
     try {
-      const auth = await this.registrationService.register(data);
+      const auth = await this.registrationService.registerForLine(data, userId);
 
       //   this.userSessionService.set(userId, {
       //   ...session,

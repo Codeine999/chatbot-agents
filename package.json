@@ -18,6 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-e2e.json",
+    "test:commerce": "node test/scripts/run-commerce-tests.mjs",
+    "test:product-audit": "node --env-file=.env test/scripts/run-product-ecom-audit.mjs",
     "test:live-eval": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-live.json --runInBand --forceExit",
     "prisma:generate": "bunx prisma generate",
     "gen:db": "prisma generate",
@@ -25,7 +27,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
     "db:sync": "prisma migrate deploy && prisma generate",
-    "seed:ai-pricing": "nest build && node dist/src/scripts/seed-ai-pricing.js"
+    "seed:ai-pricing": "nest build && node dist/src/scripts/seed-ai-pricing.js",
+    "seed:demo-catalog": "nest build && node dist/src/scripts/seed-demo-catalog.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1139.0",
