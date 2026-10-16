@@ -22,10 +22,10 @@ import type {
   ChatContextMessage,
   KnowledgeRetrievalResult,
   RouteDecision,
-} from '../../src/modules/chatbot/types/chat.types';
+} from '../../src/modules/chatbot/shared/types/chat.types';
 import { resolveRetrievalQuery } from '../../src/modules/chatbot/knowledge/retrieval-query-planner.service';
-import { CLARIFY_MESSAGE } from '../../src/modules/chatbot/constants/knowledge-routing.constants';
-import { thaiTerms } from '../../src/modules/chatbot/knowledge/thai-bm25';
+import { CLARIFY_MESSAGE } from '../../src/modules/chatbot/shared/knowledge-routing.constants';
+import { thaiTerms } from '../../src/modules/chatbot/knowledge/utils/thai-bm25';
 import { redactPii } from '../../src/utils/text.utils';
 import { AnswerPatternCacheService } from '../../src/modules/chatbot/knowledge/answer-pattern-cache.service';
 import { LoadContextService } from '../../src/modules/chatbot/context/load-context.service';

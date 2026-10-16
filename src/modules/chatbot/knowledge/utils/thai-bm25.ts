@@ -1,5 +1,5 @@
-import { normalizeText } from '../../../utils/text.utils';
-import type { KnowledgeRecord } from './answer-pattern.service';
+import { normalizeText } from '../../../../utils/text.utils';
+import type { KnowledgeRecord } from '../answer-pattern.service';
 
 const segmenter = new Intl.Segmenter('th', { granularity: 'word' });
 const STOP_WORDS = new Set([

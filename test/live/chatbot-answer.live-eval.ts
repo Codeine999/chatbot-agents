@@ -22,17 +22,17 @@ import { AiProviderModule } from '../../src/modules/ai/ai-provider.module';
 import { CreditServiceModule } from '../../src/modules/usage/credit-point/credit.module';
 import { ChatbotModule } from '../../src/modules/chatbot/chatbot.module';
 import { ChatbotService } from '../../src/modules/chatbot/chatbot.service';
-import { AiChatService } from '../../src/modules/chatbot/aichat.service';
-import { IntentRouterService } from '../../src/modules/chatbot/intent-router.service';
-import { UserSessionService } from '../../src/modules/chatbot/user-session.service';
+import { AiChatService } from '../../src/modules/chatbot/answer/answer.service';
+import { IntentRouterService } from '../../src/modules/chatbot/intent/intent-router.service';
+import { UserSessionService } from '../../src/modules/users/session/user-session.service';
 import { UsersAiProviderService } from '../../src/modules/ai/users-ai-provider.service';
 import { EmbeddingService } from '../../src/modules/ai/embeding/embedding.service';
-import { CLARIFY_MESSAGE } from '../../src/modules/chatbot/constants/knowledge-routing.constants';
+import { CLARIFY_MESSAGE } from '../../src/modules/chatbot/shared/knowledge-routing.constants';
 import type {
   ChatContextMessage,
   ChatResponse,
   RouteDecision,
-} from '../../src/modules/chatbot/types/chat.types';
+} from '../../src/modules/chatbot/shared/types/chat.types';
 import {
   CASES,
   PII_PROBES,

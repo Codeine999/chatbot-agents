@@ -1,7 +1,7 @@
-import { AiIntentClassifierService } from '../ai-intent-classifier.service';
-import { IntentRouterService } from '../intent-router.service';
+import { AiIntentClassifierService } from '../intent/ai-intent-classifier.service';
+import { IntentRouterService } from '../intent/intent-router.service';
 import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
-import { RuleIntentService } from '../rule-intent.service';
+import { RuleIntentService } from '../intent/rule-intent.service';
 import { RichMenuReplyCacheService } from './rich-menu-reply-cache.service';
 
 const match = {

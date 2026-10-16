@@ -23,7 +23,7 @@ import type {
   AiRequestContext,
   KnowledgeRetrievalResult,
   ChatContextMessage,
-} from '../../types/chat.types';
+} from '../../shared/types/chat.types';
 import { toAiProviderMessages } from '../../context/ai-provider-context';
 import { redactPii } from '../../../../utils/text.utils';
 import { stripJsonCodeFence } from '../../../../utils/json.utils';

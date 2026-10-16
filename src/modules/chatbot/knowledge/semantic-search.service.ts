@@ -3,10 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { AnswerPatternVectorRepository } from '../../ai/embeding/answer-pattern-vector.repository';
 import { EmbeddingService } from '../../ai/embeding/embedding.service';
 import type { EmbeddingUsageContext } from '../../ai/embeding/embedding.service';
-import { MAX_RETRIEVAL_CANDIDATES } from '../constants/knowledge-routing.constants';
-import { KnowledgeItem } from '../types/chat.types';
+import { MAX_RETRIEVAL_CANDIDATES } from '../shared/knowledge-routing.constants';
+import { KnowledgeItem } from '../shared/types/chat.types';
 import { MicroKnowledgeVectorRepository } from '../../ai/embeding/micro-knowledge-vector.repository';
-import { knowledgeScope, KnowledgeScope } from './knowledge-scope';
+import { knowledgeScope, KnowledgeScope } from './utils/knowledge-scope';
 import { logBlock, logSafeText, redactPii } from '../../../utils/text.utils';
 import type { EmbeddingResult } from '../../../infra/embedding/embedding-adapter.interface';
 

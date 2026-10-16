@@ -48,8 +48,8 @@ import { CreditServiceModule } from '../../src/modules/usage/credit-point/credit
 import { AdminAiPricingModule } from '../../src/modules/admin/pricing/admin-ai-pricing.module';
 import { ChatbotModule } from '../../src/modules/chatbot/chatbot.module';
 import { ChatbotService } from '../../src/modules/chatbot/chatbot.service';
-import { IntentRouterService } from '../../src/modules/chatbot/intent-router.service';
-import { UserSessionService } from '../../src/modules/chatbot/user-session.service';
+import { IntentRouterService } from '../../src/modules/chatbot/intent/intent-router.service';
+import { UserSessionService } from '../../src/modules/users/session/user-session.service';
 import { LoadContextService } from '../../src/modules/chatbot/context/load-context.service';
 import { ProductSearchService } from '../../src/modules/products/search/product-search.service';
 import { MessageProcessorService } from '../../src/modules/events/message/message-processor.service';
@@ -60,7 +60,7 @@ import type {
 import type {
   ChatResponse,
   RouteDecision,
-} from '../../src/modules/chatbot/types/chat.types';
+} from '../../src/modules/chatbot/shared/types/chat.types';
 import type {
   AiGenerateRequest,
   AiGenerateResponse,
@@ -76,10 +76,10 @@ import {
   renderProductAnswer,
 } from '../../src/modules/chatbot/knowledge/product/product-answer.policy';
 import { OpenRouterProvider } from '../../src/ai-provider/providers/openrouter-ai.provider';
-import type { KnowledgeItem } from '../../src/modules/chatbot/types/chat.types';
+import type { KnowledgeItem } from '../../src/modules/chatbot/shared/types/chat.types';
 import type { ProductWorkflow } from '../../src/modules/products/search/product-search.types';
-import { CLARIFY_MESSAGE } from '../../src/modules/chatbot/constants/knowledge-routing.constants';
-import { LOW_CONFIDENCE_CLASSIFIER_SYSTEM_INSTRUCTION } from '../../src/modules/chatbot/constants/low-confidence-classifier.prompt';
+import { CLARIFY_MESSAGE } from '../../src/modules/chatbot/shared/knowledge-routing.constants';
+import { LOW_CONFIDENCE_CLASSIFIER_SYSTEM_INSTRUCTION } from '../../src/modules/chatbot/shared/prompt/low-confidence-classifier.prompt';
 import {
   CATALOG,
   FALLBACK_MESSAGE,

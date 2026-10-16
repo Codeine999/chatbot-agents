@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import type { ConversationSession } from '../../chatbot/types/session.types';
+import type { ConversationSession } from '../../users/session/types/session.types';
 import { NotificationGateway } from './notification.gateway';
 import {
   toAdminNotification,

@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { normalizeText, redactPii } from '../../../utils/text.utils';
-import { bm25Scores } from '../../chatbot/knowledge/thai-bm25';
+import { bm25Scores } from '../../chatbot/knowledge/utils/thai-bm25';
 import {
   productCompanyScope,
   productWhere,
@@ -39,6 +39,7 @@ import {
   stableProductDescription,
 } from './product-document';
 import { productContentTerms } from './product-terms';
+import { hasCatalogConstraints } from './product-plan-policy';
 import { productDiscount } from '../product-pricing';
 
 const include = {
@@ -302,22 +303,20 @@ export class ProductSearchService {
         embedding.model,
         db,
       );
+    const noSubject = !ids.length && !terms.length && !vectorRows.length;
+    // "ราคาเท่าไร" alone names nothing to look up: ask which product, never scan or fail.
+    if (noSubject && !hasCatalogConstraints(plan))
+      return { status: 'MISSING_INPUT', evidence: [], choices: [] };
     const filters: Prisma.ProductWhereInput[] = [
       { ...productWhere(scope), status: 'ACTIVE', language },
     ];
-    // Planner categories are free text ("เสื้อ" for a "เสื้อผ้า" category), so match loosely.
-    if (plan.category)
-      filters.push({
-        OR: [
-          { category: { contains: plan.category, mode: 'insensitive' } },
-          { name: { contains: plan.category, mode: 'insensitive' } },
-          { aliases: { has: plan.category } },
-        ],
-      });
+    if (plan.category) filters.push(await this.categoryFilter(db, scope, plan));
     if (ids.length) filters.push({ id: { in: ids } });
+    // Constraints without a subject ("ไม่เกิน 2000", "สีดำ") filter the whole catalog.
     const allCatalogOperation =
       ['LIST', 'COUNT', 'CHEAPEST'].includes(plan.operation) ||
-      (!terms.length && plan.filters.length > 0);
+      (!terms.length && plan.filters.length > 0) ||
+      noSubject;
     // Aggregates scan the real catalog, never vector top-k, but stay on the
     // subject the customer named: "รองเท้าที่ถูกที่สุด" must not return a shirt.
     // Every subject term must match, because a count or "cheapest" claim about
@@ -335,30 +334,30 @@ export class ProductSearchService {
     const records: ProductRecord[] = [];
     const hits = new Map<string, number>();
     if (!ids.length && !allCatalogOperation) {
-      const condition = terms.length
-        ? Prisma.join(
-            terms.map(
-              (term) =>
-                Prisma.sql`position(lower(${term}) in lower(concat_ws(' ', p.name, array_to_string(p.aliases,' '), p.description, p.category, ${searchableValues(attributeKeys)}))) > 0`,
-            ),
-            ' OR ',
-          )
-        : Prisma.sql`false`;
-      const relevance = terms.length
-        ? Prisma.join(
-            terms.map(
-              (term) =>
-                Prisma.sql`CASE WHEN position(lower(${term}) in lower(concat_ws(' ',p.name,array_to_string(p.aliases,' ')))) > 0 THEN 4 WHEN position(lower(${term}) in lower(concat_ws(' ',p.description,p.category,${searchableValues(attributeKeys)}))) > 0 THEN 1 ELSE 0 END`,
-            ),
-            ' + ',
-          )
-        : Prisma.sql`0`;
-      const lexicalRows = await db.$queryRaw<{ id: string; hits: number }[]>(
-        Prisma.sql`
-        SELECT p.id, (${identityHits(terms, attributeKeys)})::int AS hits FROM products p WHERE p."companyId"=${scope.companyId}::uuid
-        AND p.status='ACTIVE' AND p.language=${language}
-        AND (${condition}) ORDER BY (${relevance}) DESC,p.id LIMIT 60`,
-      );
+      // Without terms only vector candidates remain; an empty lexical query is never sent.
+      let lexicalRows: { id: string; hits: number }[] = [];
+      if (terms.length) {
+        const condition = Prisma.join(
+          terms.map(
+            (term) =>
+              Prisma.sql`position(lower(${term}) in lower(concat_ws(' ', p.name, array_to_string(p.aliases,' '), p.description, p.category, ${searchableValues(attributeKeys)}))) > 0`,
+          ),
+          ' OR ',
+        );
+        const relevance = Prisma.join(
+          terms.map(
+            (term) =>
+              Prisma.sql`CASE WHEN position(lower(${term}) in lower(concat_ws(' ',p.name,array_to_string(p.aliases,' ')))) > 0 THEN 4 WHEN position(lower(${term}) in lower(concat_ws(' ',p.description,p.category,${searchableValues(attributeKeys)}))) > 0 THEN 1 ELSE 0 END`,
+          ),
+          ' + ',
+        );
+        lexicalRows = await db.$queryRaw<{ id: string; hits: number }[]>(
+          Prisma.sql`
+          SELECT p.id, (${identityHits(terms, attributeKeys)})::int AS hits FROM products p WHERE p."companyId"=${scope.companyId}::uuid
+          AND p.status='ACTIVE' AND p.language=${language}
+          AND (${condition}) ORDER BY (${relevance}) DESC,p.id LIMIT 60`,
+        );
+      }
       for (const row of lexicalRows) hits.set(row.id, Number(row.hits));
       filters.push({
         id: {
@@ -471,6 +470,13 @@ export class ProductSearchService {
       .filter((r) => reliable || r.score > 0 || r.hits > 0)
       .sort((a, b) => b.score - a.score || a.p.id.localeCompare(b.p.id));
     if (!reliable && plan.operation === 'DETAIL' && ranked.length > 1) {
+      // Variant constraints settle ambiguity first ("เสื้อเชิ้ตผ้าลินิน" has
+      // one linen shirt); if none satisfies them, keep all so the identified
+      // product can still report VARIANT_UNAVAILABLE below.
+      const satisfying = ranked.filter(
+        (r) => this.evidence(r.p, plan, definitions).length > 0,
+      );
+      if (satisfying.length) ranked = satisfying;
       // The product whose name/alias/category covers strictly more of the
       // subject wins ("เสื้อลินิน" over every other "เสื้อ"); a tie stays a
       // question back to the customer, never a silent pick of rank one.
@@ -492,7 +498,8 @@ export class ProductSearchService {
         evidence: [],
         choices: [],
       };
-    if (plan.ambiguous)
+    // Asking "which one?" needs a choice: one named product answers for all its variants.
+    if (plan.ambiguous && ranked.length > 1)
       return {
         status: 'MISSING_INPUT',
         evidence: [],
@@ -565,6 +572,33 @@ export class ProductSearchService {
       identified: reliable,
       truncated: evidence.length > 12 || ranked.length > selected.length,
     };
+  }
+
+  /**
+   * A store category the planner chose from storeCategories is the subject
+   * itself, matched exactly ("shirt" must not include "t-shirt"). Free-text
+   * categories ("เสื้อ" for a "เสื้อผ้า" category) still match loosely.
+   */
+  private async categoryFilter(
+    db: Prisma.TransactionClient,
+    scope: CommerceScope,
+    plan: ProductPlan,
+  ): Promise<Prisma.ProductWhereInput> {
+    const category = plan.category!;
+    const exact = { equals: category, mode: 'insensitive' as const };
+    const stored = await db.product.findFirst({
+      where: { ...productWhere(scope), category: exact },
+      select: { id: true },
+    });
+    return stored
+      ? { category: exact }
+      : {
+          OR: [
+            { category: { contains: category, mode: 'insensitive' } },
+            { name: { contains: category, mode: 'insensitive' } },
+            { aliases: { has: category } },
+          ],
+        };
   }
 
   private evidence(

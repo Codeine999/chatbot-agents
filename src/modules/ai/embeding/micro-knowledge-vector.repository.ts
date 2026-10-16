@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
-import type { KnowledgeScope } from '../../chatbot/knowledge/knowledge-scope';
+import type { KnowledgeScope } from '../../chatbot/knowledge/utils/knowledge-scope';
 import {
   AnswerPatternVectorRepository,
   SemanticSearchRow,

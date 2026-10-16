@@ -1,6 +1,6 @@
 import { normalizeText, redactPii } from '../../../utils/text.utils';
-import type { ChatContextMessage } from '../types/chat.types';
-import { CLARIFY_MESSAGE } from '../constants/knowledge-routing.constants';
+import type { ChatContextMessage } from '../shared/types/chat.types';
+import { CLARIFY_MESSAGE } from '../shared/knowledge-routing.constants';
 
 const MAX_HISTORY_MESSAGES = 6;
 const MAX_CONTEXT_CHARACTERS = 160;

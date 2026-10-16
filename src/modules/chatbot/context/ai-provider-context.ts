@@ -1,5 +1,5 @@
 import type { AiProviderMessage } from '../../../ai-provider/types/ai-provider.types';
-import { ChatContextMessage } from '../types/chat.types';
+import { ChatContextMessage } from '../shared/types/chat.types';
 import { redactPii } from '../../../utils/text.utils';
 
 const MAX_RECENT_CONTEXT_CHARACTERS = 6_000;

@@ -35,7 +35,7 @@ import { InventoryService } from '../../src/modules/products/inventory.service';
 import { ProductIndexService } from '../../src/modules/products/search/product-index.service';
 import type { CreateProductDto } from '../../src/modules/products/dto/product.dto';
 import { ConfigService } from '@nestjs/config';
-import { DEFAULT_SYSTEM_PROMPT } from '../../src/modules/chatbot/constants/ai-chat.constants';
+import { DEFAULT_SYSTEM_PROMPT } from '../../src/modules/chatbot/shared/prompt/ai-chat.constants';
 
 export const STORE_NAME = 'Mira Closet';
 export const FALLBACK_MESSAGE =

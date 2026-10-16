@@ -1,4 +1,4 @@
-import { ChatAction, ChatIntent } from '../types/chat.types';
+import { ChatAction, ChatIntent } from '../../shared/types/chat.types';
 
 export type IntentRouteMapping = {
   action: ChatAction;

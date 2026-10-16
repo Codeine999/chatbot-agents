@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { KnowledgeItem } from '../../types/chat.types';
+import type { KnowledgeItem } from '../../shared/types/chat.types';
 import type {
   AttributeFact,
   CatalogRef,
@@ -8,6 +8,11 @@ import type {
   ProductWorkflow,
 } from '../../../products/search/product-search.types';
 import { stripJsonCodeFence } from '../../../../utils/json.utils';
+import {
+  coversAskedFacts,
+  productPriceRange,
+  proseStatesOptionValue,
+} from './product-answer.grounding';
 
 export const productAnswerSchema = z
   .object({
@@ -95,7 +100,9 @@ function allowedField(field: string, policy: ProductFieldPolicy): boolean {
     field.startsWith('opts.')
   )
     return true;
-  if (['price', 'originalPrice', 'discountAmount'].includes(field))
+  if (
+    ['price', 'priceRange', 'originalPrice', 'discountAmount'].includes(field)
+  )
     return policy.price;
   if (
     ['stockStatus', 'stockQuantity', 'onHand', 'availableStock'].includes(field)
@@ -143,6 +150,7 @@ export function productFactTokens(
       description: e.description,
       attributes: joinFacts(e.details) || 'ไม่ได้ระบุคุณสมบัติ',
       price: e.price !== null ? `${e.price} บาท` : 'ยังไม่ได้ระบุราคา',
+      priceRange: productPriceRange(workflow.result.evidence, e.productId),
       ...(e.effectiveCompareAtPrice
         ? { originalPrice: `${e.effectiveCompareAtPrice} บาท` }
         : {}),
@@ -280,7 +288,8 @@ export function productPromptEvidence(
   });
   const fields = ['name', 'sku'];
   for (const key of optionKeys) fields.push(`opt.${key}`, `opts.${key}`);
-  if (policy.price) fields.push('price', 'originalPrice', 'discountAmount');
+  if (policy.price)
+    fields.push('price', 'priceRange', 'originalPrice', 'discountAmount');
   if (policy.stock) fields.push('stockStatus', 'stockQuantity');
   if (policy.description) fields.push('description');
   if (policy.attributes) {
@@ -408,7 +417,7 @@ export function renderProductAnswer(
   if (
     workflow.plan.asks.includes('PRICE') &&
     workflow.result.evidence.length &&
-    !used.some((k) => k.endsWith('.price'))
+    !used.some((k) => k.endsWith('.price') || k.endsWith('.priceRange'))
   )
     return undefined;
   if (
@@ -424,7 +433,8 @@ export function renderProductAnswer(
     const prefix = nameToken.slice(0, -4);
     if (
       workflow.plan.asks.includes('PRICE') &&
-      !used.includes(`${prefix}price`)
+      !used.includes(`${prefix}price`) &&
+      !used.includes(`${prefix}priceRange`)
     )
       return undefined;
     if (
@@ -435,6 +445,16 @@ export function renderProductAnswer(
     )
       return undefined;
   }
+  // Prices of every variant and the asked details must be shown, never one picked.
+  if (!coversAskedFacts(used, workflow)) return undefined;
+  // Options ("สีขาว") written as prose would claim a variant the evidence may not be.
+  if (
+    proseStatesOptionValue(
+      answerTemplate.replace(/\{\{[^{}]+\}\}/g, ' '),
+      workflow,
+    )
+  )
+    return undefined;
   if (workflow.plan.operation === 'COUNT' && !used.includes('catalog.count'))
     return undefined;
   // "มีสีอะไรบ้าง" must list every value, not one variant's.
@@ -488,7 +508,8 @@ export function presentedProductRefs(
     const evidence = workflow.result.evidence[Number(match[1]) - 1];
     if (!evidence) continue;
     selected.add(evidence.ref);
-    if (match[2].startsWith('opts.'))
+    // Product-level tokens present every variant they summarize.
+    if (match[2].startsWith('opts.') || match[2] === 'priceRange')
       for (const variant of workflow.result.evidence)
         if (variant.productId === evidence.productId) selected.add(variant.ref);
   }
@@ -499,6 +520,76 @@ export function presentedProductRefs(
       productId: e.productId,
       variantId: e.variantId,
     }));
+}
+
+/** Price and stock of one variant, when the question needs them. */
+function mutableFacts(
+  e: ProductEvidence,
+  plan: ProductPlan,
+  policy: ProductFieldPolicy,
+): string[] {
+  const quantity = selectedStockQuantity(plan, e);
+  return [
+    !policy.price
+      ? ''
+      : e.price !== null
+        ? `ราคา ${e.price} บาท`
+        : 'ยังไม่ได้ระบุราคา',
+    policy.stock
+      ? quantity.value != null
+        ? `${stockLabels[e.stock]} · ${quantity.label} ${quantity.value} ชิ้น`
+        : stockLabels[e.stock]
+      : '',
+  ].filter(Boolean);
+}
+
+/**
+ * Detail questions ("เนื้อผ้าอะไร") answered from stored facts: one line per
+ * product with the details its variants share, then each variant that adds
+ * its own details, price or stock.
+ */
+function detailedProductLines(
+  shown: readonly ProductEvidence[],
+  plan: ProductPlan,
+  policy: ProductFieldPolicy,
+): string {
+  const products = new Map<string, ProductEvidence[]>();
+  for (const e of shown)
+    products.set(e.productId, [...(products.get(e.productId) ?? []), e]);
+  return [...products.values()]
+    .flatMap((variants) => {
+      const [first] = variants;
+      const shared = first.details.filter((d) =>
+        variants.every((v) =>
+          v.details.some((x) => x.key === d.key && x.value === d.value),
+        ),
+      );
+      const header = [
+        first.name,
+        policy.description ? first.description : '',
+        policy.attributes
+          ? joinFacts(shared) ||
+            (variants.every((v) => !v.details.length)
+              ? 'ไม่ได้ระบุคุณสมบัติ'
+              : '')
+          : '',
+      ].filter(Boolean);
+      const isShared = (d: AttributeFact) =>
+        shared.some((s) => s.key === d.key && s.value === d.value);
+      const lines = variants.flatMap((v) => {
+        const extra = [
+          policy.attributes
+            ? joinFacts(v.details.filter((d) => !isShared(d)))
+            : '',
+          ...mutableFacts(v, plan, policy),
+        ].filter(Boolean);
+        return extra.length
+          ? [`- ${[...v.options.map((o) => o.value), ...extra].join(' · ')}`]
+          : [];
+      });
+      return [header.join(' · '), ...lines];
+    })
+    .join('\n');
 }
 
 export function safeProductAnswer(
@@ -528,27 +619,19 @@ export function safeProductAnswer(
   if (workflow.plan.operation === 'COUNT')
     return `พบ ${result.total ?? 0} รายการที่ตรงกับเงื่อนไขค่ะ`;
   const policy = productFieldPolicy(workflow.plan);
-  const text = result.evidence
-    .slice(0, 5)
-    .map((e) =>
-      [
-        e.name,
-        ...e.options.map((o) => o.value),
-        !policy.price
-          ? ''
-          : e.price !== null
-            ? `ราคา ${e.price} บาท`
-            : 'ยังไม่ได้ระบุราคา',
-        policy.stock
-          ? selectedStockQuantity(workflow.plan, e).value != null
-            ? `${stockLabels[e.stock]} · ${selectedStockQuantity(workflow.plan, e).label} ${selectedStockQuantity(workflow.plan, e).value} ชิ้น`
-            : stockLabels[e.stock]
-          : '',
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    )
-    .join('\n');
+  const shown = result.evidence.slice(0, 5);
+  const text =
+    policy.attributes || policy.description
+      ? detailedProductLines(shown, workflow.plan, policy)
+      : shown
+          .map((e) =>
+            [
+              e.name,
+              ...e.options.map((o) => o.value),
+              ...mutableFacts(e, workflow.plan, policy),
+            ].join(' · '),
+          )
+          .join('\n');
   return (
     text +
     (result.truncated || result.evidence.length > 5

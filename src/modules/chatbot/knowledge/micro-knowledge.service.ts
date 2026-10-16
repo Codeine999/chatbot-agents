@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AnswerPatternService } from './answer-pattern.service';
-import { knowledgeScope, KnowledgeScope } from './knowledge-scope';
-import { KnowledgeItem } from '../types/chat.types';
+import { knowledgeScope, KnowledgeScope } from './utils/knowledge-scope';
+import { KnowledgeItem } from '../shared/types/chat.types';
 
 @Injectable()
 export class MicroKnowledgeService {

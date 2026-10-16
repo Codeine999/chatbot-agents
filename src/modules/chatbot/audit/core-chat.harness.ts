@@ -24,14 +24,14 @@ import { AnswerPatternService } from '../knowledge/answer-pattern.service';
 import { MicroKnowledgeService } from '../knowledge/micro-knowledge.service';
 import { SemanticSearchService } from '../knowledge/semantic-search.service';
 import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
-import { RuleIntentService } from '../rule-intent.service';
-import { AiIntentClassifierService } from '../ai-intent-classifier.service';
-import { IntentRouterService } from '../intent-router.service';
-import { AiChatService } from '../aichat.service';
+import { RuleIntentService } from '../intent/rule-intent.service';
+import { AiIntentClassifierService } from '../intent/ai-intent-classifier.service';
+import { IntentRouterService } from '../intent/intent-router.service';
+import { AiChatService } from '../answer/answer.service';
 import { ChatbotService } from '../chatbot.service';
-import { UserSessionService } from '../user-session.service';
-import { ReplyTemplateService } from '../reply-template.service';
-import { StickerIntentService } from '../sticker-intent.service';
+import { UserSessionService } from '../../users/session/user-session.service';
+import { ReplyTemplateService } from '../answer/answer-template.service';
+import { StickerIntentService } from '../intent/sticker-intent.service';
 
 export type VectorRow = {
   id: string;

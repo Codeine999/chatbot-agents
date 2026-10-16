@@ -1,5 +1,17 @@
 import type { ProductPlan } from './product-search.types';
 
+/** Constraints that select catalog rows on their own, without a named subject. */
+export function hasCatalogConstraints(plan: ProductPlan): boolean {
+  return (
+    plan.options.length > 0 ||
+    plan.filters.length > 0 ||
+    plan.category !== null ||
+    plan.minPrice !== null ||
+    plan.maxPrice !== null ||
+    plan.inStockOnly
+  );
+}
+
 /** Stock-only filtering must be grounded in the customer's words, not inferred by the planner. */
 export function groundStockFilter(
   plan: ProductPlan,

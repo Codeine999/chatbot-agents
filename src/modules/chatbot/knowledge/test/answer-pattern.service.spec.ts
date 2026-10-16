@@ -1,7 +1,7 @@
 import { AnswerPatternService } from '../answer-pattern.service';
 import type { PrismaService } from '../../../../prisma/prisma.service';
 import { configStub, makePattern } from './knowledge.fixtures';
-import { thaiTerms } from '../thai-bm25';
+import { thaiTerms } from '../utils/thai-bm25';
 
 const setup = (
   rows: ReturnType<typeof makePattern>[] = [],

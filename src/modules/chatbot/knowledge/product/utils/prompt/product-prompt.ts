@@ -27,7 +27,9 @@ export function buildProductPlannerPrompt(
               options คือ [{key, value}] ของตัวเลือกที่ลูกค้าระบุ ใช้เฉพาะ key ใน storeOptions และใช้ค่าตาม values ของร้านเมื่อหมายถึงค่าเดียวกัน (เช่น "256" → "256GB") listOptions คือ key ที่ลูกค้าถามว่ามีตัวเลือกอะไรบ้าง
               filters คือ [{key, operator, value}] จากข้อจำกัดที่ลูกค้าระบุจริง ใช้เฉพาะ key/type/operators ใน storeFields ตัวเลขใช้ decimal strings ห้ามใช้ field เงิน/สต็อกใน filters ข้อมูลขาดไม่ผ่าน NOT_CONTAINS
               query ใช้ชื่อ/ประเภทสินค้าเป็นคำค้น ข้อจำกัดที่แยกลง options/filters แล้วไม่ต้องใส่ซ้ำใน query หากไม่มีชื่อหรือประเภทที่ระบุให้ query ว่าง ห้ามเพิ่มชื่อสินค้าเอง
-              options/category/minPrice/maxPrice/inStockOnly มาจากคำถามจริง อย่าเติมข้อจำกัดเอง category ใช้ค่าใน storeCategories ค่าเงินเป็น decimal strings
+              options/category/minPrice/maxPrice/inStockOnly มาจากคำถามจริง อย่าเติมข้อจำกัดเอง ค่าเงินเป็น decimal strings
+              category ใช้ค่าใน storeCategories ตรงตัว เฉพาะเมื่อลูกค้าถามถึงทั้งหมวดนั้น แม้ใช้คำหรือภาษาต่างกัน และไม่ต้องใส่คำประเภทนั้นซ้ำใน query (query เหลือเฉพาะชื่อ/คำเฉพาะอื่น); ถ้าสิ่งที่ถามแคบกว่าหมวดหรือไม่มีหมวดตรง ให้ category=null และใช้ query
+              ระบุชื่อสินค้าชัดเจนแต่ไม่ระบุ variant ไม่ใช่ ambiguous ระบบจะแสดงทุก variant ของสินค้านั้นเอง
               inStockOnly=true เฉพาะลูกค้าขอของที่มีสต็อกหรือพร้อมส่ง คำถามทั่วไป "มีเสื้อไรบ้าง" หรือ "มีสินค้าอะไรบ้าง" เป็น LIST และ inStockOnly=false แม้สินค้าจะหมดก็ต้องค้นรายการก่อน
               operation CHEAPEST/COUNT/LIST เฉพาะลูกค้าขอราคาถูกสุด/จำนวน/รายการ; COUNT ใช้ countUnit=PRODUCTS สำหรับชนิดสินค้า VARIANTS สำหรับรุ่นย่อย; COMPARE เมื่อถามเปรียบเทียบ; RECOMMEND เมื่อขอแนะนำ; DETAIL กรณีอื่น
               ถามจำนวนสต็อก เช่น "มีกี่ชิ้น" "เหลือกี่ชิ้น" ของสินค้าที่อ้างถึง ใช้ DETAIL และ asks=STOCK ไม่ใช้ COUNT ซึ่งนับรายการสินค้า/variant

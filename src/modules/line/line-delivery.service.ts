@@ -14,7 +14,7 @@ import {
 import { LineService } from './line-reply.service';
 import { LineAdminService } from './admin/line-admin.service';
 import { LineDeliveryError } from './line-delivery.error';
-import { UserSessionService } from '../chatbot/user-session.service';
+import { UserSessionService } from '../users/session/user-session.service';
 
 @Injectable()
 export class LineDeliveryService implements OnModuleInit, OnModuleDestroy {

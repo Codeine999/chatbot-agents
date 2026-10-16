@@ -6,7 +6,7 @@ import {
 } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RichMenuReplyCacheService } from '../chatbot/menu/rich-menu-reply-cache.service';
-import type { ChatResponse } from '../chatbot/types/chat.types';
+import type { ChatResponse } from '../chatbot/shared/types/chat.types';
 import type {
   ChannelAdapter,
   ChatTurn,
@@ -20,7 +20,7 @@ import { LineService } from './line-reply.service';
 import { LINE_EVENT_MAX_AGE_MS } from './line-events.queue';
 import { LineAdminService } from './admin/line-admin.service';
 import { LineDeliveryService } from './line-delivery.service';
-import { UserSessionService } from '../chatbot/user-session.service';
+import { UserSessionService } from '../users/session/user-session.service';
 
 type IncomingLineChatMessage = {
   messageType: LineChatMessageType;

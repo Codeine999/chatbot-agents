@@ -10,7 +10,7 @@ import { CompanyService } from '../../admin/company/company.service';
 import {
   DIRECT_IMMEDIALY,
   MIN_CONTEXT_SCORE,
-} from '../../chatbot/constants/knowledge-routing.constants';
+} from '../../chatbot/shared/knowledge-routing.constants';
 import { AiPricingService } from '../../usage/billing/ai-pricing.service';
 import { AnswerPatternVectorRepository } from './answer-pattern-vector.repository';
 import type { VectorCoverageRow } from './answer-pattern-vector.repository';

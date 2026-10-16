@@ -17,21 +17,21 @@ import {
   DEFAULT_LEXICAL_CANDIDATE_MIN_SCORE,
   DEFAULT_RAG_MIN_VECTOR_SIMILARITY,
   MAX_RAG_EVIDENCE_CHARACTERS,
-} from '../constants/knowledge-routing.constants';
+} from '../shared/knowledge-routing.constants';
 import {
   ChatContextMessage,
   KnowledgeItem,
   KnowledgeMatchType,
   KnowledgeRetrievalResult,
-} from '../types/chat.types';
+} from '../shared/types/chat.types';
 import { AnswerPatternCacheService } from './answer-pattern-cache.service';
 import { AnswerPatternService } from './answer-pattern.service';
 import { MicroKnowledgeService } from './micro-knowledge.service';
 import { SemanticSearchService } from './semantic-search.service';
 import { resolveRetrievalQuery } from './retrieval-query-planner.service';
-import { knowledgeScope, KnowledgeScope } from './knowledge-scope';
+import { knowledgeScope, KnowledgeScope } from './utils/knowledge-scope';
 import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
-import { isUsableKnowledge } from './knowledge-answer.policy';
+import { isUsableKnowledge } from './utils/knowledge-answer.policy';
 import { ProductRetrievalService } from './product/product-retrieval.service';
 import type { EmbeddingResult } from '../../../infra/embedding/embedding-adapter.interface';
 

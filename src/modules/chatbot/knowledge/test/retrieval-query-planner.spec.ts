@@ -1,6 +1,6 @@
 import { resolveRetrievalQuery } from '../retrieval-query-planner.service';
 import { userMessage } from './knowledge.fixtures';
-import { CLARIFY_MESSAGE } from '../../constants/knowledge-routing.constants';
+import { CLARIFY_MESSAGE } from '../../shared/knowledge-routing.constants';
 
 describe('resolveRetrievalQuery', () => {
   it('ข้อความปกติที่ไม่ได้อ้างถึงของเดิม ส่งผ่านตรง ๆ', () => {

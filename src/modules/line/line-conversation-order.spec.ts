@@ -2,7 +2,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ChatbotService } from '../chatbot/chatbot.service';
 import { LoadContextService } from '../chatbot/context/load-context.service';
 import { RichMenuReplyCacheService } from '../chatbot/menu/rich-menu-reply-cache.service';
-import { UserSessionService } from '../chatbot/user-session.service';
+import { UserSessionService } from '../users/session/user-session.service';
 import { LineAdminService } from './admin/line-admin.service';
 import { LineDeliveryService } from './line-delivery.service';
 import { LineService } from './line-reply.service';

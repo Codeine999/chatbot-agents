@@ -1,14 +1,14 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import { REDIS_CLIENT } from '../../infra/redis/redis.module';
+import { REDIS_CLIENT } from '../../../infra/redis/redis.module';
 import {
   ConversationSession,
   ConversationFlow,
   ConversationStatus,
 } from './types/session.types';
-import { NotificationService } from '../admin/notification/notification.service';
-import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationService } from '../../admin/notification/notification.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 
 export type { ConversationSession } from './types/session.types';
 

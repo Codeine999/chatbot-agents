@@ -1,46 +1,46 @@
-import { rethrowPendingAiUsage } from '../usage/billing/pending-ai-usage.error';
-import { rethrowInsufficientCredit } from '../usage/credit-point/insufficient-credit.exception';
+import { rethrowPendingAiUsage } from '../../usage/billing/pending-ai-usage.error';
+import { rethrowInsufficientCredit } from '../../usage/credit-point/insufficient-credit.exception';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
-import { AI_GENERATION_CONFIG } from '../../ai-provider/utils/ai-provider.config';
-import { UsersAiProviderService } from '../ai/users-ai-provider.service';
+import { AI_GENERATION_CONFIG } from '../../../ai-provider/utils/ai-provider.config';
+import { UsersAiProviderService } from '../../ai/users-ai-provider.service';
 import type {
   AiProviderImage,
   AiProviderMessage,
-} from '../../ai-provider/types/ai-provider.types';
-import { AiBudgetService } from '../usage/rate-limit/ai-budget.service';
-import { PrismaService } from '../../prisma/prisma.service';
-import { KnowledgeRetrievalService } from './knowledge/knowledge-retrieval.service';
-import { toAiProviderMessages } from './context/ai-provider-context';
+} from '../../../ai-provider/types/ai-provider.types';
+import { AiBudgetService } from '../../usage/rate-limit/ai-budget.service';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
+import { toAiProviderMessages } from '../context/ai-provider-context';
 import {
   DEFAULT_FALLBACK_MESSAGE,
   DEFAULT_SYSTEM_PROMPT,
   GENERAL_RULES,
   KNOWLEDGE_RULES,
-} from './constants/ai-chat.constants';
-import { INSUFFICIENT_CONTEXT } from './constants/knowledge-routing.constants';
+} from '../shared/prompt/ai-chat.constants';
+import { INSUFFICIENT_CONTEXT } from '../shared/knowledge-routing.constants';
 import {
   AiAnswerResult,
   AiRequestContext,
   KnowledgeAnswerContext,
   KnowledgeItem,
-} from './types/chat.types';
-import { AiRuntimeSetting } from './types/ai-runtime.types';
-import { logBlock, logSafeText } from '../../utils/text.utils';
+} from '../shared/types/chat.types';
+import { AiRuntimeSetting } from '../shared/types/ai-runtime.types';
+import { logBlock, logSafeText } from '../../../utils/text.utils';
 import {
   isSafeImageAnalysis,
   parseImageAnalysisResponse,
-} from './image-analysis.policy';
+} from '../intent/utils/image-analysis.policy';
 import {
   aiSettingTenantId,
   parseAiResponseStyle,
   aiResponseStyleSchema,
   parseAiSkills,
-} from '../ai/ai-setting/ai-setting-config';
-import { composeAiAnswerPrompt } from './prompt/ai-setting-prompt.composer';
-import { isUsableKnowledge } from './knowledge/knowledge-answer.policy';
-import { ProductAnswerService } from './knowledge/product/product-answer.service';
+} from '../../ai/ai-setting/ai-setting-config';
+import { composeAiAnswerPrompt } from '../shared/prompt/ai-setting-prompt.composer';
+import { isUsableKnowledge } from '../knowledge/utils/knowledge-answer.policy';
+import { ProductAnswerService } from '../knowledge/product/product-answer.service';
 
 const IMAGE_ANSWER_RULES = `คุณเป็นระบบจำแนกความปลอดภัยและอธิบายรูปภาพสำหรับแชตลูกค้า
 

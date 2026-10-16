@@ -1,4 +1,4 @@
-import { inKnowledgeScope, knowledgeScope } from '../knowledge-scope';
+import { inKnowledgeScope, knowledgeScope } from '../utils/knowledge-scope';
 import { configStub } from './knowledge.fixtures';
 
 describe('knowledgeScope', () => {

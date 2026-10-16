@@ -1,6 +1,6 @@
 import type { ConfigService } from '@nestjs/config';
 import type { KnowledgeRecord } from '../answer-pattern.service';
-import type { ChatContextMessage, KnowledgeItem } from '../../types/chat.types';
+import type { ChatContextMessage, KnowledgeItem } from '../../shared/types/chat.types';
 
 /** ConfigService ปลอม อ่านค่าจาก map ที่ส่งเข้ามา คีย์ที่ไม่ได้ตั้ง = undefined */
 export const configStub = (

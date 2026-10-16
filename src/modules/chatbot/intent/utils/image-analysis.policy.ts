@@ -1,4 +1,4 @@
-import { stripJsonCodeFence } from '../../utils/json.utils';
+import { stripJsonCodeFence } from '../../../../utils/json.utils';
 
 export const IMAGE_ANALYSIS_CLASSIFICATIONS = [
   'SAFE_GENERAL',

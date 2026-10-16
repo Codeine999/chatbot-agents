@@ -1,26 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConversationSession } from './user-session.service';
+import { ConversationSession } from '../../users/session/user-session.service';
 import { RuleIntentService } from './rule-intent.service';
 import { AiIntentClassifierService } from './ai-intent-classifier.service';
-import { KnowledgeRetrievalService } from './knowledge/knowledge-retrieval.service';
+import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
 
-import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
-import { parseMenuPostback } from '../../shared/richMenu/menu-postback';
+import { RichMenuReplyCacheService } from '../menu/rich-menu-reply-cache.service';
+import { parseMenuPostback } from '../../../shared/richMenu/menu-postback';
 import {
   ChatContextMessage,
   IntentSource,
   KnowledgeRetrievalResult,
   RouteDecision,
-} from './types/chat.types';
-import { fromRule } from './intent/intent.utils';
-import { logBlock, logSafeText } from '../../utils/text.utils';
-import type { LineAiUsageContext } from '../usage/billing/ai-usage.types';
+} from '../shared/types/chat.types';
+import { fromRule } from './utils/intent.utils';
+import { logBlock, logSafeText } from '../../../utils/text.utils';
+import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
+import { DETECT_GREET } from './utils/detect-greet';
 
 /** Enough of the ranking curve to see a tie; [Retrieval] holds the full list. */
 const MAX_LOGGED_SCORES = 5;
-
-const INQUIRY_OPENER =
-  /^(?:(?:สวัสดี|หวัดดี|แอดมิน)(?:ครับผม|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า)?)?(?:(?:รบกวน|ขอ|อยาก|จะ|มีเรื่อง){0,4}(?:สอบถาม|ถาม|ปรึกษา)(?:ข้อมูล|เพิ่มเติม)?|มีคำถาม)(?:หน่อย|ด้วย|นิดนึง|นิดหน่อย)?(?:นะ)?(?:ครับผม|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า)?(?:[\p{P}\p{S}]|\u200d|\ufe0f)*$/u;
 
 @Injectable()
 export class IntentRouterService {
@@ -74,6 +72,16 @@ export class IntentRouterService {
       ]),
     );
 
+    if (DETECT_GREET.test(input.replace(/\s+/gu, ''))) {
+      return this.logDecision(input, {
+        action: 'CONTINUE_AI_CHAT',
+        intent: 'GENERAL_QUESTION',
+        confidence: 1,
+        source: 'RULE',
+        reason: 'just greeting :)',
+      });
+    }
+
     if (rule.intent === 'CANCEL') {
       return this.logDecision(input, {
         action: 'CANCEL_SESSION',
@@ -86,6 +94,7 @@ export class IntentRouterService {
 
     let ruleKnowledgeDecision: RouteDecision | undefined;
 
+    // if current on session register active
     if (session?.status === 'ACTIVE' && session.flow === 'REGISTER') {
       if (
         rule.confidence >= 0.9 &&
@@ -97,8 +106,11 @@ export class IntentRouterService {
           source: 'SESSION',
           reason: `active REGISTER session interrupted by ${rule.intent}`,
         };
+
+        // if need ANSWER_KNOWLEDGE it will throw out this function
         if (interruption.action !== 'ANSWER_KNOWLEDGE')
           return this.logDecision(input, interruption);
+
         ruleKnowledgeDecision = interruption;
       }
 
@@ -110,16 +122,6 @@ export class IntentRouterService {
           source: 'SESSION',
           reason: 'active REGISTER session continues current flow',
         });
-    }
-
-    if (INQUIRY_OPENER.test(input.replace(/\s+/gu, ''))) {
-      return this.logDecision(input, {
-        action: 'CONTINUE_AI_CHAT',
-        intent: 'GENERAL_QUESTION',
-        confidence: 1,
-        source: 'RULE',
-        reason: 'whole-message inquiry opener without a topic',
-      });
     }
 
     if (!ruleKnowledgeDecision && rule.confidence >= 0.9) {

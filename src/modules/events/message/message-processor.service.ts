@@ -4,7 +4,7 @@ import { LoadContextService } from '../../chatbot/context/load-context.service';
 import type {
   ChatContextMessage,
   ChatResponse,
-} from '../../chatbot/types/chat.types';
+} from '../../chatbot/shared/types/chat.types';
 import type {
   ChannelAdapter,
   ChatTurn,

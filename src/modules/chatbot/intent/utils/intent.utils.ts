@@ -1,4 +1,4 @@
-import { IntentResult, RouteDecision } from '../types/chat.types';
+import { IntentResult, RouteDecision } from '../../shared/types/chat.types';
 import { RULE_MAP } from './intent.maps';
 
 export function fromRule(rule: IntentResult): RouteDecision {

@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { UserSessionService } from '../chatbot/user-session.service';
-import { ReplyTemplateService } from '../chatbot/reply-template.service';
+import { UserSessionService } from '../users/session/user-session.service';
+import { ReplyTemplateService } from './answer/answer-template.service';
 import { RegistrationFlowService } from '../registration/registration-flow.service';
-import { AiChatService } from './aichat.service';
-import { IntentRouterService } from './intent-router.service';
+import { AiChatService } from './answer/answer.service';
+import { IntentRouterService } from './intent/intent-router.service';
 import {
   ChatContextPolicy,
   ChatRequest,
@@ -13,12 +13,12 @@ import {
   ImageChatRequest,
   StickerChatRequest,
   AiAnswerResult,
-} from './types/chat.types';
-import { StickerIntentService } from './sticker-intent.service';
+} from './shared/types/chat.types';
+import { StickerIntentService } from './intent/sticker-intent.service';
 import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
 import { logBlock, logSafeText } from '../../utils/text.utils';
 import { isRegistrationEnabled } from '../registration/registration-feature';
-import { CLARIFY_MESSAGE } from './constants/knowledge-routing.constants';
+import { CLARIFY_MESSAGE } from './shared/knowledge-routing.constants';
 import { InsufficientCreditException } from '../usage/credit-point/insufficient-credit.exception';
 
 @Injectable()
@@ -59,7 +59,7 @@ export class ChatbotService {
       turnId,
       postbackData,
     } = request;
-    
+
     const input = text.trim();
     const usage = { userId, lineMemberId, conversationId, turnId };
 

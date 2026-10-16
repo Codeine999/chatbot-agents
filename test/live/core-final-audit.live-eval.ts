@@ -18,7 +18,7 @@ import { AnthropicAiProvider } from '../../src/ai-provider/providers/anthropic-a
 import { GeminiEmbeddingAdapter } from '../../src/infra/embedding/gemini-embedding.adapter';
 import { AnswerPatternVectorRepository } from '../../src/modules/ai/embeding/answer-pattern-vector.repository';
 import { MicroKnowledgeVectorRepository } from '../../src/modules/ai/embeding/micro-knowledge-vector.repository';
-import { knowledgeScope } from '../../src/modules/chatbot/knowledge/knowledge-scope';
+import { knowledgeScope } from '../../src/modules/chatbot/knowledge/utils/knowledge-scope';
 import { aiSettingTenantId } from '../../src/modules/ai/ai-setting/ai-setting-config';
 import { buildHarness } from '../../src/modules/chatbot/audit/core-chat.harness';
 import { isAiProviderName } from '../../src/ai-provider/types/ai-provider.types';
@@ -29,8 +29,8 @@ import type {
 import type {
   ChatContextMessage,
   KnowledgeRetrievalResult,
-} from '../../src/modules/chatbot/types/chat.types';
-import { CLARIFY_MESSAGE } from '../../src/modules/chatbot/constants/knowledge-routing.constants';
+} from '../../src/modules/chatbot/shared/types/chat.types';
+import { CLARIFY_MESSAGE } from '../../src/modules/chatbot/shared/knowledge-routing.constants';
 import { redactPii } from '../../src/utils/text.utils';
 import { CASES, PII_PROBES, type Outcome } from './chatbot-answer.cases';
 

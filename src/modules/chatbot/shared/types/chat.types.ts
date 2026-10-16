@@ -176,9 +176,9 @@ export type KnowledgeItem = {
   metadata?: Record<string, unknown>;
 };
 
-import type { AiProviderImage } from '../../../ai-provider/types/ai-provider.types';
-import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
+import type { AiProviderImage } from '../../../../ai-provider/types/ai-provider.types';
+import type { LineAiUsageContext } from '../../../usage/billing/ai-usage.types';
 import type {
   CatalogRef,
   ProductWorkflow,
-} from '../../products/search/product-search.types';
+} from '../../../products/search/product-search.types';

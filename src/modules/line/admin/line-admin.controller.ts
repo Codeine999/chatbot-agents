@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
 import { CompanyService } from '../../admin/company/company.service';
-import { LineAdminService } from '../admin/line-admin.service';
+import { LineAdminService } from './line-admin.service';
 
 @AdminGuard()
 @Controller('api/line/admin')

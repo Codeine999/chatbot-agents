@@ -4,14 +4,14 @@ import { RegistrationFlowService } from '../registration/registration-flow.servi
 import { RegisterParser } from '../registration/utils/register.parser';
 import { RegisterValidator } from '../registration/utils/register.validator';
 import { ChatbotService } from './chatbot.service';
-import { RuleIntentService } from './rule-intent.service';
-import { IntentRouterService } from './intent-router.service';
-import { ReplyTemplateService } from './reply-template.service';
-import { UserSessionService } from './user-session.service';
+import { RuleIntentService } from './intent/rule-intent.service';
+import { IntentRouterService } from './intent/intent-router.service';
+import { ReplyTemplateService } from './answer/answer-template.service';
+import { UserSessionService } from '../users/session/user-session.service';
 import { AiModule } from './ai.module';
 import { NotificationModule } from '../admin/notification/notification.module';
 import { LoadContextService } from './context/load-context.service';
-import { StickerIntentService } from './sticker-intent.service';
+import { StickerIntentService } from './intent/sticker-intent.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
 

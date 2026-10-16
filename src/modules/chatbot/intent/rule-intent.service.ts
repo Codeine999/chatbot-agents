@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { IntentResult } from './types/chat.types';
+import { IntentResult } from '../shared/types/chat.types';
 
 @Injectable()
 export class RuleIntentService {

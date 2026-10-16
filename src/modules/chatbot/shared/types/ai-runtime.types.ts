@@ -1,7 +1,7 @@
 import type {
   AiResponseStyle,
   AiSkill,
-} from '../../ai/ai-setting/ai-setting-config';
+} from '../../../ai/ai-setting/ai-setting-config';
 
 export type AiRuntimeSetting = {
   systemPrompt: string;
