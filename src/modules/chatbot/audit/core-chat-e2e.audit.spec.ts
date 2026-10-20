@@ -126,6 +126,34 @@ describe('Deterministic routing', () => {
     expect(await harness.sessions.get('U1')).toBeUndefined();
   });
 
+  it('back-office preview never starts or continues registration', async () => {
+    const harness = buildHarness({ env: { CAN_REGISTER: 'true' } });
+
+    const started = await harness.chatbot.handleTextMessage(
+      ask('สมัคร', { preview: true }),
+    );
+
+    expect(started.source).toBe('REGISTRATION');
+    expect(started.text).toBe('ขออภัยครับ ขณะนี้ยังไม่มีระบบสมัครสมาชิก');
+    expect(harness.spies.registrationStart).not.toHaveBeenCalled();
+
+    await harness.sessions.set('U1', {
+      userId: 'U1',
+      flow: 'REGISTER',
+      step: 'ASK_NAME',
+      status: 'ACTIVE',
+      data: {},
+    });
+
+    const continued = await harness.chatbot.handleTextMessage(
+      ask('สมชาย ใจดี', { preview: true }),
+    );
+
+    expect(continued.text).toBe('ขออภัยครับ ขณะนี้ยังไม่มีระบบสมัครสมาชิก');
+    expect(harness.spies.registrationHandle).not.toHaveBeenCalled();
+    expect(await harness.sessions.get('U1')).toBeUndefined();
+  });
+
   it('observes an active registration session swallowing an unrelated business question', async () => {
     const harness = buildHarness({
       env: { CAN_REGISTER: 'true' },
