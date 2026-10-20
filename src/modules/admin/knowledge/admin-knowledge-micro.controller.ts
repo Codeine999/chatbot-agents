@@ -13,6 +13,7 @@ import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
 import { AdminKnowledgeMicroService } from './admin-knowledge-micro.service';
 import {
   AdminMicroKnowledgeIdParamDto,
+  CreateAdminMicroKnowledgeBulkDto,
   CreateAdminMicroKnowledgeDto,
   UpdateAdminMicroKnowledgeDto,
 } from './dto/admin-micro-knowledge.dto';
@@ -47,6 +48,16 @@ export class AdminKnowledgeMicroController {
     @Body() body: CreateAdminMicroKnowledgeDto,
   ) {
     return this.knowledgeMicroService.create(body, request.admin?.id);
+  }
+
+  /** Dev seeding: a JSON array of create bodies, reported item by item. */
+  @AdminGuard('dev')
+  @Post('bulk')
+  createMany(
+    @Req() request: AdminRequest,
+    @Body() body: CreateAdminMicroKnowledgeBulkDto,
+  ) {
+    return this.knowledgeMicroService.createMany(body, request.admin?.id);
   }
 
   @AdminGuard('dev', 'owner')

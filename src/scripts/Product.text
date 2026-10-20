@@ -1,0 +1,690 @@
+[
+  {
+    "requestId": "df5a83b0-5631-4271-a7ae-812dd74f629e",
+    "name": "ชุดตุ๋นสมุนไพรจีน",
+    "aliases": [],
+    "description": "บำรุงฟื้นฟูร่างกายให้ร่างกายให้แข็งแรง\nเสริมสร้างภูมิคุ้มกัน\nมีกำลัง กระปรี้กระเปร่า",
+    "category": "ชุดสมุนไพรจีนยอดนิยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-001",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "0ac463b1-0ea2-4b05-be53-6c10f8bd0538",
+    "name": "สมุนไพรบำรุงครรภ์ (จับซาไทป้อ)",
+    "aliases": [
+      "จับซาไทป้อ"
+    ],
+    "description": "บำรุงครรภ์ และเด็กในครรภ์\nแก้อาการแพ้ท้อง ท้องอืด ท้องเฟ้อ\nแก้อาการปวดเมื่อยเอว และหลัง",
+    "category": "ชุดสมุนไพรจีนยอดนิยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-002",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "a2de5594-fa5f-4cb9-a7ff-01410ca9bbff",
+    "name": "จับเลี้ยง",
+    "aliases": [],
+    "description": "ป้องกันและบรรเทาอาการร้อนใน\nแก้อาการเจ็บคอ เสียงแหบ ไอ คอแห้ง\nเสริมระบบทางเดินอาหาร",
+    "category": "ชุดสมุนไพรจีนยอดนิยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-003",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "5d1fb6c5-51c6-4ce2-adb9-7de6c8bd5874",
+    "name": "สมุนไพรดองเหล้า",
+    "aliases": [],
+    "description": "บำรุงกำลัง ร่างกายแข็งแรง\nแก้ปวดเมื่อย ปวดหลัง เอว ข้อ กระดูก\nช่วยขับสารพิษออกจากร่างกาย",
+    "category": "ชุดสมุนไพรจีนยอดนิยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-004",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "142602d0-c724-4bf1-a92a-8c23d10b4108",
+    "name": "สมุนไพรแก้อักเสบ (เหล่งเอียง)",
+    "aliases": [
+      "เหล่งเอียง"
+    ],
+    "description": "ลดการอักเสบ สมานแผล แผลหายเร็วขึ้น\nตับร้อนในตับ ล้างพิษ ฟื้นฟูกำลัง\nปรับสมดุลร่างกายให้ฟื้นจากพิษไข้",
+    "category": "ชุดสมุนไพรจีนยอดนิยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-005",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "f87dd9b2-7a78-436c-873f-96e9418bd3ba",
+    "name": "ครีมผ่อนคลายกล้ามเนื้อ OFFISS",
+    "aliases": [],
+    "description": "บรรเทาอาการอักเสบ อาการปวดจากการบาดเจ็บ ของข้อ เอ็น กล้ามเนื้อ\nบรรเทาอาการปวดเมื่อยตามร่างกาย",
+    "category": "ชุดสมุนไพรจีนยอดนิยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-006",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "8e054fb1-6264-4c9f-a7f4-2841520dab83",
+    "name": "ชุกดีท็อกซ์สมุนไพร",
+    "aliases": [
+      "ชุดดีท็อกซ์สมุนไพร"
+    ],
+    "description": "ช่วยล้างลำไส้\nดีท็อกซ์สารพิษที่สะสมในร่างกาย",
+    "category": "ชุดสมุนไพรจีนยอดนิยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-007",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "64a52502-5935-4a0d-91e8-05d20ba32b7e",
+    "name": "สมุนไพรเพื่อการแช่เท้า",
+    "aliases": [],
+    "description": "บรรเทาอาการปวดตามข้อเท้า รองช้ำ ส้นเท้าแตก\nช่วยให้เลือดลมไหลเวียนคล่องตัว พร้อมให้ความอบอุ่นแก่ร่างกาย",
+    "category": "ชุดสมุนไพรจีนยอดนิยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-008",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "7841219f-1bfa-4842-8d87-6922a8744bbe",
+    "name": "วิตตี้",
+    "aliases": [],
+    "description": "เสริมภูมิคุ้มกันโรคเลี่ยงในระบบประสาทตา\nลดภาวะเสี่ยงของการทำงานผิดปกติของดวงตา\nบรรเทาอาการตาแห้ง แสบตา น้ำตาไหลเอง",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบประสาทและสมอง",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-009",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "20e94783-3a45-4a5a-9a58-b1b1752825e7",
+    "name": "ฟิซซ์เซอร์",
+    "aliases": [],
+    "description": "เสริมการไหลเวียนเลือดภายในสมอง\nบรรเทาอาการปวดหัว ไมเกรน ความดัน\nช่วยคลายเครียด หลับลึกมีคุณภาพ",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบประสาทและสมอง",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-010",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "df2f5499-80c0-4de6-9fab-0bdc61d01b89",
+    "name": "ออฟฟิส",
+    "aliases": [],
+    "description": "บรรเทาอาการปวดเมื่อยเรื้อรัง จากออฟฟิศซิมโดม หรือ อาการอักเสบของกล้ามเนี้อ\nบำรุงกระดูก เลือด ข้อต่อ และเส้นเอ็น ให้ทำงานได้อย่างมีประสิทธิภาพมากขึ้น\nเสริมการไหลเวียนโลหิตทั่วร่างกาย",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบไหลเวียนโลหิต กล้ามเนื้อ และกระดูก",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-011",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "d910724f-1e8a-4897-adee-ee9b94c1a1fb",
+    "name": "โฟลว่า",
+    "aliases": [],
+    "description": "บำรุงระบบไหลเวียนโลหิตภายในร่างกาย\nบรรเทาอาการชาตามปลายมือ ปลายเท้า\nลดปัญหาอาการเลือดคั่งภายใน",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบไหลเวียนโลหิต กล้ามเนื้อ และกระดูก",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-012",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "31da9bfa-0c90-47ae-993b-d12c597bd55a",
+    "name": "ไทร่า",
+    "aliases": [],
+    "description": "ฟื้นฟูการทำงานของระบบไต\nลดอาการบวมน้ำ และป้องกันภาวะไตวาย\nเสริมสร้างสมรรถภาพร่างกาย",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบไหลเวียนโลหิต กล้ามเนื้อ และกระดูก",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-013",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "2b0a8ea1-933c-49f4-a25d-67daa8f72a9f",
+    "name": "ไดจีส",
+    "aliases": [],
+    "description": "บรรเทาอาการกรดไหลย้อน\nลดกรด บรรเทาอาการจุดเสียด แน่นท้อง เรอบ่อย\nบรรเทาอาการอาหารไม่ย่อยเรื้อรัง ท้องอืด ท้องเฟ้อ",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบย่อยอาหารและเผาผลาญ",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-014",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "a60b36b2-fd59-491a-b5db-ca9b61229e7e",
+    "name": "ไคมาร์",
+    "aliases": [],
+    "description": "ลดคอเลสเตอรอล ไตรกลีเซอไรด์สูง ไขมันสูง\nลดปัญหาการเกิดไขมันพอกตับ\nลดภาวะเสี่ยงโรคหัวใจ ความดันสูง",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบย่อยอาหารและเผาผลาญ",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-015",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "aef937da-b683-476a-886e-5ef0904621b0",
+    "name": "ไอ-โคพอต",
+    "aliases": [
+      "ไอโคพอต"
+    ],
+    "description": "ฟื้นฟูการทำงานของ คอ ปอด\nบรรเทาอาการไอเรื้อรัง ไอมีเสมหะ\nลดภาวะเสี่ยงจากโรคในระบบทางเดินหายใจ",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบภูมิคุ้มกัน",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-016",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "87331a5a-9ef6-4f30-8b1f-ba44a26c3b63",
+    "name": "อีซี่",
+    "aliases": [],
+    "description": "เสริมภูมิคุ้มกันระบบทางเดินหายใจ\nบรรเทาและป้องกันอาการภูมิแพ้อากาศ\nบรรเทาอาการหอบหืด ไซนัส หวัด น้ำมูลไหล",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบภูมิคุ้มกัน",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-017",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "21a69825-f0ac-4592-a20d-eb1f1bd7aeb2",
+    "name": "เอ็คซ่า",
+    "aliases": [],
+    "description": "เสริมภูมิคุ้มกันน้ำเหลือง\nลดอาการแพ้ ลดผื่นคันตามผิวหนัง\nลดอาการบวมน้ำจากหลอดน้ำเหลืองอุดตัน",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบภูมิคุ้มกัน",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-018",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "a298b5a1-4aa2-4605-896e-c09879bbd5bd",
+    "name": "นิวว่า",
+    "aliases": [],
+    "description": "บรรเทาการเกิดนิ่วในกระเพาะปัสสาวะ\nบรรเทาอาการปัสสาวะแสบขัด ขัดเบา\nเสริมภูมิคุ้มกัน ระบบไต ปัสสาวะ",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบขับถ่าย / ปัสสาวะ",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-019",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "bb841ef1-c9e1-40ee-bda6-09d85e2f9867",
+    "name": "บอนนี่",
+    "aliases": [],
+    "description": "ช่วยขับพิษร้อนสะสม ลดไข้ ตัวร้อน ร้อนในเรื้อรัง\nลดการเกิดสิว ท้องผูก\nช่วยลดปัญหาอาการร้อนภายใน เครียด จิตใจไม่สงบ",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบขับถ่าย / ปัสสาวะ",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-020",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "1afcca52-890a-43f2-bdde-388a9721081d",
+    "name": "ลิฟเฟอร์",
+    "aliases": [],
+    "description": "ฟื้นฟูการทำงานของตับให้ดีขึ้น ลดภาวะเบาหวาน\nบรรเทาอาการไขมันพอกตับ ตับอักเสบ\nเพิ่มประสิทธิภาพในการเผาผลาญน้ำตาลส่วนเกิน",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบต่อมไร้ท่อ/ฮอร์โมน",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-021",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "b55e6727-7dac-45a9-8b4d-fdadcd1e4409",
+    "name": "สุก้า",
+    "aliases": [],
+    "description": "ลดน้ำตาลในเลือด ลดปัญหาเบาหวาน\nบำรุงและฟื้นฟูการทำงานของตับ\nบำรุงระบบหมุนเวียนโลหิต",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบต่อมไร้ท่อ/ฮอร์โมน",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-022",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "c2f8069d-6f1b-48ef-bdae-af9cb950efa6",
+    "name": "ซาริน่า",
+    "aliases": [],
+    "description": "บำรุงการไหลเวียนภายในสตรี\nลดปวดประจำดือน ลดอาการตกขาว\nผิวพรรณสดใส ปรับสมดุลฮอร์โมน",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ระบบภายในสตรี",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-023",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "171d440a-e3a4-4c43-a65c-6322f58fe44f",
+    "name": "ซีรีน",
+    "aliases": [],
+    "description": "เสริมการไหลเวียนเลือดภายในสมอง\nบรรเทาอาการปวดหัว ไมเกรน คลายเครียด\nลดภาวะการนอนไม่หลับเรื้อรัง",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ตำรับรักษาพรีเมี่ยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-024",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "9b59c315-5010-4bd8-b836-119316eaa923",
+    "name": "ชีร่า",
+    "aliases": [],
+    "description": "ลดคอเลสเตอรอล ไตรกลีเซอไรด์และไขมัน\nลดปัญหาการเกิดไขมันพอกตับ\nลดภาวะเสี่ยงโรคหัวใจ และความตันสูง",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ตำรับรักษาพรีเมี่ยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-025",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "1b5e5801-ce16-445e-9638-168f5b544937",
+    "name": "แอสชัวร์",
+    "aliases": [],
+    "description": "ลดภาวะเบาหวาน\nฟื้นฟูการทำงานของตับให้ดีขึ้น\nบรรเทาอาการไขมันพอกตับ",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ตำรับรักษาพรีเมี่ยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-026",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "40272413-5633-4f66-89d6-2193703e319b",
+    "name": "ยูริก้า",
+    "aliases": [],
+    "description": "ฟื้นฟูการทำงานของระบบไต\nลดอาหารบวมน้ำ และป้องกันไตเสื่อม\nเสริมภูมิคุ้มกันจากโรคร้าย",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ตำรับรักษาพรีเมี่ยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-027",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "04200fe1-3d9b-438e-9f21-5ba4d014a954",
+    "name": "เฮฮบีน่า",
+    "aliases": [],
+    "description": "บำรุงโลหิตผู้สูงวัย ปรับสมดุลร่างกายผู้ที่มีวัย 40 ปีขึ้นไป\nบำรุงกำลัง ลดอาการอ่อนเพลีย เพิ่มความสดชื่น คลายปวดเมื่อย\nช่วยเรื่องการนอนหลับให้มีคุณภาพ\nเสริมภูมิคุ้ม ชะลอวัย บำรุงร่างกายแบบองค์รวม",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ตำรับบำรุงพรีเมี่ยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-028",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "c2c628f6-d5d2-4aad-bd74-0a70367eecc7",
+    "name": "ชามิน่า",
+    "aliases": [],
+    "description": "บำรุงภายในสตรีแบบองด์รวม ขับโลหิตภายในที่ตกค้างพร้อม กระตุ้นการสร้างโลหิตใหม่ทดแทน\nสลายของคังเสียตกค้าง ขับพิษออก ช่วยให้ผิวพรรณขาวใส\nลดปัญหาสิว ฝ้า ฮอร์โมนไม่สมดุล\nบรรเทาอาการวัยทอง เช่น อาการร้อนวูบวาบ อาการซึมเศร้า\nความจำเสื่อม นอนไม่หลับ สมรรถภาพเสื่อมถอย",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ตำรับบำรุงพรีเมี่ยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-029",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "a7dd34f4-a0ec-4210-a2a8-24e2257014fd",
+    "name": "คอร์ดี้ฟูล",
+    "aliases": [],
+    "description": "เสริมสมรรถทางร่างกายให้แข็งแรง และปรับสมดุล\nบำรุงเลือด ฟื้นฟูทุกระบบในร่างกาย ช่วยชะลอวัย\nช่วยสร้างสมดุลระบบสืบพันธุ์ ระบบต่อมไร้ท่อเพิ่มปริมาณอสุจิ",
+    "category": "สมุนไพรจีนตำรับรักษา/บำรุงพรีเมี่ยม: ตำรับบำรุงพรีเมี่ยม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-030",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "42711937-ff68-453b-8ea3-a48e1e4c2886",
+    "name": "ชาดอกหอมหมื่นลี้",
+    "aliases": [],
+    "description": "บำรุงปอด ช่วยขับเสมหะ\nชจัดพิษในร่างกาย\nลดคลอเรสเตอรอล\nช่วยให้หลับสบาย สดชื่น แจ่มใส",
+    "category": "ชาสมุนไพร และอาหารสุขภาพ: ชาสมุนไพร",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-031",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "e939383e-5af7-4dfe-b707-58c74b14b975",
+    "name": "ชาดอกโบตั๋น",
+    "aliases": [],
+    "description": "ลดอาการปวดท้องประจำเดือน\nบำรุงผิวพรรณสดใส\nผ่อนคลายความเครียด\nบรรเทาอาการปวดศีรษะ",
+    "category": "ชาสมุนไพร และอาหารสุขภาพ: ชาสมุนไพร",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-032",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "843d6245-1888-4c1c-b1ef-ca8d07f037fb",
+    "name": "ชาคาโมมายล์",
+    "aliases": [],
+    "description": "ผ่อนคลายความเคลียด วิตกกังวล\nแก้อาการปวดท้องประจำเดือน\nขับลม ลดอาการอักเสบ และแผลในทางทางเดินอาหาร",
+    "category": "ชาสมุนไพร และอาหารสุขภาพ: ชาสมุนไพร",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-033",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "770a1b3d-6524-467a-914c-5bc65f687042",
+    "name": "ชามะลิหอม",
+    "aliases": [],
+    "description": "ช่วยบำรุงหัวใจ และระบบประสาท\nช่วยให้หลับสบาย จิตใจผ่อนคลาย\nดับพิษร้อน แก้ร้อนใน ตัวร้อน\nบรรเทาอาการปวดศีรษะ",
+    "category": "ชาสมุนไพร และอาหารสุขภาพ: ชาสมุนไพร",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-034",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "5fc3132b-fb14-4cd5-9b8d-e0f3218a654e",
+    "name": "เจียวกู่หลาน",
+    "aliases": [],
+    "description": "ช่วยลดเลสเตอรอล\nช่วยปรับสมดุลความดันโลหิต\nช่วยควบคุมระดับน้ำตาลในเลือด\nช่วยชะลอความเสื่อมโทรมของเซลล์ในร่างกาย",
+    "category": "ชาสมุนไพร และอาหารสุขภาพ: ชาสมุนไพร",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-035",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "abd3f2e7-3b5e-4de4-b00e-5209f3a37ff2",
+    "name": "ชาลาเวนเดอร์",
+    "aliases": [],
+    "description": "ช่วยลดอาการท้องอืด\nอาหารไม่ย่อย\nบรรเทาอาการปวดศีรษะ\nช่วยให้หลับสนิท หลับลึก",
+    "category": "ชาสมุนไพร และอาหารสุขภาพ: ชาสมุนไพร",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-036",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "b235cd46-75e1-49d8-8fb2-1cafe9c90313",
+    "name": "สตรอว์เบอร์รี ฟรีซดราย",
+    "aliases": [],
+    "description": "สตรอว์เบอร์รี ฟรีซดราย",
+    "category": "ชาสมุนไพร และอาหารสุขภาพ: อาหารสุขภาพ",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-037",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "5120a659-d80e-49b7-bee4-7e1fa2782f0b",
+    "name": "มะนาวผสมน้ำผึ้งป่า",
+    "aliases": [],
+    "description": "มะนาวผสมน้ำผึ้งป่า แบบแผ่น",
+    "category": "ชาสมุนไพร และอาหารสุขภาพ: อาหารสุขภาพ",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-038",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "9c5e3633-36fe-4dff-b079-66e179dbf0f6",
+    "name": "เลมอนอบแห้ง เคลือบน้ำผึ้ง",
+    "aliases": [],
+    "description": "เลมอนอบแห้ง เคลือบน้ำผึ้ง",
+    "category": "ชาสมุนไพร และอาหารสุขภาพ: อาหารสุขภาพ",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-039",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  },
+  {
+    "requestId": "73e09e83-5a8c-4de4-988c-8a16d742cd18",
+    "name": "ลูกพีชอบแห้ง",
+    "aliases": [],
+    "description": "ลูกพีชอบแห้ง",
+    "category": "ชาสมุนไพร และอาหารสุขภาพ: อาหารสุขภาพ",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KLH-040",
+        "price": null,
+        "trackStock": false,
+        "active": true
+      }
+    ]
+  }
+]

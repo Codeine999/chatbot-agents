@@ -34,6 +34,13 @@ export class CreateAdminMicroKnowledgeDto extends createZodDto(
   createMicroKnowledgeSchema,
 ) {}
 
+/** Every item is embedded one by one, so the batch stays small. */
+export const MAX_BULK_MICRO_KNOWLEDGE = 100;
+
+export class CreateAdminMicroKnowledgeBulkDto extends createZodDto(
+  z.array(createMicroKnowledgeSchema).min(1).max(MAX_BULK_MICRO_KNOWLEDGE),
+) {}
+
 const updateMicroKnowledgeSchema = z
   .object({
     ...microKnowledgeFields,
