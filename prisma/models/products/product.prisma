@@ -81,10 +81,9 @@ model ProductVariant {
 
   inventory InventoryBalance?
   movements InventoryMovement[]
-  fashion FashionVariant?
-  restaurant RestaurantVariant?
-  hotel HotelVariant?
 
+  /// Business field values for every business type, keyed by the selected
+  /// preset's field keys (e.g. color/size, ram_gb, bed_type/max_guests).
   meta Json @default("{}")
   trackStock Boolean @default(true)
   currency String @default("THB") @db.VarChar(3)
@@ -98,44 +97,6 @@ model ProductVariant {
   @@unique([companyId, sku])
   @@index([productId, companyId, active])
   @@map("productVariants")
-}
-
-model FashionVariant {
-  variantId String @id @db.Uuid
-  companyId String @db.Uuid
-  variant ProductVariant @relation(fields: [variantId, companyId], references: [id, companyId], onDelete: Restrict)
-  color String? @db.VarChar(100)
-  size String? @db.VarChar(100)
-  condition String? @db.VarChar(100)
-
-  @@unique([variantId, companyId])
-  @@index([companyId])
-  @@map("fashionVariants")
-}
-
-model RestaurantVariant {
-  variantId String @id @db.Uuid
-  companyId String @db.Uuid
-  variant ProductVariant @relation(fields: [variantId, companyId], references: [id, companyId], onDelete: Restrict)
-  portion String? @db.VarChar(100)
-  spiceLevel String? @db.VarChar(100)
-
-  @@unique([variantId, companyId])
-  @@index([companyId])
-  @@map("restaurantVariants")
-}
-
-model HotelVariant {
-  variantId String @id @db.Uuid
-  companyId String @db.Uuid
-  variant ProductVariant @relation(fields: [variantId, companyId], references: [id, companyId], onDelete: Restrict)
-  bedType String? @db.VarChar(100)
-  maxGuests Int?
-  roomArea Decimal? @db.Decimal(10, 2)
-
-  @@unique([variantId, companyId])
-  @@index([companyId])
-  @@map("hotelVariants")
 }
 
 model InventoryBalance {
