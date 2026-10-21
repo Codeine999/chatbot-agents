@@ -1,0 +1,562 @@
+[
+  {
+    "requestId": "99cdb4f7-638d-4069-ab8b-63dfe43e947a",
+    "name": "การ์ดจอ GIGABYTE AORUS GeForce RTX 5090 STEALTH ICE 32G",
+    "aliases": ["RTX 5090", "5090", "การ์ดจอ 5090", "AORUS 5090"],
+    "description": "การ์ดจอเรือธง RTX 5090 หน่วยความจำ GDDR7 32GB ดีไซน์ AORUS Stealth Ice สีขาว เหมาะกับเล่นเกม 4K และงาน AI",
+    "category": "การ์ดจอ",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "GPU-GB-AORUS-5090-SICE",
+        "price": "149000.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "GIGABYTE",
+          "tags": ["การ์ดจอ", "NVIDIA", "เล่นเกม 4K", "AI"],
+          "warranty": "3 ปี",
+          "gpu": "GeForce RTX 5090",
+          "vram_gb": 32,
+          "tdp_w": 575,
+          "color": "ขาว"
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "f9f94519-fc81-4eff-92a6-c12587fb4fd5",
+    "name": "การ์ดจอ ASUS ROG Astral GeForce RTX 5090 OC Edition 32GB",
+    "aliases": ["RTX 5090", "5090", "ROG Astral 5090"],
+    "description": "RTX 5090 รุ่นท็อปจาก ASUS ROG ซีรีส์ Astral ระบายความร้อน 4 พัดลม GDDR7 32GB",
+    "category": "การ์ดจอ",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "GPU-ASUS-ROG-ASTRAL-5090-OC",
+        "price": "239000.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "ASUS",
+          "tags": ["การ์ดจอ", "NVIDIA", "เล่นเกม 4K", "AI"],
+          "warranty": "3 ปี",
+          "gpu": "GeForce RTX 5090",
+          "vram_gb": 32,
+          "tdp_w": 575,
+          "color": "ดำ"
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "e894b877-eefd-48d5-9386-cdf321f8195e",
+    "name": "การ์ดจอ GIGABYTE GeForce RTX 5080 WINDFORCE OC SFF 16G",
+    "aliases": ["RTX 5080", "5080", "การ์ดจอ 5080"],
+    "description": "RTX 5080 GDDR7 16GB ขนาด SFF ใส่เคสเล็กได้ เล่นเกม 1440p/4K",
+    "category": "การ์ดจอ",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "GPU-GB-WF-5080-SFF",
+        "price": "58900.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "GIGABYTE",
+          "tags": ["การ์ดจอ", "NVIDIA", "เล่นเกม 2K"],
+          "warranty": "3 ปี",
+          "gpu": "GeForce RTX 5080",
+          "vram_gb": 16,
+          "tdp_w": 360,
+          "color": "ดำ"
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "b67cf43a-800f-45ed-aa83-18a0ea2e2dbf",
+    "name": "การ์ดจอ MSI GeForce RTX 5070 Ti VENTUS 3X OC 16G",
+    "aliases": ["RTX 5070 Ti", "5070ti", "การ์ดจอ 5070 Ti"],
+    "description": "RTX 5070 Ti GDDR7 16GB พัดลม 3 ตัว คุ้มค่าสำหรับเล่นเกม 1440p",
+    "category": "การ์ดจอ",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "GPU-MSI-VENTUS3X-5070TI",
+        "price": "46900.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "MSI",
+          "tags": ["การ์ดจอ", "NVIDIA", "เล่นเกม 2K"],
+          "warranty": "3 ปี",
+          "gpu": "GeForce RTX 5070 Ti",
+          "vram_gb": 16,
+          "tdp_w": 300,
+          "color": "ดำ"
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "b0f8c02c-a61f-4a46-8f67-d1cc28d3971c",
+    "name": "ซีพียู AMD Ryzen 7 9800X3D",
+    "aliases": ["9800X3D", "Ryzen 7 9800X3D", "ซีพียูเล่นเกม"],
+    "description": "ซีพียูสายเกมมิ่ง 8 คอร์ 16 เธรด เทคโนโลยี 3D V-Cache ซ็อกเก็ต AM5 ไม่แถมฮีตซิงก์",
+    "category": "ซีพียู",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "CPU-AMD-R7-9800X3D",
+        "price": "17990.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "AMD",
+          "tags": ["ซีพียู", "เล่นเกม", "AM5"],
+          "warranty": "3 ปี",
+          "cpu": "Ryzen 7 9800X3D",
+          "cpu_cores": 8,
+          "cpu_threads": 16,
+          "socket": "AM5",
+          "tdp_w": 120
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "02a76d9d-c6c8-4a4f-b389-2adb6b58afd8",
+    "name": "ซีพียู AMD Ryzen 9 9950X3D",
+    "aliases": ["9950X3D", "Ryzen 9 9950X3D"],
+    "description": "ซีพียู 16 คอร์ 32 เธรด 3D V-Cache แรงทั้งเล่นเกมและทำงานตัดต่อ ซ็อกเก็ต AM5",
+    "category": "ซีพียู",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "CPU-AMD-R9-9950X3D",
+        "price": "26990.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "AMD",
+          "tags": ["ซีพียู", "เล่นเกม", "ตัดต่อ", "AM5"],
+          "warranty": "3 ปี",
+          "cpu": "Ryzen 9 9950X3D",
+          "cpu_cores": 16,
+          "cpu_threads": 32,
+          "socket": "AM5",
+          "tdp_w": 170
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "bb281d87-1b00-4acf-9de2-f29b6847cc19",
+    "name": "ซีพียู AMD Ryzen 5 9600X",
+    "aliases": ["9600X", "Ryzen 5 9600X"],
+    "description": "ซีพียู 6 คอร์ 12 เธรด สถาปัตยกรรม Zen 5 กินไฟต่ำ เหมาะกับคอมเล่นเกมงบกลาง",
+    "category": "ซีพียู",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "CPU-AMD-R5-9600X",
+        "price": "9590.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "AMD",
+          "tags": ["ซีพียู", "งบกลาง", "AM5"],
+          "warranty": "3 ปี",
+          "cpu": "Ryzen 5 9600X",
+          "cpu_cores": 6,
+          "cpu_threads": 12,
+          "socket": "AM5",
+          "tdp_w": 65
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "0e054fce-879e-4995-9e27-ae3e114b370f",
+    "name": "ซีพียู Intel Core Ultra 7 265K",
+    "aliases": ["265K", "Core Ultra 7 265K", "Arrow Lake"],
+    "description": "ซีพียู Intel 20 คอร์ 20 เธรด ปลดล็อกโอเวอร์คล็อก มีกราฟิกในตัว ซ็อกเก็ต LGA1851",
+    "category": "ซีพียู",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "CPU-INTEL-CU7-265K",
+        "price": "12320.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Intel",
+          "tags": ["ซีพียู", "ทำงาน", "LGA1851"],
+          "warranty": "3 ปี",
+          "cpu": "Core Ultra 7 265K",
+          "cpu_cores": 20,
+          "cpu_threads": 20,
+          "socket": "LGA1851",
+          "tdp_w": 125
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "91f3a228-49f5-459c-9aa6-cb39d5377e41",
+    "name": "แรม Corsair Vengeance RGB DDR5 32GB 6400MHz",
+    "aliases": ["แรม DDR5 32GB", "Corsair Vengeance RGB", "แรม 6400"],
+    "description": "แรม DDR5 ความจุ 32GB บัส 6400MHz ไฟ RGB สำหรับคอมเล่นเกม",
+    "category": "แรม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "RAM-CORSAIR-VRGB-D5-32G-6400",
+        "price": "16730.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Corsair",
+          "tags": ["แรม", "DDR5", "RGB"],
+          "warranty": "ตลอดอายุการใช้งาน",
+          "ram_gb": 32,
+          "ram_type": "DDR5",
+          "ram_speed_mhz": 6400,
+          "color": "ดำ"
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "f9686d42-a61a-4313-8b23-18e884537f09",
+    "name": "แรม Kingston FURY Beast DDR5 32GB 5200MHz",
+    "aliases": ["แรม DDR5 32GB", "Kingston FURY Beast", "แรม 5200"],
+    "description": "แรม DDR5 ความจุ 32GB บัส 5200MHz ไม่มีไฟ เน้นคุ้มค่า",
+    "category": "แรม",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "RAM-KINGSTON-FURYB-D5-32G-5200",
+        "price": "16500.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Kingston",
+          "tags": ["แรม", "DDR5"],
+          "warranty": "ตลอดอายุการใช้งาน",
+          "ram_gb": 32,
+          "ram_type": "DDR5",
+          "ram_speed_mhz": 5200,
+          "color": "ดำ"
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "4bbb2640-84bf-4310-8528-e3339b04a491",
+    "name": "โน้ตบุ๊ก Apple MacBook Air M5 (2026)",
+    "aliases": ["MacBook Air", "แมคบุ๊ค แอร์", "MacBook Air M5"],
+    "description": "MacBook Air ชิป Apple M5 แรม 16GB SSD 512GB เครื่องบาง เบา แบตอึด มีขนาดจอ 13 และ 15 นิ้ว",
+    "category": "โน้ตบุ๊ก",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "NB-APPLE-MBA-M5-13-16-512",
+        "price": "36900.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Apple",
+          "tags": ["โน้ตบุ๊ก", "ทำงาน", "macOS", "พกพา"],
+          "warranty": "1 ปี",
+          "cpu": "Apple M5",
+          "cpu_cores": 10,
+          "ram_gb": 16,
+          "storage": "512GB",
+          "screen_size_inch": 13.6,
+          "color": "ดำ"
+        }
+      },
+      {
+        "sku": "NB-APPLE-MBA-M5-15-16-512",
+        "price": "44900.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Apple",
+          "tags": ["โน้ตบุ๊ก", "ทำงาน", "macOS", "จอใหญ่"],
+          "warranty": "1 ปี",
+          "cpu": "Apple M5",
+          "cpu_cores": 10,
+          "ram_gb": 16,
+          "storage": "512GB",
+          "screen_size_inch": 15.3,
+          "color": "ดำ"
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "b3c8746b-69fe-45e1-803e-108f847bd81c",
+    "name": "โน้ตบุ๊ก ASUS ROG Zephyrus G14 (2026)",
+    "aliases": ["Zephyrus G14", "ROG G14", "โน้ตบุ๊กเกมมิ่ง 14 นิ้ว"],
+    "description": "โน้ตบุ๊กเกมมิ่ง 14 นิ้ว บอดี้อะลูมิเนียม ชิป AMD Ryzen AI 9 465 การ์ดจอ RTX 5060",
+    "category": "โน้ตบุ๊ก",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "NB-ASUS-ROG-G14-2026",
+        "price": "92990.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "ASUS",
+          "tags": ["โน้ตบุ๊ก", "เล่นเกม", "พกพา"],
+          "warranty": "2 ปี",
+          "cpu": "AMD Ryzen AI 9 465",
+          "gpu": "GeForce RTX 5060 Laptop GPU",
+          "vram_gb": 8,
+          "screen_size_inch": 14
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "6855050c-ed86-4f58-a99c-607fbd001e30",
+    "name": "โน้ตบุ๊ก Lenovo LOQ 15IRX10 RTX 5060",
+    "aliases": ["Lenovo LOQ", "LOQ 15", "โน้ตบุ๊กเกมมิ่งงบกลาง"],
+    "description": "โน้ตบุ๊กเกมมิ่งจอ 15.6 นิ้ว การ์ดจอ RTX 5060 คุ้มค่าสำหรับนักเรียนนักศึกษาที่เล่นเกม",
+    "category": "โน้ตบุ๊ก",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "NB-LENOVO-LOQ-15IRX10-5060",
+        "price": "36990.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Lenovo",
+          "tags": ["โน้ตบุ๊ก", "เล่นเกม", "งบกลาง"],
+          "warranty": "2 ปี",
+          "gpu": "GeForce RTX 5060 Laptop GPU",
+          "vram_gb": 8,
+          "screen_size_inch": 15.6
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "06393b6d-b2b4-46fa-bdd3-d07b3cc6347a",
+    "name": "โน้ตบุ๊ก Acer Nitro V 15 ANV15-52-501P",
+    "aliases": ["Acer Nitro V", "Nitro V 15", "โน้ตบุ๊กเกมมิ่งราคาถูก"],
+    "description": "โน้ตบุ๊กเกมมิ่งเริ่มต้น จอ 15.6 นิ้ว การ์ดจอ RTX 5060 ราคาคุ้มค่า",
+    "category": "โน้ตบุ๊ก",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "NB-ACER-NITROV15-ANV15-52-501P",
+        "price": "29990.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Acer",
+          "tags": ["โน้ตบุ๊ก", "เล่นเกม", "งบประหยัด"],
+          "warranty": "2 ปี",
+          "gpu": "GeForce RTX 5060 Laptop GPU",
+          "vram_gb": 8,
+          "screen_size_inch": 15.6
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "3e9388ca-b7c4-4115-b51c-8048beb66ad2",
+    "name": "คีย์บอร์ด Logitech MX Keys S",
+    "aliases": ["MX Keys S", "คีย์บอร์ดไร้สาย Logitech", "คีย์บอร์ดทำงาน"],
+    "description": "คีย์บอร์ดไร้สายสำหรับทำงาน ปุ่มเงียบ มีไฟ backlight เชื่อมต่อได้ 3 เครื่อง ชาร์จผ่าน USB-C",
+    "category": "คีย์บอร์ด",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KB-LOGI-MXKEYS-S-TH",
+        "price": "3690.00",
+        "compareAtPrice": "4190.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Logitech",
+          "tags": ["คีย์บอร์ด", "ไร้สาย", "ทำงาน"],
+          "warranty": "1 ปี",
+          "connectivity": ["Bluetooth", "Logi Bolt"],
+          "layout": "TH/EN ฟูลไซซ์",
+          "color": "เทา"
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "2846c5aa-ad4b-40ae-b405-865fe93d6934",
+    "name": "คีย์บอร์ด Razer BlackWidow V4 75%",
+    "aliases": ["BlackWidow V4 75", "คีย์บอร์ดเกมมิ่ง Razer"],
+    "description": "คีย์บอร์ดเกมมิ่งเมคานิคอล 75% hot-swap ไฟ RGB สายถอดได้ USB-C",
+    "category": "คีย์บอร์ด",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KB-RAZER-BWV4-75-ORANGE",
+        "price": "6990.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Razer",
+          "tags": ["คีย์บอร์ด", "เล่นเกม", "เมคานิคอล", "RGB"],
+          "warranty": "2 ปี",
+          "switch_type": "Orange",
+          "connectivity": ["USB-C"],
+          "layout": "EN 75%",
+          "color": "ดำ"
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "747ae38f-da64-4ebd-b1bf-5654df5fb0e0",
+    "name": "คีย์บอร์ด Keychron K2 (Version 2) RGB Hot-swap",
+    "aliases": ["Keychron K2", "คีย์บอร์ดเมคานิคอลไร้สาย"],
+    "description": "คีย์บอร์ดเมคานิคอล 75% ไร้สาย ใช้ได้ทั้ง Mac และ Windows เปลี่ยนสวิตช์ได้ เลือกสวิตช์ Red, Brown หรือ Blue",
+    "category": "คีย์บอร์ด",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "KB-KEYCHRON-K2V2-RED",
+        "price": "3390.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Keychron",
+          "tags": ["คีย์บอร์ด", "ไร้สาย", "เมคานิคอล"],
+          "warranty": "1 ปี",
+          "switch_type": "Red",
+          "connectivity": ["Bluetooth", "USB-C"],
+          "layout": "EN 75%",
+          "color": "เทา"
+        }
+      },
+      {
+        "sku": "KB-KEYCHRON-K2V2-BROWN",
+        "price": "3390.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Keychron",
+          "tags": ["คีย์บอร์ด", "ไร้สาย", "เมคานิคอล"],
+          "warranty": "1 ปี",
+          "switch_type": "Brown",
+          "connectivity": ["Bluetooth", "USB-C"],
+          "layout": "EN 75%",
+          "color": "เทา"
+        }
+      },
+      {
+        "sku": "KB-KEYCHRON-K2V2-BLUE",
+        "price": "3390.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Keychron",
+          "tags": ["คีย์บอร์ด", "ไร้สาย", "เมคานิคอล"],
+          "warranty": "1 ปี",
+          "switch_type": "Blue",
+          "connectivity": ["Bluetooth", "USB-C"],
+          "layout": "EN 75%",
+          "color": "เทา"
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "9d480489-cfac-4b5a-838d-21f2f13f9777",
+    "name": "หูฟัง Sony WH-1000XM6",
+    "aliases": ["WH-1000XM6", "XM6", "หูฟังตัดเสียงรบกวน Sony"],
+    "description": "หูฟังครอบหูไร้สายเรือธงของ Sony ตัดเสียงรบกวนระดับท็อป พับเก็บได้ แบตใช้งานยาว",
+    "category": "หูฟัง",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "HP-SONY-WH1000XM6-BLACK",
+        "price": "14990.00",
+        "compareAtPrice": "15990.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Sony",
+          "tags": ["หูฟัง", "ไร้สาย", "ตัดเสียงรบกวน"],
+          "warranty": "1 ปี",
+          "noise_cancelling": true,
+          "connectivity": ["Bluetooth", "USB-C", "AUX 3.5mm"],
+          "color": "ดำ"
+        }
+      },
+      {
+        "sku": "HP-SONY-WH1000XM6-SILVER",
+        "price": "14990.00",
+        "compareAtPrice": "15990.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Sony",
+          "tags": ["หูฟัง", "ไร้สาย", "ตัดเสียงรบกวน"],
+          "warranty": "1 ปี",
+          "noise_cancelling": true,
+          "connectivity": ["Bluetooth", "USB-C", "AUX 3.5mm"],
+          "color": "เงิน"
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "bd55c26c-4e68-43fd-875e-009eb3287ed6",
+    "name": "หูฟัง Sony WH-1000XM5",
+    "aliases": ["WH-1000XM5", "XM5"],
+    "description": "หูฟังครอบหูไร้สายตัดเสียงรบกวนรุ่นก่อนหน้า XM6 เสียงดี น้ำหนักเบา ราคาคุ้มกว่า",
+    "category": "หูฟัง",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "HP-SONY-WH1000XM5-BLACK",
+        "price": "11990.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "Sony",
+          "tags": ["หูฟัง", "ไร้สาย", "ตัดเสียงรบกวน"],
+          "warranty": "1 ปี",
+          "noise_cancelling": true,
+          "connectivity": ["Bluetooth", "USB-C", "AUX 3.5mm"],
+          "color": "ดำ"
+        }
+      }
+    ]
+  },
+  {
+    "requestId": "4c74d639-cfcb-4456-a00a-0eb942f93d3a",
+    "name": "หูฟังเกมมิ่ง HyperX Cloud III",
+    "aliases": ["HyperX Cloud 3", "Cloud III", "หูฟังเล่นเกม"],
+    "description": "หูฟังเกมมิ่งแบบมีสาย ไมค์ถอดได้ ใส่สบาย ใช้ได้กับ PC, PS5 และมือถือ",
+    "category": "หูฟัง",
+    "language": "th",
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "HP-HYPERX-CLOUD3-BLACK",
+        "price": "3290.00",
+        "trackStock": true,
+        "meta": {
+          "brand": "HyperX",
+          "tags": ["หูฟัง", "เล่นเกม", "มีไมค์"],
+          "warranty": "2 ปี",
+          "noise_cancelling": false,
+          "connectivity": ["USB-C", "USB-A", "AUX 3.5mm"],
+          "color": "ดำ"
+        }
+      }
+    ]
+  }
+]
