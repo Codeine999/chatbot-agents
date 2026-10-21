@@ -20,6 +20,7 @@ import { logBlock, logSafeText } from '../../utils/text.utils';
 import { isRegistrationEnabled } from '../registration/registration-feature';
 import { CLARIFY_MESSAGE } from './shared/knowledge-routing.constants';
 import { InsufficientCreditException } from '../usage/credit-point/insufficient-credit.exception';
+import { isCancelKeyword } from './intent/utils/cancel-keyword';
 
 @Injectable()
 export class ChatbotService {
@@ -103,11 +104,13 @@ export class ChatbotService {
       ]),
     );
 
+    // Registration was switched off mid-flow: close the session on any input
+    // except cancel, which the router answers. CONTINUE_REGISTER relies on it.
     if (
       session?.status === 'ACTIVE' &&
       session.flow === 'REGISTER' &&
       !this.canRegister(preview) &&
-      !['cancel', 'ยกเลิก', 'ออก'].includes(input.toLowerCase())
+      !isCancelKeyword(input)
     ) {
       await this.userSessionService.clear(userId);
       return this.response(

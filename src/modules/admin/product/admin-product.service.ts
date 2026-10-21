@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, Injectable, Logger } from '@nestjs/common';
 import type { CommerceScope } from '../../commerce/types/commerce-scope';
 import {
   CreateProductDto,
@@ -10,9 +10,18 @@ import {
 } from '../../products/dto/product.dto';
 import { ProductService } from '../../products/product.service';
 
+type CreatedProduct = Awaited<ReturnType<ProductService['create']>>;
+
+export type BulkCreateProductResult = {
+  created: CreatedProduct[];
+  failed: Array<{ index: number; name: string; reason: string }>;
+};
+
 /** Admin API operations reuse the catalog's ownership, transaction and replay rules. */
 @Injectable()
 export class AdminProductService {
+  private readonly logger = new Logger(AdminProductService.name);
+
   constructor(private readonly products: ProductService) {}
 
   list(scope: CommerceScope, query: ListProductsQueryDto) {
@@ -25,6 +34,37 @@ export class AdminProductService {
 
   create(scope: CommerceScope, actorId: string, input: CreateProductDto) {
     return this.products.create(scope, actorId, input);
+  }
+
+  /**
+   * Sequential on purpose: each item is its own idempotent catalog command, so
+   * a failed item neither rolls back nor blocks the items that succeeded.
+   */
+  async createMany(
+    scope: CommerceScope,
+    actorId: string,
+    items: CreateProductDto[],
+  ): Promise<BulkCreateProductResult> {
+    const result: BulkCreateProductResult = { created: [], failed: [] };
+    for (const [index, item] of items.entries()) {
+      try {
+        result.created.push(await this.products.create(scope, actorId, item));
+      } catch (error) {
+        // Only HTTP exceptions carry client-safe messages.
+        if (!(error instanceof HttpException))
+          this.logger.error(
+            `Bulk product create failed at index ${index}`,
+            error,
+          );
+        result.failed.push({
+          index,
+          name: item.name,
+          reason:
+            error instanceof HttpException ? error.message : 'Create failed',
+        });
+      }
+    }
+    return result;
   }
 
   update(

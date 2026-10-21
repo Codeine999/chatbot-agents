@@ -141,6 +141,18 @@ export class AiPricingService {
     };
   }
 
+  /**
+   * Throws unless the model has a billable price right now. Selecting a model
+   * without one would turn every later reply into a pricing failure.
+   */
+  async assertBillable(
+    provider: AiProviderName,
+    model: string,
+    at: Date = new Date(),
+  ): Promise<void> {
+    await this.requireActivePricing(provider, model, at);
+  }
+
   async estimateReservationCredit(
     provider: AiProviderName,
     model: string,

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -17,7 +18,15 @@ import { InsufficientCreditException } from './insufficient-credit.exception';
 import { PendingAiUsageError } from '../billing/pending-ai-usage.error';
 
 const DEFAULT_MIN_AI_BALANCE_CREDIT = 20;
-const SERIALIZABLE_RETRY_LIMIT = 3;
+/**
+ * Every AI call reserves and settles on the one company wallet row, so a burst
+ * of concurrent LINE turns (LINE_EVENTS_CONCURRENCY) conflicts under
+ * SERIALIZABLE. Three immediate retries let half of a six-call burst fail;
+ * jittered backoff spreads the retries until the burst drains.
+ */
+const SERIALIZABLE_RETRY_LIMIT = 10;
+const SERIALIZABLE_RETRY_BASE_DELAY_MS = 10;
+const SERIALIZABLE_RETRY_MAX_DELAY_MS = 200;
 
 /** Aggregate hold created before the provider is contacted. */
 export type CreditHold = Readonly<{
@@ -612,6 +621,14 @@ export class CreditService {
 
         this.logger.warn(
           `Retrying serialized AI credit transaction (${attempt}/${SERIALIZABLE_RETRY_LIMIT})`,
+        );
+        // Full jitter: concurrent losers must not retry in lockstep.
+        await delay(
+          Math.random() *
+            Math.min(
+              SERIALIZABLE_RETRY_MAX_DELAY_MS,
+              SERIALIZABLE_RETRY_BASE_DELAY_MS * 2 ** attempt,
+            ),
         );
       }
     }
