@@ -27,6 +27,14 @@ export const AI_PROVIDER_LABELS = {
   OPENROUTER: 'OpenRouter',
 } as const satisfies Readonly<Record<AiProviderName, string>>;
 
+/**
+ * Providers admins can see and select. The others stay registered (direct
+ * Gemini still serves embeddings) but are hidden from the catalog for now.
+ */
+export const AI_SELECTABLE_PROVIDERS: readonly AiProviderName[] = [
+  'OPENROUTER',
+];
+
 export const AI_PROVIDER_TEXT_MODELS = {
   GEMINI: [
     'gemini-3.7-flash',

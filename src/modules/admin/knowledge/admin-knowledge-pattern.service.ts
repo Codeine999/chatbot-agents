@@ -1,6 +1,8 @@
 import {
   BadRequestException,
+  HttpException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { AnswerPattern } from '../../../generated/prisma/client';
@@ -16,6 +18,8 @@ import {
 
 @Injectable()
 export class AdminKnowledgePatternService {
+  private readonly logger = new Logger(AdminKnowledgePatternService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly embeddingService: EmbeddingService,
@@ -42,25 +46,47 @@ export class AdminKnowledgePatternService {
     input: CreateAdminAnswerPatternDto,
     adminMemberId?: string,
   ): Promise<AnswerPattern> {
-    const embedding = await this.embeddingService.embedDocument(
-      buildAnswerPatternDocument(input),
-      { adminMemberId },
-    );
-
-    const pattern = await this.prisma.$transaction(async (tx) => {
-      const pattern = await tx.answerPattern.create({ data: input });
-      await this.vectors.upsert(
-        tx,
-        pattern.id,
-        embedding.values,
-        embedding.model,
-        pattern.active,
-      );
-      return pattern;
-    });
+    const pattern = await this.createIndexed(input, adminMemberId);
 
     await this.answerPatternCache.refresh();
     return pattern;
+  }
+
+  /**
+   * Creates each item independently: a failed item is reported and skipped,
+   * while the items already committed stay. The cache refreshes once.
+   */
+  async createMany(
+    inputs: readonly CreateAdminAnswerPatternDto[],
+    adminMemberId?: string,
+  ): Promise<{
+    created: AnswerPattern[];
+    failed: Array<{ index: number; title: string; reason: string }>;
+  }> {
+    const created: AnswerPattern[] = [];
+    const failed: Array<{ index: number; title: string; reason: string }> = [];
+
+    // Sequential on purpose: each item is a billed provider call.
+    for (const [index, input] of inputs.entries()) {
+      try {
+        created.push(await this.createIndexed(input, adminMemberId));
+      } catch (error) {
+        this.logger.warn(
+          `bulk answer pattern ${index} failed: ${error instanceof Error ? error.name : 'unknown error'}`,
+        );
+        failed.push({
+          index,
+          title: input.title,
+          reason:
+            error instanceof HttpException
+              ? error.message
+              : 'Failed to create answer pattern',
+        });
+      }
+    }
+
+    if (created.length) await this.answerPatternCache.refresh();
+    return { created, failed };
   }
 
   async update(
@@ -121,6 +147,29 @@ export class AdminKnowledgePatternService {
 
     await this.answerPatternCache.refresh();
     return { deleted: true };
+  }
+
+  /** The provider call stays outside the transaction; a failure writes nothing. */
+  private async createIndexed(
+    input: CreateAdminAnswerPatternDto,
+    adminMemberId?: string,
+  ): Promise<AnswerPattern> {
+    const embedding = await this.embeddingService.embedDocument(
+      buildAnswerPatternDocument(input),
+      { adminMemberId },
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      const pattern = await tx.answerPattern.create({ data: input });
+      await this.vectors.upsert(
+        tx,
+        pattern.id,
+        embedding.values,
+        embedding.model,
+        pattern.active,
+      );
+      return pattern;
+    });
   }
 
   async reindex(adminMemberId?: string): Promise<{

@@ -58,6 +58,7 @@ export class ChatbotService {
       conversationId,
       turnId,
       postbackData,
+      preview,
     } = request;
 
     const input = text.trim();
@@ -105,7 +106,7 @@ export class ChatbotService {
     if (
       session?.status === 'ACTIVE' &&
       session.flow === 'REGISTER' &&
-      !this.canRegister() &&
+      !this.canRegister(preview) &&
       !['cancel', 'ยกเลิก', 'ออก'].includes(input.toLowerCase())
     ) {
       await this.userSessionService.clear(userId);
@@ -146,7 +147,7 @@ export class ChatbotService {
         );
 
       case 'CONTINUE_REGISTER':
-        if (!this.canRegister()) {
+        if (!this.canRegister(preview)) {
           await this.userSessionService.clear(userId);
 
           return this.response(
@@ -163,7 +164,7 @@ export class ChatbotService {
         );
 
       case 'START_REGISTER':
-        if (!this.canRegister()) {
+        if (!this.canRegister(preview)) {
           return this.response(
             this.replyTemplateService.registerUnavailable(),
             'REGISTRATION',
@@ -392,7 +393,7 @@ export class ChatbotService {
     );
   }
 
-  private canRegister(): boolean {
-    return isRegistrationEnabled(this.configService);
+  private canRegister(preview = false): boolean {
+    return !preview && isRegistrationEnabled(this.configService);
   }
 }

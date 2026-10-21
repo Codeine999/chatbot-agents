@@ -8,11 +8,11 @@ import { ConfigService } from '@nestjs/config';
 import {
   AI_PROVIDER_LABELS,
   AI_PROVIDER_TEXT_MODELS,
+  AI_SELECTABLE_PROVIDERS,
 } from '../../../ai-provider/utils/ai-provider.constants';
 import { AI_PROVIDER_ADAPTERS } from '../../../ai-provider/providers/ai-provider.registry';
 import type { AiProviderAdapterRegistry } from '../../../ai-provider/providers/ai-provider.registry';
 import {
-  AI_PROVIDER_NAMES,
   AiProviderCatalogItem,
   AiProviderName,
   AiProviderScope,
@@ -36,8 +36,9 @@ export class AiModelCatalogService {
     );
   }
 
+  /** Hidden providers are left out, so assertSelectable rejects them too. */
   getCatalog(): readonly AiProviderCatalogItem[] {
-    return AI_PROVIDER_NAMES.map((provider) => ({
+    return AI_SELECTABLE_PROVIDERS.map((provider) => ({
       provider,
       label: AI_PROVIDER_LABELS[provider],
       available: this.isProviderAvailable(provider),

@@ -1,6 +1,8 @@
 import {
   BadRequestException,
+  HttpException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -20,6 +22,7 @@ import {
 
 @Injectable()
 export class AdminKnowledgeMicroService {
+  private readonly logger = new Logger(AdminKnowledgeMicroService.name);
   private readonly scope: KnowledgeScope;
 
   constructor(
@@ -73,6 +76,42 @@ export class AdminKnowledgeMicroService {
       );
       return knowledge;
     });
+  }
+
+  /**
+   * Creates each item independently: a failed item is reported and skipped,
+   * while the items already committed stay.
+   */
+  async createMany(
+    inputs: readonly CreateAdminMicroKnowledgeDto[],
+    adminMemberId?: string,
+  ): Promise<{
+    created: MicroKnowledge[];
+    failed: Array<{ index: number; title: string; reason: string }>;
+  }> {
+    const created: MicroKnowledge[] = [];
+    const failed: Array<{ index: number; title: string; reason: string }> = [];
+
+    // Sequential on purpose: each item is a billed provider call.
+    for (const [index, input] of inputs.entries()) {
+      try {
+        created.push(await this.create(input, adminMemberId));
+      } catch (error) {
+        this.logger.warn(
+          `bulk micro knowledge ${index} failed: ${error instanceof Error ? error.name : 'unknown error'}`,
+        );
+        failed.push({
+          index,
+          title: input.title,
+          reason:
+            error instanceof HttpException
+              ? error.message
+              : 'Failed to create micro knowledge',
+        });
+      }
+    }
+
+    return { created, failed };
   }
 
   async update(

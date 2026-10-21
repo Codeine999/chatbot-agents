@@ -123,6 +123,12 @@ export type ChatRequest = LineAiUsageContext &
      * customer never carries it, so its presence is proof of a real tap.
      */
     postbackData?: string;
+    /**
+     * Back-office preview of the customer view. The simulated customer has no
+     * LINE identity, so flows that create customer records (registration)
+     * are refused instead of writing a real member.
+     */
+    preview?: boolean;
   }>;
 
 export type ImageChatRequest = LineAiUsageContext &

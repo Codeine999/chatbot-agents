@@ -25,3 +25,84 @@ services:
 volumes:
   postgres_data:
   redis_data:
+# services:
+#   postgres:
+#     image: pgvector/pgvector:pg16
+#     container_name: nest-postgres
+#     restart: always
+#     ports:
+#       - "5432:5432"
+#     environment:
+#       POSTGRES_USER: chatbot
+#       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chatbot_password666}
+#       POSTGRES_DB: app_db
+#     volumes:
+#       - postgres_data:/var/lib/postgresql/data
+#     healthcheck:
+#       test: ["CMD-SHELL", "pg_isready -U chatbot -d app_db"]
+#       interval: 5s
+#       timeout: 3s
+#       retries: 10
+
+#   redis:
+#     image: redis:7-alpine
+#     container_name: chatbot-redis
+#     restart: unless-stopped
+#     ports:
+#       - "6666:6379"
+#     volumes:
+#       - redis_data:/data
+#     command: redis-server --appendonly yes
+#     healthcheck:
+#       test: ["CMD", "redis-cli", "ping"]
+#       interval: 5s
+#       timeout: 3s
+#       retries: 10
+
+#   migrate:
+#     build:
+#       context: .
+#       target: migrate
+#     container_name: chatbot-migrate
+#     restart: "no"
+#     env_file: .env
+#     environment:
+#       DATABASE_URL: postgresql://chatbot:${POSTGRES_PASSWORD:-chatbot_password666}@postgres:5432/app_db?schema=public
+#     depends_on:
+#       postgres:
+#         condition: service_healthy
+
+#   app:
+#     build:
+#       context: .
+#       target: runner
+#     container_name: chatbot-app
+#     restart: unless-stopped
+#     ports:
+#       - "${APP_PORT:-8080}:8080"
+#     env_file: .env
+#     environment:
+#       NODE_ENV: production
+#       DATABASE_URL: postgresql://chatbot:${POSTGRES_PASSWORD:-chatbot_password666}@postgres:5432/app_db?schema=public
+#       REDIS_HOST: redis
+#       REDIS_PORT: "6379"
+#     volumes:
+#       - uploads_data:/app/uploads
+#     depends_on:
+#       postgres:
+#         condition: service_healthy
+#       redis:
+#         condition: service_healthy
+#       migrate:
+#         condition: service_completed_successfully
+#     healthcheck:
+#       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+#       interval: 15s
+#       timeout: 5s
+#       retries: 5
+#       start_period: 30s
+
+# volumes:
+#   postgres_data:
+#   redis_data:
+#   uploads_data:

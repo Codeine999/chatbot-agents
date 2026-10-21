@@ -58,9 +58,9 @@ async function bootstrap() {
         'http://localhost:5173',
         'https://chatbot-dashboard-r6ac.vercel.app',
         'https://chatbot-dashboard-eta-nine.vercel.app',
-
-        
-        'http://localhost:8080'
+        'https://chatbot-dashboard-vby1.vercel.app',
+        'http://localhost:3000',
+        'https://chatbot-dashboard-vby1-git-main-codeines-projects-0adf5d1d.vercel.app',
       ];
 
       const isVercelPreview =

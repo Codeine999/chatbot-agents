@@ -25,6 +25,7 @@ import { AdminAiSettingController } from './ai-setting/admin-ai-setting.controll
 import { AdminAiSettingService } from './ai-setting/admin-ai-setting.service';
 import { StorageModule } from '../../infra/storage/storage.module';
 import { AdminProductModule } from './product/admin-product.module';
+import { AdminUserViewModule } from './userview/admin-userview.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AdminProductModule } from './product/admin-product.module';
     RichMenuModule,
     StorageModule,
     AdminProductModule,
+    AdminUserViewModule,
   ],
   controllers: [
     AdminController,

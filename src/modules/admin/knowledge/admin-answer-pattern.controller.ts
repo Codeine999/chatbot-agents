@@ -13,6 +13,7 @@ import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
 import { AdminKnowledgePatternService } from './admin-knowledge-pattern.service';
 import {
   AdminAnswerPatternIdParamDto,
+  CreateAdminAnswerPatternBulkDto,
   CreateAdminAnswerPatternDto,
   UpdateAdminAnswerPatternDto,
 } from './dto/admin-answer-pattern.dto';
@@ -46,6 +47,16 @@ export class AdminKnowledgePatternController {
     @Body() body: CreateAdminAnswerPatternDto,
   ) {
     return this.knowledgePatternService.create(body, request.admin?.id);
+  }
+
+  /** Dev seeding: a JSON array of create bodies, reported item by item. */
+  @AdminGuard('dev')
+  @Post('bulk')
+  createMany(
+    @Req() request: AdminRequest,
+    @Body() body: CreateAdminAnswerPatternBulkDto,
+  ) {
+    return this.knowledgePatternService.createMany(body, request.admin?.id);
   }
 
   @AdminGuard('dev', 'owner')

@@ -239,6 +239,15 @@ Admin ส่งข้อความด้วย clientRequestId → durable PUS
 
 Notification read state กับ conversation unread/history เป็นคนละข้อมูล อย่าถือว่า mark notification read คือ delivery accepted หรือ customer read receipt
 
+### 7.1 Admin customer-view preview (2026-10-21)
+
+`/api/admin/userview` ให้แอดมินทดสอบแชทในมุมลูกค้าโดยไม่ผ่าน LINE: `POST sessions` → `POST sessions/:sessionId/messages` (`{ clientRequestId, text, postbackData? }`) → `GET`/`DELETE sessions/:sessionId`. แต่ละ turn เรียก `ChatbotService.handleTextMessage` ตัวเดียวกับ LINE และ **ตัดเครดิตจริงจาก company wallet บน scope `*`** เหมือน LINE traffic; ไม่มี webhook, queue, LineDelivery หรือ LineChatHistory
+
+- ลูกค้าจำลองคือ `preview:{adminId}:{sessionId}` (Redis session/context แยกจากลูกค้าจริง, TTL 30 นาที) ไม่ส่ง `conversationId`/`lineMemberId` ดังนั้น usage row ไม่ผูก conversation
+- `requestAdmin` ไม่เจอ LineMember จึงไม่เปลี่ยน status และไม่แจ้งเตือนแอดมิน; Product RAG ที่ต้องมี conversation จริงถูก skip และตกไป knowledge path แทน
+- `preview: true` ทำให้ ChatbotService ปฏิเสธ registration (ไม่สร้าง member จริง)
+- `clientRequestId` replay คำตอบเดิม 10 นาที และเป็นส่วนของ `turnId` ที่ billing ใช้กันตัดซ้ำ; ส่งซ้อนใน session เดียวได้ 409; ต้องมี `AdminMember.aiEnabled`
+
 ## 8. หลักฐานและ source
 
 [System E2E](mvp-system-e2e-results-2026-09-07.md): 42/42, PostgreSQL/Redis/BullMQ/Mongo จริง แต่ provider/LINE fixtures ไม่มี live message; unit98/98, audit16/16, build/typecheck ผ่าน ไม่ได้ kill/restart worker จริงเพื่อพิสูจน์ทุก crash window

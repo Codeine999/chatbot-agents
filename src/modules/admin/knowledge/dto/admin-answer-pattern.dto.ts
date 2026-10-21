@@ -32,6 +32,13 @@ export class CreateAdminAnswerPatternDto extends createZodDto(
   createAnswerPatternSchema,
 ) {}
 
+/** Every item is embedded one by one, so the batch stays small. */
+export const MAX_BULK_ANSWER_PATTERNS = 100;
+
+export class CreateAdminAnswerPatternBulkDto extends createZodDto(
+  z.array(createAnswerPatternSchema).min(1).max(MAX_BULK_ANSWER_PATTERNS),
+) {}
+
 const updateAnswerPatternSchema = z
   .object({
     ...answerPatternFields,
