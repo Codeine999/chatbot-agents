@@ -278,3 +278,7 @@ prices are preserved by default seeding.
 When moving from a different embedding model, reindex both answer-pattern and
 micro-knowledge vectors before serving retrieval with the new model. Equal
 vector dimensions do not make embeddings from different models compatible.
+
+อัปเดต 19 ตุลาคม 2026: `RuleIntentService` ตรวจข้อความเกริ่นสอบถามที่ยังไม่มีหัวข้อด้วย `DETECT_GREET` หลังตัด whitespace เช่น “ขอสอบถามหน่อยครับ” เป็น `GREET` confidence `0.95` รองรับคำทักทายล้วน เช่น “สวัสดี” และ “สวัสดีครับ” ด้วย Router ส่งต่อ `GENERAL_QUESTION` เพื่อเรียก `answerGeneral` ก่อน registration gate โดยไม่ค้น retrieval และไม่ล้าง registration session; ข้อความมีหัวข้อ เช่น “สอบถามห้องว่าง” ไม่เข้า rule นี้
+
+อัปเดต 19 ตุลาคม 2026 (analytics/billing audit): `GET /api/admin/analytics/*` รับ `interval=hour|day|week|month|year`; `week` ตัดเป็นสัปดาห์เริ่มวันจันทร์ตามเวลา Asia/Bangkok (label = วันจันทร์ `YYYY-MM-DD`) ค่าเริ่มต้นคือ 12 สัปดาห์ล่าสุด การสลับโมเดลผ่าน `AiProviderSettingsService.update` (USER/ADMIN) ถูกปฏิเสธด้วย 400 ถ้าโมเดลไม่มี `AiModelPricing` ที่ active และคิดเงินได้ เพราะ billing ปฏิเสธโมเดลที่ไม่มีราคาอยู่แล้ว ธุรกรรม SERIALIZABLE ของ wallet (`CreditService.runSerializable`) retry ได้ 10 ครั้งพร้อม jittered backoff เพื่อรองรับ `LINE_EVENTS_CONCURRENCY` เทิร์นที่จอง/settle บน wallet เดียวพร้อมกัน
