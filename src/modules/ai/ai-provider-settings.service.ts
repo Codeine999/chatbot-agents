@@ -1,8 +1,15 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../infra/redis/redis.module';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AI_PROVIDER_SETTING_CACHE_PREFIX } from '../../ai-provider/utils/ai-provider.constants';
+import { AiPricingService } from '../usage/billing/ai-pricing.service';
 import { AiModelCatalogService } from './ai-setting/ai-model-catalog.service';
 import {
   AiProviderName,
@@ -20,6 +27,7 @@ export class AiProviderSettingsService {
     private readonly prisma: PrismaService,
     private readonly catalogService: AiModelCatalogService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly pricingService: AiPricingService,
   ) {}
 
   // Get Ai modal details from redis reuse
@@ -43,6 +51,15 @@ export class AiProviderSettingsService {
   ): Promise<AiProviderRuntimeSetting> {
     const normalizedModel = model.trim();
     this.catalogService.assertSelectable(provider, normalizedModel);
+    // Billing refuses an unpriced model, so selecting one would stop every reply.
+    try {
+      await this.pricingService.assertBillable(provider, normalizedModel);
+    } catch (error) {
+      if (!(error instanceof ServiceUnavailableException)) throw error;
+      throw new BadRequestException(
+        `Model ${normalizedModel} has no active billable pricing for provider ${provider}`,
+      );
+    }
 
     const setting = await this.prisma.aiProviderSetting.upsert({
       where: { scope },

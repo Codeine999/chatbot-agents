@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { IntentResult } from '../shared/types/chat.types';
+import { DETECT_GREET } from './utils/detect-greet';
+import { isCancelKeyword } from './utils/cancel-keyword';
 
 @Injectable()
 export class RuleIntentService {
@@ -15,7 +17,16 @@ export class RuleIntentService {
       };
     }
 
-    if (['ยกเลิก', 'cancel', 'ออก'].includes(input)) {
+    if (DETECT_GREET.test(input.replace(/\s+/gu, ''))) {
+      return {
+        intent: 'GREET',
+        confidence: 0.95,
+        source: 'RULE',
+        reason: 'just GREET',
+      };
+    }
+
+    if (isCancelKeyword(input)) {
       return {
         intent: 'CANCEL',
         confidence: 1,

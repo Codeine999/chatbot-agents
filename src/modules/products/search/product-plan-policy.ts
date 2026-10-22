@@ -26,7 +26,10 @@ export function groundStockFilter(
     );
   return {
     ...plan,
-    inStockOnly: plan.inStockOnly && explicit && !declined,
+    // "สีดำ L มีของไหม" asks for one variant's stock: report it, never filter
+    // it away and turn "out of stock" into "which product?".
+    inStockOnly:
+      plan.inStockOnly && explicit && !declined && plan.operation !== 'DETAIL',
     stockQuantitySource:
       /(?:ในคลัง|ในโกดัง|on\s*hand|onhand|physical stock)/iu.test(message)
         ? 'ON_HAND'

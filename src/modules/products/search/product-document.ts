@@ -1,14 +1,13 @@
 import { variantAttributes } from '../variant-business';
 import { createHash } from 'node:crypto';
 import { redactPii } from '../../../utils/text.utils';
-import {
-  formatAttributeValue,
-  type AttributeDefinition,
-  type AttributeScope,
-} from '../attributes/attribute-definition';
+import { formatAttributeValue } from '../attributes/utils/attribute-value.util';
+import type {
+  AttributeDefinition,
+  AttributeScope,
+} from '../attributes/types/attribute-definition.types';
 
 export type ProductDocumentSource = {
-  company?: { productBusinessType: string | null };
   name: string;
   aliases: string[];
   description: string;
@@ -71,10 +70,7 @@ export function buildProductDocument(
         .sort((a, b) => a.sku.localeCompare(b.sku))
         .map((v) => ({
           sku: v.sku,
-          options: pairs(
-            'VARIANT',
-            variantAttributes(v, source.company?.productBusinessType),
-          ),
+          options: pairs('VARIANT', variantAttributes(v)),
         })),
     }),
   );

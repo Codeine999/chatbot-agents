@@ -1,17 +1,14 @@
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { CommerceScope } from '../../commerce/types/commerce-scope';
 import { CreateProductDto } from '../dto/product.dto';
-import {
-  BUSINESS_PRESETS,
-  attributeDefinitionSchema,
-  type AttributeDefinition,
-} from '../attributes/attribute-definition';
+import type { AttributeDefinition } from '../attributes/types/attribute-definition.types';
+import { catalogFields } from '../search/catalog-fields';
 
 /** Seeds a business preset's fields for a test store, as an admin applying it would. */
 export async function seedPresetFields(
   db: PrismaService,
   scope: CommerceScope,
-  type: keyof typeof BUSINESS_PRESETS = 'FASHION',
+  type: string = 'ECOMMERCE',
   categories: string[] = [],
 ) {
   await db.company.update({
@@ -21,13 +18,8 @@ export async function seedPresetFields(
 }
 
 /** In-memory definitions for pure unit tests (no DB). */
-export function presetDefinitions(
-  type: keyof typeof BUSINESS_PRESETS = 'FASHION',
-): AttributeDefinition[] {
-  return BUSINESS_PRESETS[type].fields.map((field) => {
-    const parsed = attributeDefinitionSchema.parse(field);
-    return { ...parsed, scope: 'VARIANT' as const, status: 'ACTIVE' as const };
-  });
+export function presetDefinitions(type = 'ECOMMERCE'): AttributeDefinition[] {
+  return catalogFields(type);
 }
 
 /** Expand shared fixture defaults into explicit per-variant payloads. */

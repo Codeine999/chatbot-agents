@@ -1,11 +1,9 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
-import { attributeValuesSchema } from '../attributes/attribute-definition';
 import {
-  fashionFields,
-  restaurantFields,
-  hotelFields,
-} from '../variant-business';
+  attributePatchValuesSchema,
+  attributeValuesSchema,
+} from '../attributes/dto/attribute-definition.dto';
 
 // Decimal strings only: no coercion from JS floating point, rounding, or exponent notation.
 export const productMoneySchema = z
@@ -19,16 +17,13 @@ const sku = z
   .regex(/^[\p{L}\p{N}._-]+$/u);
 const text = (max: number) => z.string().trim().min(1).max(max);
 const version = z.number().int().min(1).max(2147483646);
-// Field values are checked against the store's definitions in ProductService;
-// the edge only bounds their shape and rejects unknown key formats.
+// Every business's field values go in `meta`, checked against the store's
+// preset in ProductService; the edge only bounds their shape and key format.
 const variantAttributesSchema = attributeValuesSchema;
 const variantFields = z
   .object({
     sku,
     price: productMoneySchema.nullable().default(null),
-    fashion: fashionFields.optional(),
-    restaurant: restaurantFields.optional(),
-    hotel: hotelFields.optional(),
     meta: variantAttributesSchema.default({}),
     trackStock: z.boolean().default(true),
     currency: z.literal('THB').default('THB'),
@@ -62,10 +57,8 @@ const variantPatchFields = z
   .object({
     sku,
     price: productMoneySchema.nullable(),
-    fashion: fashionFields,
-    restaurant: restaurantFields,
-    hotel: hotelFields,
-    meta: variantAttributesSchema,
+    // Merged into the stored values; null clears a field.
+    meta: attributePatchValuesSchema,
     trackStock: z.boolean(),
     currency: z.literal('THB'),
     compareAtPrice: productMoneySchema.nullable(),
@@ -103,6 +96,11 @@ export const createProductSchema = productFields
     }
   });
 export class CreateProductDto extends createZodDto(createProductSchema) {}
+/** Dev-only bulk create; each item still runs as its own catalog command. */
+export const MAX_BULK_PRODUCTS = 50;
+export class BulkCreateProductDto extends createZodDto(
+  z.array(createProductSchema).min(1).max(MAX_BULK_PRODUCTS),
+) {}
 export class DeleteProductDto extends createZodDto(
   z
     .object({

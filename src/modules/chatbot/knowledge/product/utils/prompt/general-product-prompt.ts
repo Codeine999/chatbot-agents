@@ -1,2 +1,5 @@
-export const GENERAL_PRODUCT_PLANNER_RULES = `business=GENERAL: ใช้เฉพาะตัวเลือกและ field ที่ประกาศใน storeOptions/storeFields ของร้าน ห้ามสมมติ field ของธุรกิจอื่น`;
-export const GENERAL_PRODUCT_ANSWER_RULES = `business=GENERAL: ตอบจาก field ของสินค้าที่มีในหลักฐานเท่านั้น ห้ามเติมคุณสมบัติของธุรกิจอื่น`;
+import { GENERAL_PROMPT } from '../../../../../products/attributes/prompts/general.prompt';
+
+/** Rules for a store without a known business; the GENERAL preset uses the same wording. */
+export const GENERAL_PRODUCT_PLANNER_RULES = GENERAL_PROMPT.planner;
+export const GENERAL_PRODUCT_ANSWER_RULES = GENERAL_PROMPT.answer;

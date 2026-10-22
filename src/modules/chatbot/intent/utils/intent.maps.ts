@@ -7,6 +7,10 @@ export type IntentRouteMapping = {
 
 /** Rule-path intent -> action mapping (rule confidence already >= 0.9 here). */
 export const RULE_MAP: Record<ChatIntent, IntentRouteMapping> = {
+  GREET: {
+    action: 'GENERAL_QUESTION',
+    reason: 'rule matched greeting or inquiry opener without a topic',
+  },
   REGISTER: {
     action: 'START_REGISTER',
     reason: 'rule matched register keyword/menu',

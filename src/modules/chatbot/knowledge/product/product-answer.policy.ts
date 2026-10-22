@@ -632,8 +632,22 @@ export function safeProductAnswer(
             ].join(' · '),
           )
           .join('\n');
+  // "มีสีอะไรบ้าง" asks for every value of an option, so list them per product.
+  const productIds = [...new Set(shown.map((e) => e.productId))];
+  const listed = productIds.flatMap((productId) => {
+    const first = shown.find((e) => e.productId === productId)!;
+    return workflow.plan.listOptions.flatMap((key) => {
+      const values = optionValues(workflow, productId, key);
+      const label = first.options.find((o) => o.key === key)?.label ?? key;
+      const owner = productIds.length > 1 ? ` (${first.name})` : '';
+      return values.length
+        ? [`${label}ที่มี${owner}: ${values.join(', ')}`]
+        : [];
+    });
+  });
   return (
     text +
+    (listed.length ? `\n${listed.join('\n')}` : '') +
     (result.truncated || result.evidence.length > 5
       ? '\nแสดงเพียงบางรายการ กรุณาระบุรุ่นหรือเงื่อนไขเพิ่มเติมค่ะ'
       : '') +

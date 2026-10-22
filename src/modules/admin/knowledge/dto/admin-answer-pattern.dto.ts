@@ -16,14 +16,16 @@ const answerPatternFields = {
   questionExamples: z.array(z.string().trim().min(1).max(2_000)).max(100),
   answer: z.string().trim().min(1).max(50_000),
   language: languageSchema,
+  renderMode: z.enum(['DIRECT', 'REWRITE']),
   priority: z.number().int().min(0).max(100),
   active: z.boolean(),
 } as const;
 
-const createAnswerPatternSchema = z.object({
+export const createAnswerPatternSchema = z.object({
   ...answerPatternFields,
   keywords: answerPatternFields.keywords.default([]),
   questionExamples: answerPatternFields.questionExamples.default([]),
+  renderMode: answerPatternFields.renderMode.default('DIRECT'),
   priority: answerPatternFields.priority.default(0),
   active: answerPatternFields.active.default(true),
 });

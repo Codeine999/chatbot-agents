@@ -1,7 +1,13 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-export const ANALYTICS_INTERVALS = ['hour', 'day', 'month', 'year'] as const;
+export const ANALYTICS_INTERVALS = [
+  'hour',
+  'day',
+  'week',
+  'month',
+  'year',
+] as const;
 
 export type AnalyticsInterval = (typeof ANALYTICS_INTERVALS)[number];
 
@@ -14,6 +20,9 @@ export const MAX_ANALYTICS_BUCKETS = 1000;
 
 /** Number of calendar years shown by the default yearly chart. */
 export const DEFAULT_ANALYTICS_YEAR_SPAN = 5;
+
+/** Number of weeks (Monday-based, as Postgres `date_trunc`) in the default weekly chart. */
+export const DEFAULT_ANALYTICS_WEEK_SPAN = 12;
 
 /**
  * Timezone every bucket is cut in. The business and the dashboard both run on
@@ -35,6 +44,7 @@ export type AnalyticsRange = {
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * DAY_MS;
 
 function formatUtcDay(date: Date): string {
   return [
@@ -80,6 +90,15 @@ export function resolveAnalyticsQueryDefaults(
     case 'day':
       defaultFrom = `${today.slice(0, 7)}-01`;
       break;
+    case 'week':
+      // Starts on a Monday so the first bucket is a whole week.
+      defaultFrom = formatUtcDay(
+        new Date(
+          startOfWeek(parseUtcDay(today)).getTime() -
+            (DEFAULT_ANALYTICS_WEEK_SPAN - 1) * WEEK_MS,
+        ),
+      );
+      break;
     case 'month':
       defaultFrom = `${year}-01-01`;
       break;
@@ -101,6 +120,11 @@ function parseUtcDay(day: string): Date {
   return new Date(Date.UTC(year, month - 1, date));
 }
 
+/** Monday of the calendar week holding `day`, matching `date_trunc('week')`. */
+function startOfWeek(day: Date): Date {
+  return new Date(day.getTime() - ((day.getUTCDay() + 6) % 7) * DAY_MS);
+}
+
 export function countAnalyticsBuckets(
   interval: AnalyticsInterval,
   from: string,
@@ -114,6 +138,11 @@ export function countAnalyticsBuckets(
       return ((end.getTime() - start.getTime()) / DAY_MS) * 24 + 24;
     case 'day':
       return (end.getTime() - start.getTime()) / DAY_MS + 1;
+    case 'week':
+      return (
+        (startOfWeek(end).getTime() - startOfWeek(start).getTime()) / WEEK_MS +
+        1
+      );
     case 'month':
       return (
         (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
@@ -147,7 +176,7 @@ export function toAnalyticsRange(query: {
  * DTO cannot be represented in the OpenAPI document this app publishes at boot.
  * Both are calendar days in `ANALYTICS_TIMEZONE`. When absent, their defaults
  * depend on the requested chart granularity: hour=today, day=this month,
- * month=this year, year=the last five years.
+ * week=the last twelve weeks, month=this year, year=the last five years.
  */
 export const getAdminAnalyticsQuerySchema = z
   .object({

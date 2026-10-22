@@ -1,4 +1,3 @@
-import { businessInclude } from '../variant-business';
 import {
   Injectable,
   Logger,
@@ -241,7 +240,7 @@ export class ProductIndexService implements OnModuleInit, OnModuleDestroy {
         where: { id: job.productId, companyId: job.companyId },
         include: {
           company: { select: { productBusinessType: true } },
-          variants: { include: businessInclude },
+          variants: true,
         },
       });
       if (
@@ -266,7 +265,7 @@ export class ProductIndexService implements OnModuleInit, OnModuleDestroy {
           where: { id: job.productId, companyId: job.companyId },
           include: {
             company: { select: { productBusinessType: true } },
-            variants: { include: businessInclude },
+            variants: true,
           },
         });
         // Field definitions are part of the document (labels, searchable flags).

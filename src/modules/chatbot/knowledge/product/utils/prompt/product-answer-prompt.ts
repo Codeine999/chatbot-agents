@@ -10,7 +10,8 @@ export function buildProductAnswerPrompt(
 ตอบเฉพาะประเด็นที่ลูกค้าถาม (question.asks/operation) ไม่ต้องเล่ารายละเอียดสินค้าส่วนอื่นที่ไม่ได้ถาม
 คืน JSON decision=ANSWER/INSUFFICIENT_CONTEXT, directlyAnswered, answerTemplate, evidenceIds
 แต่ละ variant ใน productEvidence มี key (e1, e2, ...) ใช้ token {{<key>.<field>}} โดย field ต้องอยู่ใน productEvidence.variantTokenFields เท่านั้น เช่น {{e1.name}} และต้องใส่ ref ของ variant นั้นใน evidenceIds
-ตัวเลือกของ variant (สี ไซส์ ความจุ รสชาติ ฯลฯ) ใช้ opt.<key> ถ้าลูกค้าถามว่ามีตัวเลือกอะไรบ้าง (question.listOptions) ใช้ opts.<key> ของสินค้านั้น ไม่แสดงเพียง variant เดียว รายละเอียดสินค้าใช้ attr.<key> หรือ attributes
+คำตอบเรื่องสินค้าทุกครั้ง (ยกเว้น operation=COUNT) ต้องมี {{<key>.name}} ของสินค้าที่ตอบอย่างน้อยหนึ่งครั้ง เช่น "{{e1.name}} มีสี{{e1.opts.color}}ค่ะ" คำตอบที่ไม่มีชื่อสินค้าจะไม่ถูกส่งให้ลูกค้า
+ตัวเลือกของ variant (สี ไซส์ ความจุ รสชาติ ฯลฯ) ใช้ opt.<key> ถ้าลูกค้าถามว่ามีตัวเลือกอะไรบ้าง (question.listOptions) ใช้ opts.<key> ของสินค้านั้นครั้งเดียว (รวมค่าของทุก variant ของสินค้านั้นแล้ว ห้ามใช้ opts ซ้ำจาก variant อื่นของสินค้าเดียวกัน) ไม่แสดงเพียง variant เดียว รายละเอียดสินค้าใช้ attr.<key> หรือ attributes
 นโยบายใช้ {{p1.answer}} ตาม key ใน policyEvidence และ cite ref ของมัน จำนวนรายการใช้ {{catalog.count}} และ cite CATALOG:COUNT
 ห้ามพิมพ์ตัวเลข ราคา ยอด จำนวน claim stock หรือเงื่อนไขส่งฟรีเองนอก token อธิบายเหตุผลเลือก/เปรียบเทียบได้เฉพาะคุณสมบัติที่ evidence มี
 ข้อความนอก token ใช้เป็นคำเชื่อม คำสุภาพ หรือทวนคำถามเท่านั้น ค่าตัวเลือกของ variant ต้องมาจาก opt/opts token (ยกเว้นค่าที่ลูกค้าเลือกใน question.options) ห้ามเติมคุณสมบัติ วัสดุ ส่วนประกอบ หรือคำบรรยายสินค้าที่ไม่มีใน evidence

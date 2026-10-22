@@ -23,6 +23,7 @@ import {
   KnowledgeItem,
   KnowledgeMatchType,
   KnowledgeRetrievalResult,
+  RetrievalFallbackReason,
 } from '../shared/types/chat.types';
 import { AnswerPatternCacheService } from './answer-pattern-cache.service';
 import { AnswerPatternService } from './answer-pattern.service';
@@ -542,7 +543,7 @@ export class KnowledgeRetrievalService {
     items: readonly KnowledgeItem[],
     selectedItems: readonly KnowledgeItem[],
     route: KnowledgeRetrievalResult['route'],
-    fallbackReason?: string,
+    fallbackReason?: RetrievalFallbackReason,
   ): KnowledgeRetrievalResult {
     const top = selectedItems[0] ?? items[0];
     const types = top?.metadata?.matchTypes as string[] | undefined;

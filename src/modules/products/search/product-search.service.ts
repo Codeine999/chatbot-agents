@@ -1,8 +1,4 @@
-import {
-  businessInclude,
-  variantAttributes,
-  variantAttributesSql,
-} from '../variant-business';
+import { variantAttributes } from '../variant-business';
 import { Injectable, Optional, ConflictException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
@@ -18,7 +14,6 @@ import {
 import type { EmbeddingResult } from '../../../infra/embedding/embedding-adapter.interface';
 import { ProductVectorRepository } from './product-vector.repository';
 import { loadCatalogFields, loadCatalogContext } from './catalog-fields';
-import { businessIncludeFor } from '../business/business-registry';
 import {
   fieldOperators,
   matchesBusinessFields,
@@ -27,8 +22,8 @@ import {
 import {
   formatAttributeValue,
   appliesToCategory,
-  type AttributeDefinition,
-} from '../attributes/attribute-definition';
+} from '../attributes/utils/attribute-value.util';
+import type { AttributeDefinition } from '../attributes/types/attribute-definition.types';
 import type {
   ProductPlan,
   ProductSearchResult,
@@ -46,7 +41,7 @@ const include = {
   company: { select: { productBusinessType: true } },
   variants: {
     where: { active: true },
-    include: { inventory: true, ...businessInclude },
+    include: { inventory: true },
     orderBy: { sku: 'asc' as const },
   },
 };
@@ -54,7 +49,7 @@ type ProductRecord = Prisma.ProductGetPayload<{ include: typeof include }>;
 
 /** Values of the store's searchable product-level fields (e.g. brand), as text. */
 function searchableValues(keys: readonly string[]): Prisma.Sql {
-  return Prisma.sql`COALESCE((SELECT string_agg(e.value, ' ') FROM "productVariants" v CROSS JOIN LATERAL jsonb_each_text(${variantAttributesSql(true)}) e WHERE v."productId"=p.id AND v."companyId"=p."companyId" AND v.active AND e.key = ANY(${[...keys]}::text[])), '')`;
+  return Prisma.sql`COALESCE((SELECT string_agg(e.value, ' ') FROM "productVariants" v CROSS JOIN LATERAL jsonb_each_text(v.meta) e WHERE v."productId"=p.id AND v."companyId"=p."companyId" AND v.active AND e.key = ANY(${[...keys]}::text[])), '')`;
 }
 
 /**
@@ -193,7 +188,7 @@ export class ProductSearchService {
           SELECT e.key, (array_agg(DISTINCT e.value ORDER BY e.value))[1:30] AS values
           FROM products p
           JOIN "productVariants" v ON v."productId"=p.id AND v."companyId"=p."companyId" AND v.active
-          CROSS JOIN LATERAL jsonb_each_text(${variantAttributesSql(true)}) e
+          CROSS JOIN LATERAL jsonb_each_text(v.meta) e
           WHERE p."companyId"=${scope.companyId}::uuid AND p.status='ACTIVE' AND p.language=${language}
             AND e.key = ANY(${definitions.map((d) => d.key)}::text[])
           GROUP BY e.key`
@@ -381,16 +376,7 @@ export class ProductSearchService {
         },
         take: allCatalogOperation ? 100 : 80,
         orderBy: { id: 'asc' },
-        include: {
-          ...include,
-          variants: {
-            ...include.variants,
-            include: {
-              inventory: true,
-              ...businessIncludeFor(catalog.businessType),
-            },
-          },
-        },
+        include,
       });
       if (!page.length) break;
       if (!allCatalogOperation) {
@@ -435,12 +421,7 @@ export class ProductSearchService {
         answer: labelledAttributes(
           definitions,
           'VARIANT',
-          Object.assign(
-            {},
-            ...p.variants.map((v) =>
-              variantAttributes(v, p.company.productBusinessType),
-            ),
-          ),
+          Object.assign({}, ...p.variants.map((v) => variantAttributes(v))),
           'searchable',
         )
           .map((a) => a.value)
@@ -548,9 +529,7 @@ export class ProductSearchService {
                   product.variants.flatMap((v) => {
                     const value = formatAttributeValue(
                       d,
-                      variantAttributes(v, product.company.productBusinessType)[
-                        d.key
-                      ],
+                      variantAttributes(v)[d.key],
                     );
                     return value ? [value] : [];
                   }),
@@ -615,10 +594,7 @@ export class ProductSearchService {
       .filter((variant) => {
         if (plan.variantIds.length && !plan.variantIds.includes(variant.id))
           return false;
-        const values = variantAttributes(
-          variant,
-          product.company.productBusinessType,
-        );
+        const values = variantAttributes(variant);
         return matchesBusinessFields(
           values,
           product.category,
@@ -669,13 +645,13 @@ export class ProductSearchService {
             details: labelledAttributes(
               visibleDefinitions.filter((d) => !d.variantOption),
               'VARIANT',
-              variantAttributes(variant, product.company.productBusinessType),
+              variantAttributes(variant),
               'aiVisible',
             ),
             options: labelledAttributes(
               visibleDefinitions.filter((d) => d.variantOption),
               'VARIANT',
-              variantAttributes(variant, product.company.productBusinessType),
+              variantAttributes(variant),
               'aiVisible',
             ),
             price: price?.toFixed(2) ?? null,

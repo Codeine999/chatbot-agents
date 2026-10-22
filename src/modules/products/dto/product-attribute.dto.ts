@@ -1,9 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
-import {
-  ATTRIBUTE_SCOPES,
-  BUSINESS_TYPES,
-} from '../attributes/attribute-definition';
+import { ATTRIBUTE_SCOPES } from '../attributes/types/attribute-definition.types';
+import { BUSINESS_TYPES } from '../search/catalog-fields';
 
 export class ListProductAttributesQueryDto extends createZodDto(
   z

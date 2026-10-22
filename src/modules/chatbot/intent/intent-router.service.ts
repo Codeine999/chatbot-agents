@@ -8,14 +8,14 @@ import { RichMenuReplyCacheService } from '../menu/rich-menu-reply-cache.service
 import { parseMenuPostback } from '../../../shared/richMenu/menu-postback';
 import {
   ChatContextMessage,
-  IntentSource,
   KnowledgeRetrievalResult,
+  RetrievalFallbackReason,
   RouteDecision,
 } from '../shared/types/chat.types';
 import { fromRule } from './utils/intent.utils';
 import { logBlock, logSafeText } from '../../../utils/text.utils';
 import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
-import { DETECT_GREET } from './utils/detect-greet';
+import { decideFromRetrieval, gateBeforeSearch } from './utils/route-stages';
 
 /** Enough of the ranking curve to see a tie; [Retrieval] holds the full list. */
 const MAX_LOGGED_SCORES = 5;
@@ -58,10 +58,11 @@ export class IntentRouterService {
       ]),
     );
 
+    // 1. Menu taps are tenant-configured and outrank text rules.
     const menuDecision = this.resolveRichMenu(postbackData, input);
     if (menuDecision) return this.logDecision(input, menuDecision);
 
-    // detect from rule base first
+    // 2. Deterministic gates: decide now, or search (maybe with a rule label).
     const rule = this.ruleIntentService.detect(input);
     this.logger.debug(
       logBlock('Rule', [
@@ -72,166 +73,25 @@ export class IntentRouterService {
       ]),
     );
 
-    if (DETECT_GREET.test(input.replace(/\s+/gu, ''))) {
-      return this.logDecision(input, {
-        action: 'CONTINUE_AI_CHAT',
-        intent: 'GENERAL_QUESTION',
-        confidence: 1,
-        source: 'RULE',
-        reason: 'just greeting :)',
-      });
-    }
+    const inRegister =
+      session?.status === 'ACTIVE' && session.flow === 'REGISTER';
+    const gate = gateBeforeSearch({ input, rule, inRegister });
+    if (gate.kind === 'DECIDE') return this.logDecision(input, gate.decision);
 
-    if (rule.intent === 'CANCEL') {
-      return this.logDecision(input, {
-        action: 'CANCEL_SESSION',
-        intent: 'CANCEL',
-        confidence: 1,
-        source: 'RULE',
-        reason: 'cancel keyword exits',
-      });
-    }
-
-    let ruleKnowledgeDecision: RouteDecision | undefined;
-
-    // if current on session register active
-    if (session?.status === 'ACTIVE' && session.flow === 'REGISTER') {
-      if (
-        rule.confidence >= 0.9 &&
-        rule.intent !== 'UNKNOWN' &&
-        rule.intent !== 'REGISTER'
-      ) {
-        const interruption: RouteDecision = {
-          ...fromRule(rule),
-          source: 'SESSION',
-          reason: `active REGISTER session interrupted by ${rule.intent}`,
-        };
-
-        // if need ANSWER_KNOWLEDGE it will throw out this function
-        if (interruption.action !== 'ANSWER_KNOWLEDGE')
-          return this.logDecision(input, interruption);
-
-        ruleKnowledgeDecision = interruption;
-      }
-
-      if (!ruleKnowledgeDecision)
-        return this.logDecision(input, {
-          action: 'CONTINUE_REGISTER',
-          intent: 'REGISTER',
-          confidence: 1,
-          source: 'SESSION',
-          reason: 'active REGISTER session continues current flow',
-        });
-    }
-
-    if (!ruleKnowledgeDecision && rule.confidence >= 0.9) {
-      const decision = fromRule(rule);
-
-      if (decision.action !== 'ANSWER_KNOWLEDGE') {
-        return this.logDecision(input, decision);
-      }
-
-      ruleKnowledgeDecision = decision;
-    }
-
-    // Rule/session routing ends here; retrieval owns cache -> DB -> embedding.
+    // 3. Retrieval owns cache -> DB -> embedding.
     const retrieval = await this.knowledgeRetrievalService.retrieve(input, {
       userId,
       lineMemberId,
       conversationId,
       turnId,
       recentMessages,
-      disableProduct:
-        session?.status === 'ACTIVE' && session.flow === 'REGISTER',
+      disableProduct: inRegister,
     });
 
-    if (retrieval.product)
-      return this.logDecision(
-        input,
-        {
-          action: 'ANSWER_KNOWLEDGE',
-          intent: 'ANSWER_KNOWLEDGE',
-          confidence: 0,
-          source: 'DATABASE',
-          retrieval,
-          resolvedQuery: input,
-          reason: `product plan ${retrieval.product.plan.mode}`,
-        },
-        retrieval,
-      );
+    const decision = decideFromRetrieval(retrieval, input, gate.label);
+    if (decision) return this.logDecision(input, decision, retrieval);
 
-    if (retrieval.fallbackReason === 'MISSING_USER_INFORMATION') {
-      return this.logDecision(
-        input,
-        {
-          action: 'CLARIFY',
-          intent: 'ANSWER_KNOWLEDGE',
-          confidence: 0,
-          source: 'DATABASE',
-          fallbackReason: retrieval.fallbackReason,
-        },
-        retrieval,
-      );
-    }
-
-    if (
-      retrieval.fallbackReason === 'CONFLICTING_CANDIDATES' ||
-      retrieval.fallbackReason === 'RETRIEVAL_ERROR'
-    ) {
-      return this.logDecision(
-        input,
-        {
-          action: 'CONTACT_ADMIN',
-          intent: 'CONTACT_ADMIN',
-          confidence: 1,
-          source: 'DATABASE',
-          businessFallback: true,
-          fallbackReason: retrieval.fallbackReason,
-        },
-        retrieval,
-      );
-    }
-
-    if (retrieval.route !== 'LOW_CONFIDENCE') {
-      const decision: RouteDecision = {
-        action: 'ANSWER_KNOWLEDGE',
-        intent: ruleKnowledgeDecision?.intent ?? 'ANSWER_KNOWLEDGE',
-        confidence: ruleKnowledgeDecision?.confidence ?? 0,
-        source:
-          ruleKnowledgeDecision?.source ?? this.retrievalSource(retrieval),
-        reason: `knowledge retrieval selected ${retrieval.route}`,
-        resolvedQuery: input,
-        retrieval,
-      };
-      return this.logDecision(input, decision, retrieval);
-    }
-
-    if (retrieval.plannerIntent === 'KNOWLEDGE') {
-      return this.logDecision(
-        input,
-        retrieval.selectedItems.length
-          ? {
-              action: 'ANSWER_KNOWLEDGE',
-              intent: 'ANSWER_KNOWLEDGE',
-              confidence: 0,
-              source: 'AI',
-              reason: 'product planner classified KNOWLEDGE',
-              resolvedQuery: input,
-              retrieval,
-            }
-          : {
-              action: 'CONTACT_ADMIN',
-              intent: 'CONTACT_ADMIN',
-              confidence: 0,
-              source: 'AI',
-              reason: 'product planner classified KNOWLEDGE without evidence',
-              businessFallback: true,
-              fallbackReason: retrieval.fallbackReason,
-            },
-        retrieval,
-      );
-    }
-
+    // 4. Low confidence: the classifier decides BUSINESS vs GENERAL.
     return this.resolveLowConfidence({
       userId,
       lineMemberId,
@@ -250,7 +110,7 @@ export class IntentRouterService {
       input: string;
       recentMessages?: readonly ChatContextMessage[];
       retrieval?: KnowledgeRetrievalResult;
-      fallbackReason?: string;
+      fallbackReason?: RetrievalFallbackReason;
     },
   ): Promise<RouteDecision> {
     const {
@@ -321,19 +181,6 @@ export class IntentRouterService {
       },
       retrieval,
     );
-  }
-
-  private retrievalSource(retrieval: KnowledgeRetrievalResult): IntentSource {
-    if (
-      retrieval.matchType === 'EMBEDDING' ||
-      retrieval.matchType === 'HYBRID'
-    ) {
-      return 'EMBEDDING';
-    }
-
-    return retrieval.selectedItems[0]?.metadata?.retrievalLayer === 'DATABASE'
-      ? 'DATABASE'
-      : 'CACHE';
   }
 
   private resolveRichMenu(

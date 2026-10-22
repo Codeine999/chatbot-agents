@@ -23,6 +23,7 @@ import type {
   AiRequestContext,
   KnowledgeRetrievalResult,
   ChatContextMessage,
+  RetrievalFallbackReason,
 } from '../../shared/types/chat.types';
 import { toAiProviderMessages } from '../../context/ai-provider-context';
 import { redactPii } from '../../../../utils/text.utils';
@@ -57,7 +58,7 @@ export function isBroadProductInquiry(message: string): boolean {
 const referenceSignal =
   /(ตัวนี้|ตัวนั้น|เมื่อกี้|อันนี้|อันนั้น|ตัวแรก|ตัวที่|สีดำ|สีขาว|แล้ว.*(?:ราคา|สี|ไซ))/u;
 // Legacy outcomes the router already handles safely without a product planner.
-const SETTLED_KNOWLEDGE = new Set([
+const SETTLED_KNOWLEDGE: ReadonlySet<RetrievalFallbackReason> = new Set([
   'CONFLICTING_CANDIDATES',
   'RETRIEVAL_ERROR',
   'MISSING_USER_INFORMATION',
@@ -306,6 +307,27 @@ export class ProductRetrievalService {
                 )
               )
                 throw new Error('Unknown planner business field or operator');
+              // A chosen value of a variant option ("สีแดง") is an option, not a
+              // filter: filtered out it reads as "which product?" instead of
+              // "not available in that color".
+              const chosen = plan.filters.filter(
+                (filter) =>
+                  filter.operator === 'EQ' &&
+                  optionKeys.has(filter.key) &&
+                  typeof filter.value === 'string',
+              );
+              if (chosen.length) {
+                plan.filters = plan.filters.filter((f) => !chosen.includes(f));
+                for (const filter of chosen)
+                  if (
+                    plan.options.length < 6 &&
+                    !plan.options.some((o) => o.key === filter.key)
+                  )
+                    plan.options.push({
+                      key: filter.key,
+                      value: String(filter.value),
+                    });
+              }
               if (
                 plan.minPrice &&
                 plan.maxPrice &&
@@ -475,7 +497,8 @@ export class ProductRetrievalService {
     const base = await legacy();
     if (
       base.route !== 'LOW_CONFIDENCE' ||
-      SETTLED_KNOWLEDGE.has(base.fallbackReason ?? '')
+      (base.fallbackReason !== undefined &&
+        SETTLED_KNOWLEDGE.has(base.fallbackReason))
     )
       return undefined;
     if (policySignal.test(message))

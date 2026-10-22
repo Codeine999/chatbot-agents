@@ -1,9 +1,4 @@
-import {
-  businessInclude,
-  coreVariant,
-  saveBusiness,
-  variantAttributes,
-} from './variant-business';
+import { variantAttributes } from './variant-business';
 import {
   ConflictException,
   Injectable,
@@ -33,17 +28,17 @@ import { assertProductPricing, productDiscount } from './product-pricing';
 import { loadCatalogFields } from './search/catalog-fields';
 import { enqueueProductIndex } from './search/product-index-outbox';
 import { lockProductPreset } from './attributes/product-attribute.service';
-import {
-  validateAttributeValues,
-  type AttributeDefinition,
-  type AttributeScope,
-} from './attributes/attribute-definition';
+import { validateAttributeValues } from './attributes/utils/attribute-value.util';
+import type {
+  AttributeDefinition,
+  AttributeScope,
+} from './attributes/types/attribute-definition.types';
 
 const catalogInclude = {
   company: { select: { productBusinessType: true } },
   variants: {
     orderBy: { id: 'asc' as const },
-    include: { inventory: true, ...businessInclude },
+    include: { inventory: true },
   },
 } satisfies Prisma.ProductInclude;
 type CatalogRecord = Prisma.ProductGetPayload<{
@@ -154,19 +149,12 @@ export class ProductService {
             data: {
               companyId: scope.companyId,
               productId: product.id,
-              ...coreVariant(variant),
+              ...variant,
               meta: checked(definitions, 'VARIANT', fields.category, {
                 values: variantAttributes(variant),
               }),
             },
           });
-          await saveBusiness(
-            tx,
-            scope.companyId,
-            record.id,
-            product.category,
-            variant,
-          );
           if (variant.trackStock)
             await tx.inventoryBalance.create({
               data: { companyId: scope.companyId, variantId: record.id },
@@ -200,7 +188,7 @@ export class ProductService {
           throw new ConflictException('Product version changed');
         const variants = await tx.productVariant.findMany({
           where: { productId: id, companyId: scope.companyId },
-          include: { inventory: true, ...businessInclude },
+          include: { inventory: true },
         });
         if (
           (dto.status ?? product.status) === 'ACTIVE' &&
@@ -224,10 +212,7 @@ export class ProductService {
           const definitions = await loadCatalogFields(tx, scope);
           for (const variant of variants)
             checked(definitions, 'VARIANT', category, {
-              stored: variantAttributes(
-                variant,
-                product.company.productBusinessType,
-              ),
+              stored: variantAttributes(variant),
             });
         }
         const searchChanged = [
@@ -288,7 +273,7 @@ export class ProductService {
           data: {
             companyId: scope.companyId,
             productId: id,
-            ...coreVariant(fields),
+            ...fields,
             meta: checked(
               await loadCatalogFields(tx, scope),
               'VARIANT',
@@ -297,13 +282,6 @@ export class ProductService {
             ),
           },
         });
-        await saveBusiness(
-          tx,
-          scope.companyId,
-          variant.id,
-          product.category,
-          fields,
-        );
         if (variant.trackStock)
           await tx.inventoryBalance.create({
             data: { companyId: scope.companyId, variantId: variant.id },
@@ -344,7 +322,7 @@ export class ProductService {
           throw new ConflictException('Product version changed');
         const variant = await tx.productVariant.findFirst({
           where: { id: variantId, productId: id, companyId: scope.companyId },
-          include: { inventory: true, ...businessInclude },
+          include: { inventory: true },
         });
         if (!variant) throw new NotFoundException('Product variant not found');
         if (variant.version !== dto.expectedVersion)
@@ -384,34 +362,15 @@ export class ProductService {
               data: { companyId: scope.companyId, variantId },
             });
         }
-        const businessInput = { ...fields };
         assertProductPricing([{ ...variant, ...fields }]);
-        if (
-          fields.meta !== undefined ||
-          fields.fashion ||
-          fields.restaurant ||
-          fields.hotel
-        )
-          fields.meta = checked(
+        if (fields.meta !== undefined)
+          fields.meta = mergedMeta(
             await loadCatalogFields(tx, scope),
-            'VARIANT',
             product.category,
-            {
-              values: variantAttributes(fields),
-              stored: variantAttributes(
-                variant,
-                product.company.productBusinessType,
-              ),
-            },
+            variantAttributes(variant),
+            fields.meta,
           ) as typeof fields.meta;
-        const searchChanged = [
-          'sku',
-          'meta',
-          'active',
-          'fashion',
-          'restaurant',
-          'hotel',
-        ].some(
+        const searchChanged = ['sku', 'meta', 'active'].some(
           (field) =>
             fields[field] !== undefined &&
             JSON.stringify(fields[field]) !== JSON.stringify(variant[field]),
@@ -423,15 +382,8 @@ export class ProductService {
             productId: id,
             version: dto.expectedVersion,
           },
-          data: { ...coreVariant(fields), version: { increment: 1 } },
+          data: { ...fields, version: { increment: 1 } },
         });
-        await saveBusiness(
-          tx,
-          scope.companyId,
-          variantId,
-          product.category,
-          businessInput,
-        );
         await tx.product.update({
           where: { id, ...productWhere(scope) },
           data: {
@@ -482,13 +434,7 @@ function catalogView(product: CatalogRecord) {
     variants: product.variants.map((variant) => ({
       ...variant,
       price: variant.price?.toFixed(2) ?? null,
-      hotel: variant.hotel
-        ? {
-            ...variant.hotel,
-            roomArea: variant.hotel.roomArea?.toFixed(2) ?? null,
-          }
-        : null,
-      meta: variantAttributes(variant, product.company.productBusinessType),
+      meta: variantAttributes(variant),
       compareAtPrice: variant.compareAtPrice?.toFixed(2) ?? null,
       ...productDiscount(variant),
       effectivePrice: variant.price?.toFixed(2) ?? null,
@@ -504,6 +450,38 @@ function catalogView(product: CatalogRecord) {
           : null,
     })),
   };
+}
+
+/**
+ * PATCH meta: the sent fields replace their stored values, null clears a
+ * field, and every other stored field is kept. The merged result is
+ * validated as a whole, so required fields are still enforced.
+ */
+function mergedMeta(
+  definitions: readonly AttributeDefinition[],
+  category: string | null,
+  stored: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Prisma.InputJsonObject {
+  const kept = { ...stored };
+  for (const [key, value] of Object.entries(patch))
+    if (value === null) delete kept[key];
+  const active = new Set(
+    definitions
+      .filter((d) => d.scope === 'VARIANT' && d.status === 'ACTIVE')
+      .map((d) => d.key),
+  );
+  return checked(definitions, 'VARIANT', category, {
+    values: {
+      ...Object.fromEntries(
+        Object.entries(kept).filter(([key]) => active.has(key)),
+      ),
+      ...Object.fromEntries(
+        Object.entries(patch).filter(([, value]) => value !== null),
+      ),
+    },
+    stored: kept,
+  });
 }
 
 /**

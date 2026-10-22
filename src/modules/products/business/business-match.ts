@@ -1,10 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
-import {
-  appliesToCategory,
-  optionMatcher,
-  type AttributeDefinition,
-} from '../attributes/attribute-definition';
+import { appliesToCategory } from '../attributes/utils/attribute-value.util';
+import { optionMatcher } from '../attributes/utils/option-matcher.util';
+import type { AttributeDefinition } from '../attributes/types/attribute-definition.types';
 import type { ProductPlan } from '../search/product-search.types';
 
 export function fieldOperators(field: AttributeDefinition): string[] {

@@ -14,6 +14,7 @@ import type {
 const BUCKET_UNIT: Record<AnalyticsInterval, string> = {
   hour: 'hour',
   day: 'day',
+  week: 'week',
   month: 'month',
   year: 'year',
 };
@@ -21,18 +22,21 @@ const BUCKET_UNIT: Record<AnalyticsInterval, string> = {
 const BUCKET_STEP: Record<AnalyticsInterval, string> = {
   hour: '1 hour',
   day: '1 day',
+  week: '1 week',
   month: '1 month',
   year: '1 year',
 };
 
 /**
- * Matches the granularity: `2026-09-01T13:00:00Z` / `2026-09-01` / `2026-09` /
- * `2026`. Calendar labels are in the reporting timezone; an hour is an exact
- * instant, so it is emitted in UTC and the client places it on its own clock.
+ * Matches the granularity: `2026-09-01T13:00:00Z` / `2026-09-01` / `2026-08-31`
+ * (the week's Monday) / `2026-09` / `2026`. Calendar labels are in the
+ * reporting timezone; an hour is an exact instant, so it is emitted in UTC and
+ * the client places it on its own clock.
  */
 const BUCKET_LABEL: Record<AnalyticsInterval, string> = {
   hour: 'YYYY-MM-DD"T"HH24:MI:00"Z"',
   day: 'YYYY-MM-DD',
+  week: 'YYYY-MM-DD',
   month: 'YYYY-MM',
   year: 'YYYY',
 };

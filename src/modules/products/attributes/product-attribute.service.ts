@@ -12,13 +12,13 @@ import {
   ApplyBusinessPresetDto,
   ListProductAttributesQueryDto,
 } from '../dto/product-attribute.dto';
+import { appliesToCategory } from './utils/attribute-value.util';
 import {
-  BUSINESS_PRESETS,
-  CORE_PRODUCT_FIELDS,
-  appliesToCategory,
-} from './attribute-definition';
-import { catalogFields, loadCatalogFields } from '../search/catalog-fields';
-import { businessStorage } from '../variant-business';
+  businessPresets,
+  catalogFields,
+  isBusinessType,
+  loadCatalogFields,
+} from '../search/catalog-fields';
 
 /** Keep the lock key compatible with preceding releases. */
 export async function lockProductPreset(
@@ -32,17 +32,9 @@ export async function lockProductPreset(
   else
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
 }
-function withStorage(
-  type: string | null,
-  field: ReturnType<typeof catalogFields>[number],
-) {
-  return {
-    ...field,
-    storage:
-      field.scope === 'VARIANT'
-        ? businessStorage(type, field.key)
-        : { object: 'meta', field: field.key },
-  };
+/** Every business field is written to the variant's `meta` under its key. */
+function withStorage(field: ReturnType<typeof catalogFields>[number]) {
+  return { ...field, storage: { object: 'meta', field: field.key } };
 }
 @Injectable()
 export class ProductAttributeService {
@@ -69,7 +61,7 @@ export class ProductAttributeService {
             (!query.scope || field.scope === query.scope) &&
             (!query.category || appliesToCategory(field, query.category)),
         )
-        .map((field) => withStorage(company.productBusinessType, field)),
+        .map(withStorage),
     };
   }
   async presets(scopeInput: CommerceScope) {
@@ -81,11 +73,10 @@ export class ProductAttributeService {
     });
     return {
       selectedType: company.productBusinessType,
-      coreFields: CORE_PRODUCT_FIELDS,
-      data: Object.entries(BUSINESS_PRESETS).map(([type, preset]) => ({
+      data: businessPresets().map(({ type, label }) => ({
         type,
-        label: preset.label,
-        fields: catalogFields(type).map((field) => withStorage(type, field)),
+        label,
+        fields: catalogFields(type).map(withStorage),
       })),
     };
   }
@@ -99,7 +90,7 @@ export class ProductAttributeService {
     const scope = productCompanyScope(scopeInput);
     const parsed = ApplyBusinessPresetDto.schema.parse(input);
     const dto = { ...parsed, requestId: parsed.requestId ?? randomUUID() };
-    if (!BUSINESS_PRESETS[type])
+    if (!isBusinessType(type))
       throw new NotFoundException('Unknown business type');
     return this.commands.execute(
       scope,
@@ -134,9 +125,7 @@ export class ProductAttributeService {
           type,
           selectedType: type,
           categories: dto.categories,
-          fields: catalogFields(type, dto.categories).map((field) =>
-            withStorage(type, field),
-          ),
+          fields: catalogFields(type, dto.categories).map(withStorage),
         };
       },
     );

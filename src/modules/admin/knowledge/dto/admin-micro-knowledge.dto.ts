@@ -22,7 +22,7 @@ const microKnowledgeFields = {
   active: z.boolean(),
 } as const;
 
-const createMicroKnowledgeSchema = z.object({
+export const createMicroKnowledgeSchema = z.object({
   ...microKnowledgeFields,
   keywords: microKnowledgeFields.keywords.default([]),
   questionExamples: microKnowledgeFields.questionExamples.default([]),

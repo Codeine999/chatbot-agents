@@ -4,11 +4,40 @@ import {
   productCompanyScope,
   type CommerceScope,
 } from '../../commerce/types/commerce-scope';
-import {
-  BUSINESS_PRESETS,
-  attributeDefinitionSchema,
-  type AttributeDefinition,
-} from '../attributes/attribute-definition';
+import type { AttributeDefinition } from '../attributes/types/attribute-definition.types';
+import { attributeDefinitionSchema } from '../attributes/dto/attribute-definition.dto';
+import { BUSINESS_PRESETS } from '../attributes/presets';
+
+/*
+ * The only reader of BUSINESS_PRESETS. Forms, validation, indexing, search and
+ * prompts get a store's fields from `loadCatalogFields`, so a new business is a
+ * new preset entry and no other code.
+ */
+
+/** Every business a store can select. */
+export const BUSINESS_TYPES = Object.keys(BUSINESS_PRESETS);
+
+export function isBusinessType(type: string): boolean {
+  return Object.hasOwn(BUSINESS_PRESETS, type);
+}
+
+/** Selectable businesses for the admin preset picker. */
+export function businessPresets(): { type: string; label: string }[] {
+  return BUSINESS_TYPES.map((type) => ({
+    type,
+    label: BUSINESS_PRESETS[type].label,
+  }));
+}
+
+/** The preset's planner/answer wording, or undefined to use the general rules. */
+export function businessPromptRules(
+  type: string | null | undefined,
+  purpose: 'planner' | 'answer',
+): string | undefined {
+  return type && isBusinessType(type)
+    ? BUSINESS_PRESETS[type].prompt[purpose]
+    : undefined;
+}
 
 /** Code presets are the only field metadata; unknown stored JSON stays private. */
 export function catalogFields(

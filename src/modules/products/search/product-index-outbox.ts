@@ -1,4 +1,3 @@
-import { businessInclude } from '../variant-business';
 import { Prisma } from '../../../generated/prisma/client';
 import { buildProductDocument, productDocumentHash } from './product-document';
 import { loadCatalogFields } from './catalog-fields';
@@ -14,7 +13,7 @@ export async function enqueueProductIndex(
     where: { id: productId, companyId },
     include: {
       company: { select: { productBusinessType: true } },
-      variants: { include: businessInclude },
+      variants: true,
     },
   });
   const document = buildProductDocument(

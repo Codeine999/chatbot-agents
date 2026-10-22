@@ -9,14 +9,18 @@ import {
   Post,
   Query,
   Req,
+  SetMetadata,
   UnauthorizedException,
 } from '@nestjs/common';
 import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
+import type { AdminRole } from '../../../shared/guards/admin-auth.types';
+import { ADMIN_ROLES_KEY } from '../../../shared/guards/admin-roles.guard';
 import type { AdminRequest } from '../admin-jwt-auth.guard';
 import { CommerceScopeService } from '../../commerce/commerce-scope.service';
 import { CommerceFeatureService } from '../../commerce/commerce-feature.service';
 import {
   AdjustProductStockDto,
+  BulkCreateProductDto,
   CreateProductDto,
   DeleteProductDto,
   CreateProductVariantDto,
@@ -67,6 +71,25 @@ export class AdminProductController {
       body = { ...body, requestId: parsed.data };
     }
     return this.products.create(
+      await this.scope(request),
+      request.admin!.id,
+      body,
+    );
+  }
+
+  // Overrides the class roles; the class guards still authenticate the JWT.
+  @SetMetadata(ADMIN_ROLES_KEY, ['dev'] satisfies AdminRole[])
+  @Post('bulk')
+  async createMany(
+    @Req() request: AdminRequest,
+    @Body() body: BulkCreateProductDto,
+  ) {
+    // One key cannot cover many commands; each item carries its own requestId.
+    if (request.headers['idempotency-key'] !== undefined)
+      throw new BadRequestException(
+        'Bulk create uses requestId on each item, not Idempotency-Key',
+      );
+    return this.products.createMany(
       await this.scope(request),
       request.admin!.id,
       body,

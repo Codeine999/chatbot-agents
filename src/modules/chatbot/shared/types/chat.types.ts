@@ -1,5 +1,6 @@
 /** Runtime list so a rich menu button can be validated against it. */
 export const CHAT_INTENTS = [
+  'GREET',
   'REGISTER',
   'GENERAL_QUESTION',
   'ANSWER_KNOWLEDGE',
@@ -60,6 +61,21 @@ export type KnowledgeMatchType =
 
 export type KnowledgeRoute = 'DIRECT' | 'RAG' | 'LOW_CONFIDENCE';
 
+/** Why retrieval did not answer confidently; routing branches on it. */
+export type RetrievalFallbackReason =
+  /** A follow-up refers to something missing from recent context. */
+  | 'MISSING_USER_INFORMATION'
+  /** Nothing searchable is left after normalization. */
+  | 'NO_SEARCH_RESULTS'
+  /** A required source failed, so partial evidence is not trusted. */
+  | 'RETRIEVAL_ERROR'
+  /** Selected evidence disagrees with itself. */
+  | 'CONFLICTING_CANDIDATES'
+  /** Candidates exist but none is usable as evidence. */
+  | 'NO_USABLE_EVIDENCE'
+  /** Evidence selected, but too weak to skip the classifier. */
+  | 'BELOW_MIN_VECTOR_SIMILARITY';
+
 export type KnowledgeRetrievalResult = Readonly<{
   route: KnowledgeRoute;
   matchType: KnowledgeMatchType;
@@ -67,7 +83,7 @@ export type KnowledgeRetrievalResult = Readonly<{
   selectedItems: readonly KnowledgeItem[];
   topScores: readonly number[];
   scoreGap: number | null;
-  fallbackReason?: string;
+  fallbackReason?: RetrievalFallbackReason;
   product?: ProductWorkflow;
   /** The product planner already classified this turn as a store question. */
   plannerIntent?: 'KNOWLEDGE';
@@ -82,7 +98,7 @@ export type RouteDecision = {
   resolvedQuery?: string;
   retrieval?: KnowledgeRetrievalResult;
   businessFallback?: boolean;
-  fallbackReason?: string;
+  fallbackReason?: RetrievalFallbackReason;
   /** Set by RICH_MENU_REPLY: the tenant-authored answer to send verbatim. */
   richMenuReply?: { key: string; label: string; replyText: string };
 };

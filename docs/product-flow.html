@@ -1,0 +1,1403 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product Flow</title>
+<meta name="description" content="แผนผัง end-to-end ของ feature product: preset/meta, admin เขียนสินค้า, สต็อก, index/embedding, แชต Product RAG พร้อม data shape แต่ละขั้น และ ERD">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f5f7;--surface:#ffffff;--surface-2:#eef0f3;--ink:#16202a;--muted:#566370;--faint:#8793a0;
+  --line:#d6dbe1;--edge:#97a3af;--accent:#1f5fd6;--accent-ink:#ffffff;--accent-soft:#e2ebfb;
+  --k-svc:#5b6876;--k-dec:#b45309;--k-llm:#7c3aed;--k-ext:#0e7490;--k-start:#1f5fd6;
+  --o-reply:#15803d;--o-handoff:#c2410c;--o-silent:#6b7280;--o-error:#b91c1c;--o-ask:#2563eb;
+  --g-line:#1f5fd6;--g-know:#0f766e;--g-prod:#7c3aed;--g-bill:#b45309;--g-id:#475569;--g-redis:#b91c1c;
+  --code-bg:#f6f7f9;--code-key:#0b5cad;--code-str:#1d7a3a;--code-com:#8a8f98;--code-num:#a2420d;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
+  --font:"IBM Plex Sans Thai",system-ui,-apple-system,"Segoe UI","Noto Sans Thai",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1116;--surface:#161b22;--surface-2:#1d232c;--ink:#e5e9ee;--muted:#9aa5b1;--faint:#6d7884;
+  --line:#2b333d;--edge:#5d6873;--accent:#6ea2ff;--accent-ink:#0b1220;--accent-soft:#1a2a45;
+  --k-svc:#8b98a6;--k-dec:#f59e0b;--k-llm:#a78bfa;--k-ext:#22b8cf;--k-start:#6ea2ff;
+  --o-reply:#34c46b;--o-handoff:#fb923c;--o-silent:#8b94a0;--o-error:#f87171;--o-ask:#60a5fa;
+  --g-line:#6ea2ff;--g-know:#2dd4bf;--g-prod:#a78bfa;--g-bill:#f59e0b;--g-id:#94a3b8;--g-redis:#f87171;
+  --code-bg:#11161d;--code-key:#79b8ff;--code-str:#85e89d;--code-com:#6a737d;--code-num:#ffab70;
+  --shadow:0 1px 2px rgba(0,0,0,.4);
+}}
+:root[data-theme="dark"]{
+  --bg:#0e1116;--surface:#161b22;--surface-2:#1d232c;--ink:#e5e9ee;--muted:#9aa5b1;--faint:#6d7884;
+  --line:#2b333d;--edge:#5d6873;--accent:#6ea2ff;--accent-ink:#0b1220;--accent-soft:#1a2a45;
+  --k-svc:#8b98a6;--k-dec:#f59e0b;--k-llm:#a78bfa;--k-ext:#22b8cf;--k-start:#6ea2ff;
+  --o-reply:#34c46b;--o-handoff:#fb923c;--o-silent:#8b94a0;--o-error:#f87171;--o-ask:#60a5fa;
+  --g-line:#6ea2ff;--g-know:#2dd4bf;--g-prod:#a78bfa;--g-bill:#f59e0b;--g-id:#94a3b8;--g-redis:#f87171;
+  --code-bg:#11161d;--code-key:#79b8ff;--code-str:#85e89d;--code-com:#6a737d;--code-num:#ffab70;
+  --shadow:0 1px 2px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.55 var(--font);display:flex;flex-direction:column;min-height:100vh}
+button{font:inherit;color:inherit}
+a{color:var(--accent)}
+code,.mono{font-family:var(--mono);font-size:.92em}
+header.top{display:flex;align-items:center;gap:16px;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header.top h1{font-size:17px;font-weight:600;margin:0;letter-spacing:-.2px}
+header.top .meta{color:var(--muted);font-size:12.5px;flex:1;min-width:220px}
+.iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 10px;cursor:pointer;font-size:12.5px;color:var(--muted)}
+.iconbtn:hover{color:var(--ink);border-color:var(--edge)}
+nav.views{display:flex;gap:6px;padding:8px 20px;background:var(--surface);border-bottom:1px solid var(--line);overflow-x:auto}
+nav.views button{border:1px solid transparent;background:none;border-radius:8px;padding:6px 12px;cursor:pointer;white-space:nowrap;color:var(--muted);font-size:13.5px}
+nav.views button:hover{background:var(--surface-2);color:var(--ink)}
+nav.views button[aria-selected="true"]{background:var(--accent-soft);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 30%,transparent);font-weight:600}
+nav.views .num{font-family:var(--mono);font-size:11px;opacity:.7;margin-right:4px}
+main#app{flex:1;min-height:0;display:grid;grid-template-columns:270px minmax(0,1fr) 420px;height:calc(100vh - 100px)}
+aside#events{border-right:1px solid var(--line);background:var(--surface);overflow:auto;padding:12px 10px 40px}
+aside#panel{border-left:1px solid var(--line);background:var(--surface);overflow:auto;padding:14px 16px 60px}
+section#stage{position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--bg)}
+#stage svg{width:100%;height:100%;display:block;cursor:grab;touch-action:none;user-select:none}
+#stage svg.dragging{cursor:grabbing}
+.toolbar{position:absolute;top:10px;left:10px;display:flex;gap:6px;z-index:2;flex-wrap:wrap}
+.toolbar button{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:4px 10px;cursor:pointer;box-shadow:var(--shadow);font-size:12.5px}
+.toolbar button:hover{border-color:var(--edge)}
+.legend{position:absolute;bottom:10px;left:10px;z-index:2;background:color-mix(in srgb,var(--surface) 92%,transparent);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:11.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 14px;max-width:calc(100% - 20px)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.hint{position:absolute;top:10px;right:10px;z-index:2;font-size:11.5px;color:var(--faint);background:color-mix(in srgb,var(--surface) 85%,transparent);padding:3px 8px;border-radius:6px}
+/* event list */
+.evgroup{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--faint);margin:14px 6px 6px;font-weight:600}
+.evgroup:first-child{margin-top:2px}
+.ev{display:block;width:100%;text-align:left;border:1px solid transparent;background:none;border-radius:8px;padding:6px 8px;cursor:pointer;margin-bottom:2px}
+.ev:hover{background:var(--surface-2)}
+.ev[aria-pressed="true"]{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.ev .t{display:flex;gap:7px;align-items:baseline;font-size:13px;line-height:1.35}
+.ev .t b{font-weight:500}
+.ev .x{display:block;color:var(--muted);font-size:11.5px;margin-left:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;transform:translateY(-1px)}
+.o-reply{--oc:var(--o-reply)}.o-handoff{--oc:var(--o-handoff)}.o-silent{--oc:var(--o-silent)}.o-error{--oc:var(--o-error)}.o-ask{--oc:var(--o-ask)}.o-pass{--oc:var(--accent)}
+.dot{background:var(--oc,var(--faint))}
+.evsearch{width:100%;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:6px 9px;font:inherit;font-size:13px;margin-bottom:6px}
+/* svg graph */
+.gedge path.e{fill:none;stroke:var(--edge);stroke-width:1.4;opacity:.75;transition:opacity .15s}
+.gedge path.hit{fill:none;stroke:transparent;stroke-width:12;cursor:pointer}
+.gedge.soft path.e{stroke-dasharray:4 4}
+.elabel{font:500 10.5px var(--font);fill:var(--muted);paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round;pointer-events:none}
+svg.has-ev .gedge:not(.hot) path.e{opacity:.1}
+svg.has-ev .gedge:not(.hot) .elabel{opacity:.12}
+svg.has-adj:not(.has-ev) .gedge:not(.adj) path.e{opacity:.18}
+svg.has-adj:not(.has-ev) .gedge:not(.adj) .elabel{opacity:.15}
+.gedge.adj path.e{stroke:var(--accent);opacity:.9;stroke-width:2}
+.gedge.hot path.e{stroke:var(--accent);stroke-width:2.8;opacity:1;stroke-dasharray:8 5;animation:flow .9s linear infinite}
+.gedge.hot .elabel{fill:var(--accent);font-weight:600}
+@keyframes flow{to{stroke-dashoffset:-13}}
+@media (prefers-reduced-motion:reduce){.gedge.hot path.e{animation:none;stroke-dasharray:none}}
+.gnode{cursor:pointer;transition:opacity .15s}
+svg.has-ev .gnode:not(.on){opacity:.22}
+svg.has-adj:not(.has-ev) .gnode:not(.adjn){opacity:.35}
+.node{width:100%;height:100%;border:1px solid var(--line);border-left:4px solid var(--kc);border-radius:9px;background:var(--surface);padding:5px 8px 5px 8px;overflow:hidden;box-shadow:var(--shadow);position:relative}
+.node .nt{font-weight:600;font-size:12px;line-height:1.25;color:var(--ink);word-break:break-word}
+.node .ns{color:var(--muted);font-size:10.5px;line-height:1.3;margin-top:2px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.node .tag~.nt{padding-right:30px}
+.node .tag{position:absolute;top:4px;right:5px;font:600 8.5px var(--mono);letter-spacing:.4px;color:var(--kc);border:1px solid color-mix(in srgb,var(--kc) 45%,transparent);border-radius:4px;padding:0 3px;background:var(--surface)}
+.k-svc{--kc:var(--k-svc)}.k-dec{--kc:var(--k-dec)}.k-llm{--kc:var(--k-llm)}.k-ext{--kc:var(--k-ext)}.k-start{--kc:var(--k-start)}
+.k-end .node,.node.k-end{border-left-width:1px;border-radius:26px;background:color-mix(in srgb,var(--oc) 9%,var(--surface));border-color:color-mix(in srgb,var(--oc) 45%,var(--line));text-align:center;padding:6px 12px}
+.node.k-end .nt{color:color-mix(in srgb,var(--oc) 75%,var(--ink))}
+.node.k-start{background:color-mix(in srgb,var(--k-start) 8%,var(--surface))}
+.node.k-dec{background:linear-gradient(90deg,color-mix(in srgb,var(--k-dec) 7%,var(--surface)),var(--surface) 60%)}
+.node.bus{border-left-width:1px;border-style:dashed;text-align:center;background:var(--surface-2)}
+.gnode.sel .node{box-shadow:0 0 0 3px var(--accent)}
+.gnode.on .node{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+.stepb circle{fill:var(--accent)}
+.stepb text{font:700 10px var(--mono);fill:var(--accent-ink);text-anchor:middle;dominant-baseline:central}
+/* panel */
+#panel h2{font-size:16px;margin:0 0 4px;font-weight:600;line-height:1.35}
+#panel h3{font-size:11.5px;letter-spacing:.7px;text-transform:uppercase;color:var(--faint);margin:18px 0 6px;font-weight:600}
+#panel p{margin:6px 0}
+#panel .sub{color:var(--muted);font-size:13px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.chip.k{color:var(--kc);border-color:color-mix(in srgb,var(--kc) 40%,transparent)}
+.chip.o{color:var(--oc);border-color:color-mix(in srgb,var(--oc) 40%,transparent)}
+.chip.btn{cursor:pointer}
+.chip.btn:hover{border-color:var(--accent);color:var(--accent)}
+.example{background:var(--surface-2);border-radius:8px;padding:8px 10px;font-size:13px;border-left:3px solid var(--accent);margin:8px 0}
+.note{font-size:12.5px;color:var(--muted);background:color-mix(in srgb,var(--k-dec) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--k-dec) 25%,var(--line));border-radius:8px;padding:7px 10px;margin:8px 0}
+.note.risk{background:color-mix(in srgb,var(--o-error) 7%,var(--surface));border-color:color-mix(in srgb,var(--o-error) 30%,var(--line))}
+ol.steps{list-style:none;padding:0;margin:6px 0;counter-reset:s}
+ol.steps li{position:relative;padding:5px 6px 5px 30px;border-radius:7px;cursor:pointer;font-size:13px;counter-increment:s}
+ol.steps li::before{content:counter(s);position:absolute;left:4px;top:5px;width:20px;height:20px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font:700 10.5px/20px var(--mono);text-align:center}
+ol.steps li:hover{background:var(--surface-2)}
+ol.steps li.cur{background:var(--accent-soft)}
+ol.steps li .via{display:block;color:var(--faint);font-size:11.5px}
+.io{border:1px solid var(--line);border-radius:9px;margin:8px 0;overflow:hidden}
+.io .h{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:5px 10px;background:var(--surface-2);font-size:12px;color:var(--muted);border-bottom:1px solid var(--line)}
+.io .h b{color:var(--ink);font-weight:600}
+pre.code{margin:0;padding:9px 11px;background:var(--code-bg);font:11.5px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word;color:var(--ink);max-height:340px;overflow:auto}
+pre.code .ck{color:var(--code-key)}pre.code .cs{color:var(--code-str)}pre.code .cc{color:var(--code-com);font-style:italic}pre.code .cn{color:var(--code-num)}
+.nav2{display:flex;gap:6px;margin:8px 0}
+.nav2 button{flex:1;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px;cursor:pointer;font-size:12.5px}
+.nav2 button:disabled{opacity:.4;cursor:default}
+.nav2 button:not(:disabled):hover{border-color:var(--accent);color:var(--accent)}
+ul.dec{padding-left:0;list-style:none;margin:4px 0}
+ul.dec li{font-size:12.5px;padding:3px 0 3px 14px;position:relative}
+ul.dec li::before{content:"→";position:absolute;left:0;color:var(--faint)}
+ul.dec li a{cursor:pointer;text-decoration:none}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12.5px}
+.kv dt{color:var(--faint)}.kv dd{margin:0}
+/* erd */
+.tbl{width:100%;height:100%;border:1px solid var(--line);border-radius:9px;background:var(--surface);overflow:hidden;box-shadow:var(--shadow);font-size:11px}
+.tbl .th{padding:5px 9px;font:600 12px var(--mono);color:#fff;background:var(--gc);display:flex;justify-content:space-between;align-items:center}
+.tbl .th span{font:500 9.5px var(--font);opacity:.85}
+.tbl .tr{display:flex;gap:6px;padding:1px 9px;height:19px;align-items:center;border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent);white-space:nowrap}
+.tbl .tr .f{font-family:var(--mono);font-size:10.5px;flex:1;overflow:hidden;text-overflow:ellipsis}
+.tbl .tr .ty{color:var(--faint);font-size:10px;font-family:var(--mono);max-width:96px;overflow:hidden;text-overflow:ellipsis}
+.tbl .tr .fl{font:700 8px var(--mono);border-radius:3px;padding:0 3px;color:var(--gc);border:1px solid color-mix(in srgb,var(--gc) 50%,transparent)}
+.tbl.redis{border-style:dashed}
+.g-line{--gc:var(--g-line)}.g-know{--gc:var(--g-know)}.g-prod{--gc:var(--g-prod)}.g-bill{--gc:var(--g-bill)}.g-id{--gc:var(--g-id)}.g-redis{--gc:var(--g-redis)}
+.rel path{fill:none;stroke:var(--edge);stroke-width:1.3;opacity:.7}
+.rel.soft path{stroke-dasharray:5 4}
+.rel.hot path{stroke:var(--accent);stroke-width:2.4;opacity:1}
+svg.has-ev .rel:not(.hot) path{opacity:.08}
+svg.has-ev .gtbl:not(.on){opacity:.25}
+.gtbl{cursor:pointer;transition:opacity .15s}
+.gtbl.sel .tbl{box-shadow:0 0 0 3px var(--accent)}
+.relmark{fill:none;stroke:context-stroke}
+.fieldlist{width:100%;border-collapse:collapse;font-size:12px}
+.fieldlist td{padding:3px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.fieldlist td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap}
+.fieldlist td.ty{color:var(--faint);font-family:var(--mono);font-size:11px}
+/* findings */
+#findings{flex:1;overflow:auto;padding:22px max(16px,4vw) 80px;background:var(--bg);border:0;outline:0}
+#findings .wrap{max-width:1100px;margin:0 auto}
+#findings h2{font-size:22px;margin:0 0 6px;font-weight:600}
+#findings .lead{color:var(--muted);max-width:820px}
+.fsum{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
+.fsum div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:12.5px;color:var(--muted)}
+.fsum b{display:block;font-size:20px;color:var(--ink)}
+.fcard{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--sc);border-radius:10px;padding:14px 18px;margin:12px 0;box-shadow:var(--shadow)}
+.fcard h3{margin:0 0 4px;font-size:15.5px;font-weight:600;line-height:1.4}
+.fcard .fh{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+.sev{font:700 10.5px var(--mono);color:#fff;background:var(--sc);border-radius:5px;padding:1px 7px}
+.s-high{--sc:var(--o-error)}.s-med{--sc:var(--o-handoff)}.s-low{--sc:var(--k-svc)}.s-good{--sc:var(--o-reply)}
+.fcard dl{display:grid;grid-template-columns:110px 1fr;gap:6px 14px;margin:8px 0 0;font-size:13.5px}
+.fcard dt{color:var(--faint);font-size:12.5px}
+.fcard dd{margin:0}
+.fcard .loc code{background:var(--surface-2);padding:1px 5px;border-radius:4px}
+.refs{font-size:12.5px;color:var(--muted)}
+#findings ol.gl{padding-left:20px;margin:6px 0}#findings ol.gl li{margin:4px 0;font-size:13.5px}
+#findings ul{padding-left:20px;font-size:13.5px}#findings ul li{margin:4px 0}
+#findings .fcard p{font-size:13.5px}
+table.gt{margin:8px 0}table.gt th{text-align:left;font-size:11.5px;color:var(--faint);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--line)}
+#findings .fcard{overflow-x:auto}
+[hidden]{display:none!important}
+@media (max-width:1180px){
+  main#app{grid-template-columns:230px minmax(0,1fr);grid-template-rows:minmax(420px,62vh) auto;height:auto}
+  aside#panel{grid-column:1/-1;border-left:0;border-top:1px solid var(--line)}
+}
+@media (max-width:760px){
+  header.top,nav.views{padding-left:16px;padding-right:16px}
+  main#app{grid-template-columns:1fr;grid-template-rows:auto 60vh auto}
+  aside#events{border-right:0;border-bottom:1px solid var(--line);max-height:34vh}
+  .fcard dl{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Product flow · preset/meta, catalog, stock, index, RAG &amp; ERD</h1>
+  <div class="meta">chatbot-agents · อ่านจาก working tree บน <code>main</code> (HEAD 6c7bc8d + ไฟล์ที่ยังไม่ commit) · 22 ต.ค. 2026 · เฉพาะ feature product (ECOMMERCE preset) · ตัวอย่างข้อมูลเป็นข้อมูลสมมติ</div>
+  <button class="iconbtn" id="themeBtn" type="button" title="สลับธีม">◐ ธีม</button>
+</header>
+<nav class="views" id="views" role="tablist"></nav>
+<main id="app">
+  <aside id="events" aria-label="Events"></aside>
+  <section id="stage">
+    <div class="toolbar">
+      <button type="button" id="fitBtn">พอดีจอ</button>
+      <button type="button" id="zinBtn" aria-label="ซูมเข้า">+</button>
+      <button type="button" id="zoutBtn" aria-label="ซูมออก">-</button>
+      <button type="button" id="clearBtn">ล้างที่เลือก</button>
+    </div>
+    <div class="hint">ลากเพื่อเลื่อน · scroll เพื่อซูม · ← → เดินทีละขั้น</div>
+    <svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="legend" id="legend"></div>
+  </section>
+  <aside id="panel" aria-live="polite"></aside>
+</main>
+<section id="findings" hidden></section>
+<div id="diag" hidden></div>
+<script>
+'use strict';
+/* ===================== data helpers ===================== */
+const q = (s) => JSON.stringify(s);
+const N = (id, x, y, k, title, s, o = {}) => ({ id, x, y, k, title, s, ...o });
+const E = (from, to, label = '', o = {}) => ({ from, to, label, ...o });
+const SRC = 'src/modules/';
+const P = SRC + 'products/';
+const KP = SRC + 'chatbot/knowledge/product/';
+
+/** ECOMMERCE preset after catalogFields(): defaults filled, scope VARIANT, status ACTIVE. */
+const ECOM_FIELDS = `AttributeDefinition[] (เรียงตาม sortOrder) = [
+  { key: 'brand', label: 'แบรนด์', type: 'TEXT', variantOption: false, searchable: true, aiVisible: true },
+  { key: 'tags', label: 'แท็ก', type: 'TAGS' },
+  { key: 'model', label: 'รุ่น', type: 'TEXT' },
+  { key: 'color', label: 'สี', type: 'TEXT', variantOption: true, valueAliases: { ดำ: ['black'], ขาว: ['white'], … } },
+  { key: 'size', label: 'ขนาด / ไซส์', type: 'TEXT', variantOption: true },
+  { key: 'material', label: 'วัสดุ', type: 'TEXT' },
+  { key: 'weight_g', label: 'น้ำหนัก', type: 'NUMBER', unit: 'g' },
+  { key: 'dimensions', label: 'ขนาดสินค้า (กว้าง x ยาว x สูง)', type: 'TEXT' },
+  { key: 'features', label: 'คุณสมบัติเด่น', type: 'TAGS' },
+  { key: 'origin', label: 'แหล่งผลิต', type: 'TEXT' },
+  { key: 'warranty', label: 'การรับประกัน', type: 'TEXT' },
+  { key: 'package_contents', label: 'สิ่งที่ได้รับในกล่อง', type: 'TEXT' },
+]  // ทุกตัว: scope 'VARIANT', status 'ACTIVE', required false, options [], categories = company.productPresetCategories`;
+const META_BK_L = `{ brand: 'Basic', color: 'ดำ', size: 'L', material: 'cotton 100%', weight_g: 180, features: ['ระบายอากาศ'] }`;
+
+/* ===================== VIEW 1 · preset & meta ===================== */
+const META = {
+  id: 'meta', num: '1', title: 'Preset → meta → ผู้ใช้',
+  intro: 'ร้านรู้ได้อย่างไรว่า meta ของ variant มี field อะไร: ไฟล์ preset ในโค้ดประกาศ field ของแต่ละธุรกิจ, Company.productBusinessType เลือกว่าใช้ preset ไหน, catalog-fields.ts เป็นประตูเดียวที่แปลง preset เป็น AttributeDefinition[] แล้วทุกจุด (ฟอร์ม, validation, index, planner, ค้นหา, evidence ที่ส่ง LLM, ตัวกันคำตอบ) อ่านจากผลลัพธ์นี้ ค่าจริงเก็บใน ProductVariant.meta (jsonb) ไม่มีตารางแยกต่อธุรกิจ',
+  nodes: [
+    N('presetFile', 2, 0, 'start', 'presets/ecommerce.preset.ts', 'BusinessPreset { label, prompt, fields[] } · ใช้ shared-fields (brand, tags, color)', { f: P + 'attributes/presets/ecommerce.preset.ts:5', d: 'ไฟล์ preset หนึ่งไฟล์ต่อธุรกิจ เป็น AttributeDefinitionInput (ยังไม่เติม default) field ที่ใช้ร่วมหลายธุรกิจอยู่ใน shared-fields.ts เช่น colorField มี valueAliases ดำ↔black', out: `ECOMMERCE_PRESET: BusinessPreset = {\n  label: 'อีคอมเมิร์ซทั่วไป', prompt: ECOMMERCE_PROMPT,\n  fields: [brandField, tagsField, { key: 'model', … }, colorField, { key: 'size', variantOption: true }, … 12 fields]\n}` }),
+    N('promptFile', 6, 0, 'start', 'prompts/ecommerce.prompt.ts', 'BusinessPrompt { planner, answer } ข้อความเฉพาะธุรกิจ', { f: P + 'attributes/prompts/ecommerce.prompt.ts:4', d: 'บอก planner ว่า field ไหนใช้ operator อะไร (เช่น weight_g ใช้ EQ/GTE/LTE) และบอก answer model ว่าห้ามเติมสเปกนอกหลักฐาน general.prompt.ts เป็น fallback ของร้านที่ไม่มี preset', out: `ECOMMERCE_PROMPT = { planner: 'business=ECOMMERCE: … weight_g กับ EQ/GTE/LTE …', answer: 'business=ECOMMERCE: ตอบจาก details/options …' }` }),
+    N('company', 0.4, 1, 'start', 'Company.productBusinessType', '+ productPresetCategories · เขียนโดย applyPreset', { f: P + 'attributes/product-attribute.service.ts:83', d: 'ค่า string (VarChar 30) ไม่ใช่ enum: ร้านเลือก preset ผ่าน POST /api/admin/products/attributes/presets/:type/apply ซึ่งล็อก preset แบบ exclusive บันทึก type + categories และเพิ่ม searchRevision ทุกสินค้าเมื่อค่าเปลี่ยน', out: `company { productBusinessType: 'ECOMMERCE' | null | <ค่าเก่า เช่น 'FASHION'>, productPresetCategories: string[] }`, db: 'R/W company' }),
+    N('registry', 4, 1, 'svc', 'BUSINESS_PRESETS (presets/index.ts)', 'registry ของธุรกิจที่เลือกได้ · ตอนนี้ { ECOMMERCE }', { f: P + 'attributes/presets/index.ts:9', d: 'ธุรกิจใหม่ = ไฟล์ preset ใหม่ + ลงทะเบียนที่นี่ ห้าม import ตรงจากที่อื่น ให้อ่านผ่าน catalog-fields.ts', out: `Readonly<Record<string, BusinessPreset>> = { ECOMMERCE: ECOMMERCE_PRESET }\nBUSINESS_TYPES = ['ECOMMERCE']` }),
+    N('noPreset', 0.3, 2, 'end', 'ไม่มี preset → 0 field', 'type = null / FASHION / HOTEL … ที่ไม่อยู่ใน registry', { oc: 'error' }),
+    N('catalogFields', 2.5, 2, 'dec', 'catalogFields(type, categories)', 'type อยู่ใน registry ? → parse + default + บังคับ VARIANT/ACTIVE', { f: P + 'search/catalog-fields.ts:43', d: 'อ่าน BUSINESS_PRESETS[type].fields แล้ว attributeDefinitionSchema.parse (เติม options [], valueAliases {}, unit null, required false, variantOption false, searchable true, aiVisible true) บังคับ scope VARIANT, status ACTIVE, categories = หมวดที่ร้านเลือก แล้วเรียง sortOrder → key; type ที่ไม่รู้จักได้ [] (ไม่ throw)', i: `(type: string | null, categories: readonly string[] = [])`, out: ECOM_FIELDS }),
+    N('promptRules', 6, 2, 'dec', 'businessPromptRules(type, purpose)', 'มี preset ? prompt ของ preset : undefined → GENERAL', { f: P + 'search/catalog-fields.ts:33', d: 'business-prompt.ts ใช้ค่านี้ ถ้า undefined ใช้ GENERAL_PRODUCT_PLANNER_RULES / ANSWER_RULES (จาก prompts/general.prompt.ts)', out: `string | undefined` }),
+    N('loadCtx', 2.5, 3, 'svc', 'loadCatalogContext / loadCatalogFields', 'อ่าน company ใน db/tx ที่ส่งมา → { businessType, fields }', { f: P + 'search/catalog-fields.ts:63', d: 'ทุกที่ที่ใช้ DB เรียกผ่านฟังก์ชันนี้ใน transaction ของตัวเอง (เช่น search RepeatableRead, catalog command) จึงเห็น preset เดียวกับข้อมูลที่อ่าน', i: `(db: TransactionClient | PrismaService, scope: { companyId })`, out: `{ businessType: string | null, fields: AttributeDefinition[] }`, db: 'R company' }),
+    N('metaCol', 5.2, 3, 'start', 'ProductVariant.meta (jsonb)', 'ค่าจริงของ field ธุรกิจ ต่อ variant', { f: P + 'variant-business.ts:6', d: 'variantAttributes(variant) คืนสำเนา meta ถ้าเป็น object (ไม่ใช่ array) ไม่งั้น {} ราคา/สต็อกไม่อยู่ใน meta (มีคอลัมน์ price และตาราง inventoryBalances)', out: `meta: ${META_BK_L}`, db: 'R productVariants.meta' }),
+    N('cForm', 0, 4, 'svc', 'ProductAttributeService.list / presets', 'ฟอร์ม admin: field + storage { object: meta, field }', { f: P + 'attributes/product-attribute.service.ts:46', out: `{ selectedType, categories, data: [{ …AttributeDefinition, storage: { object: 'meta', field: 'color' } }] }` }),
+    N('cValidate', 1, 4, 'dec', 'validateAttributeValues', 'key มีใน preset ? ACTIVE ? หมวดตรง ? ชนิดค่าถูก ? ไม่มี PII ? required ?', { f: P + 'attributes/utils/attribute-value.util.ts:25', d: 'ใช้ตอนสร้าง/แก้ variant (ผ่าน checked()/mergedMeta()) ค่าเก่าที่ key ไม่อยู่ใน preset หรือ ARCHIVED ถูกเก็บไว้ตามเดิม ค่าใหม่ต้องผ่าน checkValue ตาม type: TEXT ≤500 ไม่มี PII, NUMBER finite, BOOLEAN, SELECT ∈ options, MULTI_SELECT/TAGS list ≤30', out: `Record<string, unknown>  // meta ที่จะเขียน | BadRequestException { message: 'Invalid product fields', errors: string[] }` }),
+    N('cDoc', 2, 4, 'svc', 'buildProductDocument', 'label: value ของ field searchable → ข้อความที่ embed', { f: P + 'search/product-document.ts:53', d: 'เฉพาะ variant active, เรียง sku, ใช้ labelledAttributes(purpose searchable) label อยู่ในข้อความด้วย จึงเปลี่ยน label = hash เปลี่ยน = embed ใหม่ ราคา/สต็อกถูกตัดออกจาก description', out: `'{"name":"เสื้อยืด Basic Cotton",…,"variants":[{"sku":"TEE-BK-L","options":["แบรนด์: Basic","สี: ดำ","ขนาด / ไซส์: L","วัสดุ: cotton 100%","น้ำหนัก: 180 g",…]}]}'` }),
+    N('cPlanner', 3, 4, 'svc', 'ProductSearchService.plannerCatalog', 'storeFields + storeOptions พร้อมค่าจริงจาก meta (≤30/key)', { f: P + 'search/product-search.service.ts:176', d: 'SQL CROSS JOIN LATERAL jsonb_each_text(v.meta) เฉพาะ key ของ preset ที่ searchable + aiVisible ทำให้ planner แปลง "256" → "256GB" ได้ field ที่ไม่มีค่าจริงใช้ options ของ definition', out: `{ businessType: 'ECOMMERCE',\n  fields: [{ key: 'weight_g', label: 'น้ำหนัก', type: 'NUMBER', unit: 'g', operators: ['EQ','GTE','LTE'], values: ['180','650','980'] }, …],\n  options: [{ key: 'color', label: 'สี', values: ['ขาว','ดำ'] }, { key: 'size', label: 'ขนาด / ไซส์', values: ['L','M'] }],\n  categories: ['เสื้อยืด', 'กระเป๋า'] }`, db: 'R productVariants.meta, products.category' }),
+    N('cMatch', 4, 4, 'dec', 'matchesBusinessFields', 'options ทุกตัว + filters ทุกตัว ต้องจริงบน variant เดียวกัน', { f: P + 'business/business-match.ts:46', d: 'option: field ต้อง variantOption และ optionMatcher ตรง (ตัดคำนำหน้า สี/ไซส์, ช่องว่าง, ตัวพิมพ์, หน่วย, alias) · filter: NUMBER เทียบ Decimal (EQ/GTE/LTE), BOOLEAN ===, TAGS/MULTI_SELECT CONTAINS/NOT_CONTAINS, TEXT EQ หรือ CONTAINS · ค่าใน meta ไม่มี = ไม่ผ่าน', i: `(values = meta, category, plan { options, filters }, fields)`, out: `boolean` }),
+    N('cEvidence', 5, 4, 'svc', 'evidence(): details / options', 'labelledAttributes(aiVisible) จาก meta → ProductEvidence', { f: P + 'search/product-search.service.ts:583', d: 'field ที่ variantOption → options (สี ไซส์) ที่เหลือ → details (วัสดุ น้ำหนัก …) ค่าถูก format (list join, NUMBER + unit, BOOLEAN มี/ไม่มี)', out: `ProductEvidence {\n  options: [{ key: 'color', label: 'สี', value: 'ดำ' }, { key: 'size', label: 'ขนาด / ไซส์', value: 'L' }],\n  details: [{ key: 'brand', label: 'แบรนด์', value: 'Basic' }, { key: 'material', label: 'วัสดุ', value: 'cotton 100%' }, { key: 'weight_g', label: 'น้ำหนัก', value: '180 g' }, …]\n}` }),
+    N('cPrompt', 7, 4, 'svc', 'buildProductPlannerPrompt / AnswerPrompt', 'business wording + storeFields/storeOptions', { f: KP + 'utils/prompt/product-prompt.ts:18', out: `systemInstruction = businessPrompt(type) + กฎ planner + catalog / storeOptions / storeFields / storeCategories (JSON)` }),
+    N('xForm', 0, 5, 'end', 'admin เห็นฟอร์ม field', 'GET /api/admin/products/attributes', { oc: 'reply' }),
+    N('xWrite', 1, 5, 'end', 'meta ที่ผ่านแล้ว → DB', 'productVariants.meta', { oc: 'reply' }),
+    N('x400', 2.2, 5, 'end', '400 Invalid product fields', 'errors[] ระบุ key', { oc: 'error' }),
+    N('xVector', 3.4, 5, 'end', 'document → embedding', 'แท็บ 4', { oc: 'pass' }),
+    N('llmCall', 6, 5, 'llm', 'LLM planner / answer', 'ได้ field + evidence จาก meta', { tag: 'LLM', d: 'planner เลือกได้เฉพาะ key ใน storeOptions/storeFields (ตรวจซ้ำหลังตอบ) answer model เห็น productEvidence (details/options) และใช้ token {{e1.attr.material}} / {{e1.opt.color}} / {{e1.opts.color}}', out: `{ decision: 'ANSWER', answerTemplate: '{{e1.name}} {{e1.opt.color}} ราคา {{e1.price}}', evidenceIds: ['PRODUCT:v-bk-l'] }` }),
+    N('cGround', 6, 6, 'dec', 'proseStatesOptionValue', 'ข้อความนอก token พูดค่าตัวเลือกเอง ("สีขาว") ?', { f: KP + 'product-answer.grounding.ts:112', d: 'ใช้ catalogFields(businessType ใน snapshot) ดึง option field ทั้ง options และ valueAliases (เช่น ขาว/white/สีขาว) ถ้า prose มีค่าที่ลูกค้าไม่ได้เลือกและไม่ใช่ส่วนชื่อสินค้า → ไม่ผ่าน ร้านที่ไม่มี preset จะไม่มีรายการ alias ให้ตรวจ', out: `boolean` }),
+    N('xReply', 5.2, 7, 'end', 'คำตอบถึงลูกค้า', 'ค่าทุกตัวมาจาก token ของ DB', { oc: 'reply' }),
+    N('xReject', 6.8, 7, 'end', 'ไม่ผ่าน → safeProductAnswer', 'แสดง facts จาก DB แทน', { oc: 'ask' }),
+  ],
+  edges: [
+    E('presetFile', 'registry', 'fields'), E('promptFile', 'registry', 'prompt'),
+    E('registry', 'catalogFields', 'BUSINESS_PRESETS[type]'), E('company', 'catalogFields', 'type + categories'),
+    E('catalogFields', 'noPreset', 'ไม่อยู่ใน registry'), E('registry', 'promptRules'), E('company', 'promptRules', 'type', { lp: 0.75 }),
+    E('catalogFields', 'loadCtx', 'fields'),
+    E('loadCtx', 'cForm'), E('loadCtx', 'cValidate'), E('loadCtx', 'cDoc'), E('loadCtx', 'cPlanner'), E('loadCtx', 'cMatch'), E('loadCtx', 'cEvidence'),
+    E('metaCol', 'cDoc', 'อ่าน'), E('metaCol', 'cPlanner', 'jsonb_each_text'), E('metaCol', 'cMatch', 'ค่า variant'), E('metaCol', 'cEvidence', 'ค่า variant'),
+    E('promptRules', 'cPrompt'),
+    E('cForm', 'xForm'), E('cValidate', 'xWrite', 'ผ่าน'), E('cValidate', 'x400', 'ไม่ผ่าน'), E('cDoc', 'xVector'),
+    E('cPlanner', 'cPrompt', 'storeFields / storeOptions'), E('cMatch', 'cEvidence', 'variant ที่ match'),
+    E('cPrompt', 'llmCall'), E('cEvidence', 'llmCall', 'productEvidence'),
+    E('llmCall', 'cGround', 'answerTemplate'), E('cGround', 'xReply', 'ผ่าน'), E('cGround', 'xReject', 'พูดค่าเอง'),
+  ],
+  events: [],
+};
+const FIELDS_OUT = ['catalogFields', `BUSINESS_PRESETS['ECOMMERCE'] พบ → parse ทั้ง 12 field\n${ECOM_FIELDS}`];
+const CTX_OUT = ['loadCtx', `company.findUnique({ id: 'co-1…' }) → { productBusinessType: 'ECOMMERCE', productPresetCategories: [] }\n→ { businessType: 'ECOMMERCE', fields: AttributeDefinition[12] }`];
+const CO = (t = 'ECOMMERCE') => ['company', `company { id: 'co-1…', productBusinessType: ${q(t)}, productPresetCategories: [] }`];
+META.events.push(
+  { id: 'm-form', g: 'อ่าน preset', t: 'admin เปิดฟอร์มสินค้า', ex: 'GET /api/admin/products/attributes', oc: 'reply', llm: 0,
+    p: [CO(), FIELDS_OUT, CTX_OUT, ['cForm', `fields.filter(scope?, category?).map(withStorage)\n→ { selectedType: 'ECOMMERCE', categories: [], data: [\n  { key: 'brand', label: 'แบรนด์', type: 'TEXT', …, storage: { object: 'meta', field: 'brand' } },\n  { key: 'color', label: 'สี', variantOption: true, valueAliases: {…}, storage: { object: 'meta', field: 'color' } }, … ] }`], ['xForm', `ฟอร์มสร้าง input ตาม type: TEXT → text, NUMBER → number + unit, TAGS → chips; ค่าทั้งหมดส่งกลับใน variants[].meta`]] },
+  { id: 'm-write', g: 'เขียน meta', t: 'บันทึก meta ของ variant', ex: 'variant TEE-BK-L meta สี/ไซส์/วัสดุ/น้ำหนัก', oc: 'reply', llm: 0,
+    p: [CO(), FIELDS_OUT, CTX_OUT, ['cValidate', `validateAttributeValues({ scope: 'VARIANT', category: 'เสื้อยืด', enforceRequired: true,\n  values: ${META_BK_L} })\nทุก key มีใน preset · TEXT ไม่มี PII · weight_g number · features list → ผ่าน`], ['xWrite', `productVariant.create({ data: { sku: 'TEE-BK-L', price: '290.00', meta: ${META_BK_L} } })`]] },
+  { id: 'm-write-bad', g: 'เขียน meta', t: 'key ไม่อยู่ใน preset', ex: "meta { gpu: 'RTX 5090' } ในร้าน ECOMMERCE", oc: 'error', llm: 0, note: 'นี่คือสาเหตุที่ product.json (สเปกคอม gpu/vram_gb/ram_gb …) สร้างไม่ผ่าน ต้องมี preset ที่ประกาศ key เหล่านั้นก่อน',
+    p: [CO(), FIELDS_OUT, CTX_OUT, ['cValidate', `values: { gpu: 'RTX 5090', vram_gb: 32 }\nbyKey.get('gpu') → undefined → errors.push('gpu: no such variant field')`], ['x400', `BadRequestException { message: 'Invalid product fields', errors: ['gpu: no such variant field', 'vram_gb: no such variant field'] }`]] },
+  { id: 'm-legacy', g: 'อ่าน preset', t: 'ร้านยังเป็นธุรกิจเก่า', ex: "productBusinessType = 'FASHION' (ก่อน apply ECOMMERCE)", oc: 'error', llm: 0, risk: 'ทุกจุดได้ fields = [] → เขียน meta ไม่ได้, document ไม่มี field, planner ไม่มี storeOptions, AI ไม่เห็น details/options ต้อง apply ECOMMERCE หลัง deploy',
+    p: [CO('FASHION'), ['catalogFields', `BUSINESS_PRESETS['FASHION'] → undefined → []`], ['noPreset', `fields = [] · businessPromptRules('FASHION') → undefined → GENERAL rules\nค่าใน meta ยังอยู่ แต่ไม่มีใครอ่าน`]] },
+  { id: 'm-doc', g: 'อ่าน meta', t: 'meta → document สำหรับ embedding', ex: 'สร้าง/แก้สินค้า ขณะ PRODUCT_SEMANTIC_ENABLED', oc: 'pass', llm: 0,
+    p: [CO(), FIELDS_OUT, CTX_OUT, ['cDoc', `labelledAttributes(fields, 'VARIANT', meta, 'searchable')\n→ ['แบรนด์: Basic', 'สี: ดำ', 'ขนาด / ไซส์: L', 'วัสดุ: cotton 100%', 'น้ำหนัก: 180 g', 'คุณสมบัติเด่น: ระบายอากาศ']\ndocument = redactPii(JSON.stringify({ name, aliases, description (ตัดราคา/สต็อก), category, variants: [{ sku, options }] }))`], ['xVector', `productIndexJob { document, contentHash: sha256(document), searchRevision } → แท็บ 4`]] },
+  { id: 'm-planner', g: 'อ่าน meta', t: 'meta → planner รู้ว่าร้านมีตัวเลือกอะไร', ex: 'ลูกค้า: “มีเสื้อยืดสีขาวไซส์ M ไหม”', oc: 'pass', llm: 1,
+    p: [CO(), FIELDS_OUT, CTX_OUT, ['cPlanner', `SELECT e.key, array_agg(DISTINCT e.value)[1:30] FROM products p JOIN "productVariants" v … CROSS JOIN LATERAL jsonb_each_text(v.meta) e\n  WHERE e.key = ANY(['brand','tags','model','color','size',…]) GROUP BY e.key\n→ storeOptions = [{ key: 'color', label: 'สี', values: ['ขาว','ดำ'] }, { key: 'size', label: 'ขนาด / ไซส์', values: ['L','M'] }]`], ['cPrompt', `buildProductPlannerPrompt({ businessType: 'ECOMMERCE', storeFields, storeOptions, storeCategories, catalog: probe, presentedRefs })`], ['llmCall', `planner → { mode: 'PRODUCT', query: 'เสื้อยืด', options: [{ key: 'color', value: 'ขาว' }, { key: 'size', value: 'M' }], asks: ['STOCK'] }\nตรวจ: ทุก option key ∈ storeOptions ✓`]] },
+  { id: 'm-answer', g: 'อ่าน meta', t: 'meta → evidence → LLM → ลูกค้า', ex: 'เสื้อยืด Basic สีดำไซส์ L ราคาเท่าไหร่', oc: 'reply', llm: 2,
+    p: [CO(), FIELDS_OUT, CTX_OUT, ['cMatch', `variant TEE-BK-M meta.size 'M' ≠ 'L' → ✗\nvariant TEE-BK-L: optionMatcher(color).matches('ดำ', 'ดำ') ✓ · size 'L' ✓ → ✓`], ['cEvidence', `ProductEvidence { ref: 'PRODUCT:v-bk-l', name: 'เสื้อยืด Basic Cotton', sku: 'TEE-BK-L', price: '290.00',\n  options: [{ key: 'color', label: 'สี', value: 'ดำ' }, { key: 'size', label: 'ขนาด / ไซส์', value: 'L' }],\n  details: [{ key: 'brand', label: 'แบรนด์', value: 'Basic' }, { key: 'material', label: 'วัสดุ', value: 'cotton 100%' }, …] }`], ['llmCall', `answer → { decision: 'ANSWER', directlyAnswered: true,\n  answerTemplate: '{{e1.name}} {{e1.opt.color}} ไซส์ {{e1.opt.size}} ราคา {{e1.price}} ค่ะ', evidenceIds: ['PRODUCT:v-bk-l'] }`], ['cGround', `prose นอก token: ' ไซส์  ราคา  ค่ะ' → ไม่มีค่าตัวเลือก → ผ่าน`], ['xReply', `"เสื้อยืด Basic Cotton ดำ ไซส์ L ราคา 290.00 บาท ค่ะ"`]] },
+  { id: 'm-guard', g: 'อ่าน meta', t: 'LLM พิมพ์สีเอง → ถูกตีกลับ', ex: 'template “{{e1.name}} สีขาว ราคา {{e1.price}}” แต่ evidence เป็นสีดำ', oc: 'ask', llm: 2,
+    p: [CO(), FIELDS_OUT, CTX_OUT, ['cMatch', `plan.options = [{ key: 'size', value: 'L' }] → TEE-BK-L ✓`], ['cEvidence', `options: [สี: ดำ, ขนาด / ไซส์: L]`], ['llmCall', `answerTemplate: '{{e1.name}} สีขาว ราคา {{e1.price}} ค่ะ'`], ['cGround', `groups จาก colorField: ['ขาว','white','สีขาว', …] · ลูกค้าไม่ได้เลือกสีขาว · ไม่ใช่ชื่อสินค้า → true (ไม่ผ่าน)`], ['xReject', `renderProductAnswer → undefined → safeProductAnswer (ข้อเท็จจริงจาก DB)`]] },
+  { id: 'm-prompt', g: 'อ่าน preset', t: 'prompt ตามธุรกิจ', ex: 'business=ECOMMERCE wording ใน planner/answer', oc: 'pass', llm: 1,
+    p: [['presetFile', `ECOMMERCE_PRESET.prompt = ECOMMERCE_PROMPT`], ['registry', `BUSINESS_PRESETS.ECOMMERCE`], ['promptRules', `isBusinessType('ECOMMERCE') → BUSINESS_PRESETS.ECOMMERCE.prompt.planner`], ['cPrompt', `'business=ECOMMERCE: ค้นสินค้าจากชื่อ/aliases/category/SKU ก่อน แล้วใช้ color และ size … weight_g กับ EQ/GTE/LTE …'\n+ กฎ planner กลาง + ข้อมูลร้าน`], ['llmCall', `ProductPlan (zod productPlannerSchema)`]] },
+  { id: 'm-new', g: 'เพิ่มธุรกิจ', t: 'เพิ่ม preset ใหม่ (ตัวอย่าง IT/คอมพิวเตอร์)', ex: 'it.preset.ts: gpu, vram_gb, ram_gb, socket …', oc: 'pass', llm: 0, note: 'ไม่ต้องแก้ schema/search/index: เพิ่ม 2 ไฟล์ + 1 บรรทัด registry แล้ว apply preset (bump searchRevision → re-embed ทั้งร้าน)',
+    p: [['presetFile', `// attributes/presets/it.preset.ts\nexport const IT_PRESET: BusinessPreset = { label: 'คอมพิวเตอร์ / IT', prompt: IT_PROMPT, fields: [\n  brandField, tagsField,\n  { key: 'gpu', label: 'ชิปกราฟิก', scope: 'VARIANT', type: 'TEXT', sortOrder: 3 },\n  { key: 'vram_gb', label: 'หน่วยความจำการ์ดจอ', scope: 'VARIANT', type: 'NUMBER', unit: 'GB', sortOrder: 4 },\n  { key: 'storage', label: 'ความจุ', scope: 'VARIANT', type: 'TEXT', variantOption: true, sortOrder: 11 }, … ] }`], ['registry', `BUSINESS_PRESETS = { ECOMMERCE: ECOMMERCE_PRESET, IT: IT_PRESET }  // BUSINESS_TYPES ได้ 'IT' อัตโนมัติ`], ['catalogFields', `catalogFields('IT') → AttributeDefinition[] ของ IT\n(apply: POST …/presets/IT/apply → company.productBusinessType = 'IT', searchRevision++ ทุกสินค้า)`], CTX_OUT, ['cValidate', `meta { gpu: 'RTX 5090', vram_gb: 32 } → ผ่าน`], ['xWrite', `บันทึกได้ · planner/search/evidence เห็น gpu, vram_gb ทันที`]] },
+);
+
+/* ===================== VIEW 2 · catalog write ===================== */
+const W_CREATE_BODY = `POST /api/admin/products  (Idempotency-Key: 7f1c…  หรือ requestId ใน body)\n{ name: 'เสื้อยืด Basic Cotton', aliases: ['เสื้อยืด Basic'], category: 'เสื้อยืด', status: 'ACTIVE',\n  description: 'เสื้อยืดคอกลม ผ้าฝ้าย',\n  variants: [\n    { sku: 'TEE-BK-L', price: '290.00', meta: ${META_BK_L} },\n    { sku: 'TEE-WH-M', price: '290.00', meta: { brand: 'Basic', color: 'ขาว', size: 'M' } } ] }`;
+const wPre = (body, svc, svcOut) => [
+  ['admin', body],
+  ['guard', `AdminJwtAuthGuard → request.admin = { id: 'ad-1…', role: 'admin', companyId: 'co-1…' }\nAdminRolesGuard: ['owner','admin','dev'] ✓`],
+  ['ctrl', `Idempotency-Key เป็น UUID และ (ถ้ามี) ตรงกับ body.requestId ✓`],
+  ['scope', `features.assertCatalogEnabled() ✓ (PRODUCT_ENABLED=true)\ncommerceScopes.forAdmin(admin) → { companyId: 'co-1…' }`],
+  ['dto', `nestjs-zod: schema ผ่าน · meta key ตรง /^[a-z][a-z0-9_]{0,49}$/ และ isSafeAttributeKey ✓ · ≤50 keys`],
+  [svc, svcOut],
+];
+const cmdNew = (action) => ['cmd', `tx: adminMember ของบริษัทนี้ ✓\npg_advisory_xact_lock('catalog:co-1…:7f1c…')\nproductCatalogCommand ไม่มี requestId นี้ → create { action: '${action}', fingerprint: sha256(canonicalJson({ action, input, scope })), result: {} }`];
+const wTail = (writeOut, idx = true, resp = 'HTTP 201 catalogView(product)') => [
+  ['write', writeOut],
+  ['searchDec', idx ? `searchChanged = true · productSemanticEnabled = true → index` : `searchChanged = false → ไม่ enqueue`],
+  ...(idx ? [['enqueue', `enqueueProductIndex(tx, productId, 'co-1…', 'gemini-embedding-2')\n→ productIndexJob.upsert({ productId_searchRevision_embeddingModel }) PENDING`]] : []),
+  ['cmdDone', `view(tx) → catalogView · productCatalogCommand.update({ result: <JSON ของ view> }) · COMMIT`],
+  ['resp', resp],
+];
+const CATALOG = {
+  id: 'catalog', num: '2', title: 'Admin เขียนสินค้า',
+  intro: 'ทุกการเขียน catalog (สร้าง/แก้สินค้า, เพิ่ม/แก้ variant, archive, bulk) ผ่าน controller → scope → zod DTO → ProductCommandService.execute ซึ่งเป็น transaction เดียวที่ idempotent ด้วย requestId แล้วจึงล็อก ตรวจกฎ ตรวจ meta กับ preset เขียน DB และ enqueue งาน index ใน transaction เดียวกัน (ไม่มี network call ใน tx)',
+  nodes: [
+    N('admin', 3, 0, 'start', 'Admin API', 'POST/PATCH/DELETE /api/admin/products/…', { f: SRC + 'admin/product/admin-product.controller.ts:61', d: 'POST / (create) · POST /bulk (dev) · PATCH /:id · DELETE /:id (archive) · POST /:id/variants · PATCH /:id/variants/:variantId · (stock อยู่แท็บ 3)' }),
+    N('guard', 3, 1, 'dec', 'AdminGuard owner/admin/dev', 'JWT ถูกต้อง ? role อยู่ในรายการ ?', { f: 'src/shared/guards/admin-roles.guard.ts:18', d: 'class ใช้ @AdminGuard(owner, admin, dev) · /bulk override เป็น dev อย่างเดียว ด้วย SetMetadata(ADMIN_ROLES_KEY) (getAllAndOverride: handler ก่อน class)' }),
+    N('x401', 5.6, 1, 'end', '401 / 403', 'ไม่มี JWT / role ไม่พอ', { oc: 'error' }),
+    N('ctrl', 3, 2, 'dec', 'AdminProductController', 'Idempotency-Key เป็น UUID ? ตรง requestId ?', { f: SRC + 'admin/product/admin-product.controller.ts:61', d: 'create: header แทน requestId ได้ · bulk: ห้ามส่ง header (แต่ละ item มี requestId ของตัวเอง) · route อื่นต้องมี requestId ใน body', out: `body (ยังไม่ parse ลึก) + request.admin` }),
+    N('x400Key', 5.6, 2, 'end', '400 Idempotency-Key', 'ไม่ใช่ UUID / ไม่ตรง requestId', { oc: 'error' }),
+    N('scope', 3, 3, 'dec', 'scope + feature flag', 'PRODUCT_ENABLED ? company ของ admin มีจริง ?', { f: SRC + 'commerce/commerce-scope.service.ts:18', d: 'assertCatalogEnabled → 403 ถ้าปิด · forAdmin: admin มี companyId → ใช้ค่านั้น; legacy admin (companyId null) → COMMERCE_LEGACY_ADMIN_COMPANY_ID หรือบริษัทเดียวในระบบ', out: `CommerceScope { companyId }` }),
+    N('x403', 5.6, 3, 'end', '403 / 503', 'catalog ปิด / company ไม่ชัด', { oc: 'error' }),
+    N('dto', 3, 4, 'dec', 'Zod DTO (edge)', 'รูปแบบ · เงินเป็น decimal string · meta key ปลอดภัย', { f: P + 'dto/product.dto.ts:20', d: 'productMoneySchema ไม่รับ float · sku [\\p{L}\\p{N}._-] · variants ≤50 sku ไม่ซ้ำ · ACTIVE ต้องมี variant active · meta: key ตาม ATTRIBUTE_KEY_PATTERN และ isSafeAttributeKey (ห้าม key สงวน และคำ price/stock/onhand/qty/phone/email/…) ≤50 keys · PATCH meta รับ null เพื่อลบ', out: `CreateProductDto | UpdateProductDto | CreateProductVariantDto | UpdateProductVariantDto | DeleteProductDto | BulkCreateProductDto` }),
+    N('x400Dto', 5.6, 4, 'end', '400 validation', 'zod error · key ต้องห้าม', { oc: 'error' }),
+    N('sBulk', 0, 5, 'svc', 'AdminProductService.createMany', 'dev · ≤50 items · ทีละ item ไม่ rollback กัน', { f: SRC + 'admin/product/admin-product.service.ts:43', d: 'วนเรียก ProductService.create ทีละตัว HttpException → failed[] พร้อม message; error อื่น → log + "Create failed"', out: `{ created: CatalogView[], failed: { index, name, reason }[] }` }),
+    N('sCreate', 1.2, 5, 'svc', 'ProductService.create', 'CREATE_PRODUCT · product + variants + inventoryBalance', { f: P + 'product.service.ts:107', d: 'ไม่ส่ง variants → สร้าง V-{requestId} ราคา null · trackStock → สร้าง inventoryBalance onHand 0 · index ทุกครั้ง (ถ้า semantic เปิด)' }),
+    N('sUpdate', 2.4, 5, 'svc', 'ProductService.update', 'UPDATE_PRODUCT · name/aliases/description/category/language/status', { f: P + 'product.service.ts:169' }),
+    N('sArchive', 3.6, 5, 'svc', 'AdminProductService.remove', 'DELETE = update status ARCHIVED (ไม่ลบแถว)', { f: SRC + 'admin/product/admin-product.service.ts:79', d: 'เก็บ inventory movements, command history และ vector ownership' }),
+    N('sVarCreate', 4.8, 5, 'svc', 'ProductService.createVariant', 'CREATE_VARIANT · expectedProductVersion', { f: P + 'product.service.ts:244' }),
+    N('sVarUpdate', 6, 5, 'svc', 'ProductService.updateVariant', 'UPDATE_VARIANT · meta แบบ merge', { f: P + 'product.service.ts:302' }),
+    N('cmd', 3, 6, 'dec', 'ProductCommandService.execute', 'tx: actor ของบริษัท ? · advisory lock requestId · command เดิม ?', { w: 7, bus: true, f: P + 'product-command.service.ts:18', d: 'fingerprint = sha256(canonicalJson({ action, input, scope })) · command เดิม + fingerprint ตรง → คืน result เดิม (replay) · fingerprint ต่าง → 409 · P2002 ใน tx → 409 SKU ซ้ำ', i: `(scope, actorAdminId, requestId, action, input, mutate(tx, commandId))`, out: `T (result ที่ serialize แล้ว) — เก็บใน productCatalogCommand.result`, db: 'W productCatalogCommands (unique companyId + requestId)' }),
+    N('locks', 3, 7, 'dec', 'locks + version', 'lockProductPreset(shared) · lockProduct FOR UPDATE · expectedVersion ตรง ?', { f: P + 'product-lock.ts:9', d: 'preset lock แบบ shared กัน applyPreset (exclusive) เปลี่ยน field ระหว่างเขียน · lockProduct ล็อกแถว products ก่อนแตะ variant/balance · product.revision / variant.version ต้องตรง expected (optimistic)', db: 'advisory lock attributes:{companyId} · SELECT … FOR UPDATE products' }),
+    N('xReplay', 5.6, 7, 'end', 'replay → result เดิม', 'requestId เดิม + body เดิม · ไม่เขียนซ้ำ', { oc: 'reply' }),
+    N('xReqConflict', 7.2, 7, 'end', '409 requestId ใช้แล้ว', 'requestId เดิมแต่ body ต่าง', { oc: 'error' }),
+    N('rules', 3, 8, 'dec', 'กฎธุรกิจ', 'compareAtPrice > price · ACTIVE ต้องมี variant active · trackStock เปลี่ยนตอนมี reserved ?', { f: P + 'product-pricing.ts:5', d: 'assertProductPricing · ห้ามปิด variant active ตัวสุดท้ายของสินค้า ACTIVE · เปลี่ยน trackStock ไม่ได้ถ้า reserved > 0 · เปิด trackStock แล้วยังไม่มี balance → สร้าง' }),
+    N('x409Ver', 5.6, 8, 'end', '409 version changed', 'expectedVersion เก่า', { oc: 'error' }),
+    N('metaCheck', 3, 9, 'dec', 'checked() / mergedMeta()', 'loadCatalogFields(tx) → validateAttributeValues', { f: P + 'product.service.ts:460', d: 'create/createVariant: values = meta ที่ส่ง, enforceRequired · updateVariant: mergedMeta = stored − key ที่เป็น null + active stored + patch แล้ว validate ทั้งก้อน (required ยังบังคับ) · update ที่เปลี่ยน category: re-check stored meta กับหมวดใหม่', out: `Prisma.InputJsonObject (meta ใหม่)` }),
+    N('x400Rule', 5.6, 9, 'end', '400 / 409 กฎธุรกิจ', 'ราคา · variant active สุดท้าย · reserved', { oc: 'error' }),
+    N('write', 3, 10, 'svc', 'เขียน DB', 'product / variant / inventoryBalance · revision++ · searchRevision++ ถ้าค้นหาเปลี่ยน', { d: 'searchChanged: product = name, aliases, description, category, language, status · variant = sku, meta, active (เทียบ JSON) · createVariant/create เปลี่ยนเสมอ', db: 'W products, productVariants, inventoryBalances' }),
+    N('x400Meta', 5.6, 10, 'end', '400 Invalid product fields', 'key ไม่มีใน preset · ชนิดผิด · PII · required', { oc: 'error' }),
+    N('searchDec', 3, 11, 'dec', 'searchChanged && semantic ?', 'ต้องสร้าง document ใหม่ ?', { f: P + 'product.service.ts:413' }),
+    N('x409Sku', 5.6, 11, 'end', '409 SKU ซ้ำ', 'P2002 unique (companyId, sku)', { oc: 'error' }),
+    N('enqueue', 1.8, 12, 'svc', 'enqueueProductIndex(tx)', 'job PENDING ต่อ (product, searchRevision, model)', { f: P + 'search/product-index-outbox.ts:6', out: `productIndexJob { productId, searchRevision, embeddingModel, document, contentHash, state: 'PENDING' }`, db: 'W productIndexJobs (outbox) → แท็บ 4' }),
+    N('cmdDone', 3, 13, 'svc', 'save result + COMMIT', 'catalogView → productCatalogCommand.result', { f: P + 'product.service.ts:429', out: `catalogView { …product, variants: [{ …variant, price: '290.00', meta, inventory: { onHand, reserved, available } | null, effectivePrice, discountAmount }] }` }),
+    N('resp', 3, 14, 'end', 'HTTP 200/201', 'catalogView ของสินค้า', { oc: 'reply' }),
+  ],
+  edges: [
+    E('admin', 'guard'), E('guard', 'x401', 'ไม่ผ่าน'), E('guard', 'ctrl', 'ผ่าน'),
+    E('ctrl', 'x400Key', 'header ผิด'), E('ctrl', 'scope'), E('scope', 'x403', 'ปิด / ไม่มีบริษัท'), E('scope', 'dto'),
+    E('dto', 'x400Dto', 'ไม่ผ่าน'), E('dto', 'sBulk', 'POST /bulk'), E('dto', 'sCreate', 'POST /'), E('dto', 'sUpdate', 'PATCH /:id'),
+    E('dto', 'sArchive', 'DELETE /:id'), E('dto', 'sVarCreate', 'POST variants'), E('dto', 'sVarUpdate', 'PATCH variant'),
+    E('sBulk', 'sCreate', 'ทีละ item'), E('sArchive', 'sUpdate', 'status ARCHIVED'),
+    E('sCreate', 'cmd'), E('sUpdate', 'cmd'), E('sVarCreate', 'cmd'), E('sVarUpdate', 'cmd'),
+    E('cmd', 'xReplay', 'command เดิม'), E('cmd', 'xReqConflict', 'fingerprint ต่าง'), E('cmd', 'locks', 'command ใหม่'),
+    E('locks', 'x409Ver', 'version ไม่ตรง'), E('locks', 'rules'),
+    E('rules', 'x400Rule', 'ผิดกฎ'), E('rules', 'metaCheck'),
+    E('metaCheck', 'x400Meta', 'ไม่ผ่าน'), E('metaCheck', 'write', 'ผ่าน'),
+    E('write', 'x409Sku', 'P2002'), E('write', 'searchDec'),
+    E('searchDec', 'enqueue', 'ใช่'), E('searchDec', 'cmdDone', 'ไม่'), E('enqueue', 'cmdDone'), E('cmdDone', 'resp'),
+  ],
+  events: [
+    { id: 'w-create', g: 'สร้าง / แก้', t: 'สร้างสินค้า 2 variants พร้อม meta', ex: 'เสื้อยืด Basic Cotton · TEE-BK-L, TEE-WH-M', oc: 'reply', llm: 0,
+      p: [...wPre(W_CREATE_BODY, 'sCreate', `ProductService.create → commands.execute('CREATE_PRODUCT', dto)`), cmdNew('CREATE_PRODUCT'), ['locks', `lockProductPreset(tx, scope, 'shared')  // สินค้าใหม่ยังไม่มีแถวให้ lockProduct`], ['rules', `assertProductPricing(variants): compareAtPrice ไม่ได้ส่ง ✓`], ['metaCheck', `definitions = loadCatalogFields(tx) → ECOMMERCE 12 fields\nchecked(defs, 'VARIANT', 'เสื้อยืด', { values: variant.meta }) ทีละ variant ✓`], ...wTail(`product.create { companyId, name, aliases, category, status: 'ACTIVE', revision: 1, searchRevision: 1 }\nproductVariant.create × 2 { sku, price, meta }\ninventoryBalance.create × 2 { onHand: 0, reserved: 0 }  // trackStock default true`)] },
+    { id: 'w-replay', g: 'Idempotency', t: 'กดบันทึกซ้ำ (requestId เดิม)', ex: 'เน็ตหลุดแล้ว UI ส่งซ้ำด้วย Idempotency-Key เดิม', oc: 'reply', llm: 0,
+      p: [...wPre(W_CREATE_BODY, 'sCreate', `commands.execute('CREATE_PRODUCT', dto เดิม)`), ['cmd', `advisory lock → productCatalogCommand { requestId: '7f1c…' } มีแล้ว\nfingerprint ตรง → return existing.result`], ['xReplay', `HTTP 201 ผลเดิม · ไม่มีสินค้า/variant ซ้ำ · ไม่ enqueue ใหม่`]] },
+    { id: 'w-reqconf', g: 'Idempotency', t: 'requestId เดิมแต่ข้อมูลต่าง', ex: 'ใช้ Idempotency-Key ซ้ำกับสินค้าอื่น', oc: 'error', llm: 0,
+      p: [...wPre(W_CREATE_BODY.replace('เสื้อยืด Basic Cotton', 'กระเป๋าเป้ Urban 20L'), 'sCreate', `commands.execute('CREATE_PRODUCT', dto ใหม่)`), ['cmd', `command '7f1c…' มีแล้ว แต่ fingerprint ต่าง`], ['xReqConflict', `ConflictException('Request ID was already used for a different catalog command')`]] },
+    { id: 'w-meta-unknown', g: 'meta', t: 'meta key ไม่อยู่ใน preset', ex: "variant meta { gpu: 'RTX 5090' }", oc: 'error', llm: 0, note: 'DTO ผ่าน (รูปแบบ key ถูก) แต่ service ตรวจกับ preset ไม่ผ่าน ทั้ง transaction rollback รวมแถว command',
+      p: [...wPre(`POST /api/admin/products { name: 'การ์ดจอ …', variants: [{ sku: 'GPU-1', meta: { gpu: 'RTX 5090', vram_gb: 32 } }] }`, 'sCreate', `commands.execute('CREATE_PRODUCT')`), cmdNew('CREATE_PRODUCT'), ['locks', `lockProductPreset shared`], ['rules', `pricing ✓`], ['metaCheck', `validateAttributeValues → errors ['gpu: no such variant field', 'vram_gb: no such variant field']`], ['x400Meta', `400 { message: 'Invalid product fields', errors: [...] } · ROLLBACK`]] },
+    { id: 'w-meta-sensitive', g: 'meta', t: 'meta key เป็นเงิน/สต็อก/PII', ex: 'meta { onhand: 5 } หรือ { cost_price: 100 }', oc: 'error', llm: 0, note: 'สต็อกต้องอยู่ใน inventoryBalances และราคาอยู่ในคอลัมน์ price เท่านั้น จึงเขียนเงื่อนไขแบบ meta.onhand ไม่ได้ (ดูแท็บคู่มือ)',
+      p: [['admin', `PATCH /api/admin/products/p-tee/variants/v-bk-l { requestId, expectedVersion: 1, expectedProductVersion: 3, meta: { onhand: 5 } }`], ['guard', `JWT ✓ role ✓`], ['ctrl', `ไม่มี header`], ['scope', `{ companyId: 'co-1…' }`], ['dto', `attributePatchValuesSchema: key 'onhand' → isSafeAttributeKey = false (SENSITIVE_KEY_WORDS มี 'onhand')`], ['x400Dto', `400 'Not a custom field key'`]] },
+    { id: 'w-patch-merge', g: 'meta', t: 'แก้ meta บางตัว (merge) และลบ key', ex: "PATCH meta { color: 'ขาว', features: null }", oc: 'reply', llm: 0,
+      p: [...wPre(`PATCH /api/admin/products/p-tee/variants/v-bk-l\n{ requestId: '91aa…', expectedVersion: 1, expectedProductVersion: 3, meta: { color: 'ขาว', features: null } }`, 'sVarUpdate', `commands.execute('UPDATE_VARIANT', { id, variantId, ...dto })`), cmdNew('UPDATE_VARIANT'), ['locks', `lockProductPreset shared · lockProduct(p-tee) FOR UPDATE · product.revision 3 ✓ · variant.version 1 ✓`], ['rules', `ไม่ได้ปิด variant · trackStock ไม่เปลี่ยน · assertProductPricing ✓`], ['metaCheck', `stored = ${META_BK_L}\nkept = stored − features (null)\nvalues = active kept + patch = { brand: 'Basic', color: 'ขาว', size: 'L', material: 'cotton 100%', weight_g: 180 }\nvalidate ทั้งก้อน ✓`], ...wTail(`productVariant.update({ where: { id, version: 1 }, data: { meta: {…merged}, version: 2 } })\nproduct.update { revision: 4, searchRevision: +1 }  // meta เปลี่ยน`, true, 'HTTP 200 catalogView')] },
+    { id: 'w-version', g: 'Concurrency', t: 'แก้พร้อมกัน 2 คน', ex: 'expectedVersion เป็นค่าเก่า', oc: 'error', llm: 0,
+      p: [...wPre(`PATCH /api/admin/products/p-tee { requestId: 'a1…', expectedVersion: 3, name: 'เสื้อยืด Basic Cotton 2' }`, 'sUpdate', `commands.execute('UPDATE_PRODUCT')`), cmdNew('UPDATE_PRODUCT'), ['locks', `lockProduct(p-tee) → revision = 4 (อีกคนบันทึกไปแล้ว) ≠ 3`], ['x409Ver', `409 'Product version changed' · ROLLBACK · UI โหลดใหม่แล้วส่งด้วย revision ล่าสุด`]] },
+    { id: 'w-price', g: 'กฎธุรกิจ', t: 'ราคาเดิม ≤ ราคาขาย', ex: "price '290.00', compareAtPrice '250.00'", oc: 'error', llm: 0,
+      p: [...wPre(`POST /api/admin/products/p-tee/variants { requestId, expectedProductVersion: 3, sku: 'TEE-RD-L', price: '290.00', compareAtPrice: '250.00', meta: { color: 'แดง', size: 'L' } }`, 'sVarCreate', `commands.execute('CREATE_VARIANT')`), cmdNew('CREATE_VARIANT'), ['locks', `preset shared · lockProduct ✓ · revision 3 ✓`], ['rules', `assertProductPricing: compareAtPrice 250 ไม่มากกว่า 290`], ['x400Rule', `400 'compareAtPrice requires a selling price and must be greater than it'`]] },
+    { id: 'w-category', g: 'สร้าง / แก้', t: 'เปลี่ยนหมวดสินค้า', ex: "PATCH category 'เสื้อยืด' → 'เสื้อ'", oc: 'reply', llm: 0, note: 'ถ้าร้านจำกัดหมวด (productPresetCategories) และหมวดใหม่ไม่อยู่ในรายการ meta เดิมจะไม่ผ่าน (not used for category)',
+      p: [...wPre(`PATCH /api/admin/products/p-tee { requestId, expectedVersion: 3, category: 'เสื้อ' }`, 'sUpdate', `commands.execute('UPDATE_PRODUCT')`), cmdNew('UPDATE_PRODUCT'), ['locks', `preset shared · lockProduct · revision ✓`], ['rules', `ACTIVE มี variant active ✓ · pricing ✓`], ['metaCheck', `category เปลี่ยน → ทุก variant: checked(defs, 'VARIANT', 'เสื้อ', { stored: meta }) ✓`], ...wTail(`product.update { category: 'เสื้อ', revision: 4, searchRevision: +1 }`, true, 'HTTP 200 catalogView')] },
+    { id: 'w-archive', g: 'สร้าง / แก้', t: 'ลบสินค้า (archive)', ex: 'DELETE /api/admin/products/p-bag', oc: 'reply', llm: 0, note: 'index worker เห็น status ≠ ACTIVE จึงทำ job เป็น SUPERSEDED; search กรอง status ACTIVE จึงไม่โผล่ในแชตทันทีหลัง commit',
+      p: [...wPre(`DELETE /api/admin/products/p-bag { requestId: 'd4…', expectedVersion: 2 }`, 'sArchive', `DeleteProductDto.parse → products.update(scope, actor, id, { requestId, expectedVersion, status: 'ARCHIVED' })`), ['sUpdate', `commands.execute('UPDATE_PRODUCT', { id, status: 'ARCHIVED' })`], cmdNew('UPDATE_PRODUCT'), ['locks', `preset shared · lockProduct · revision 2 ✓`], ['rules', `status ARCHIVED → ไม่ต้องมี variant active`], ['metaCheck', `category ไม่เปลี่ยน → ไม่ตรวจ meta`], ...wTail(`product.update { status: 'ARCHIVED', revision: 3, searchRevision: +1 }`, true, 'HTTP 200 catalogView (status ARCHIVED)')] },
+    { id: 'w-bulk', g: 'สร้าง / แก้', t: 'bulk create (dev)', ex: 'POST /bulk 2 items: item 2 SKU ซ้ำ', oc: 'reply', llm: 0, note: 'แต่ละ item เป็น command แยก: item 1 สำเร็จแม้ item 2 ล้ม · ถ้า item ไม่มี requestId ระบบสุ่มให้ การส่ง request เดิมซ้ำจึงไม่ replay (สร้างซ้ำหรือชน SKU)',
+      p: [['admin', `POST /api/admin/products/bulk  (role dev)\n[ { requestId: 'b1…', name: 'เสื้อยืด Basic Cotton', variants: [{ sku: 'TEE-BK-L', … }] },\n  { requestId: 'b2…', name: 'เสื้อยืด Basic Cotton (ซ้ำ)', variants: [{ sku: 'TEE-BK-L', … }] } ]`], ['guard', `SetMetadata(ADMIN_ROLES_KEY, ['dev']) override class roles → role 'dev' ✓`], ['ctrl', `ห้ามมี Idempotency-Key header ✓`], ['scope', `{ companyId: 'co-1…' }`], ['dto', `BulkCreateProductDto: 1..50 × createProductSchema ✓`], ['sBulk', `for item of items: try products.create(item) catch → failed.push`], ['sCreate', `item 2: commands.execute('CREATE_PRODUCT', { requestId: 'b2…' })`], cmdNew('CREATE_PRODUCT'), ['locks', `preset shared`], ['rules', `pricing ✓`], ['metaCheck', `meta ✓`], ['write', `productVariant.create sku 'TEE-BK-L' → unique (companyId, sku) ชน`], ['x409Sku', `P2002 → ConflictException('Product or variant SKU already exists in this company')\nbulk result: { created: [item 1], failed: [{ index: 1, name, reason: 'Product or variant SKU already exists…' }] }`]] },
+    { id: 'w-disabled', g: 'สิทธิ์ / flag', t: 'catalog ถูกปิด', ex: 'PRODUCT_ENABLED=false', oc: 'error', llm: 0,
+      p: [['admin', W_CREATE_BODY], ['guard', `JWT ✓`], ['ctrl', `header ✓`], ['scope', `features.assertCatalogEnabled() → ForbiddenException('Product catalog is disabled')`], ['x403', `403 · ไม่มีการเขียน`]] },
+  ],
+};
+
+/* ===================== VIEW 3 · stock ===================== */
+const STOCK_BODY = (delta, ver = 3) => `POST /api/admin/products/p-tee/variants/v-wh-m/stock-adjustments\n{ requestId: 'c9…', expectedVersion: ${ver}, deltaOnHand: ${delta}, reason: ${q(delta > 0 ? 'รับของเข้า' : 'ขายหน้าร้าน')} }`;
+const sPre = (delta, ver) => [
+  ['admin', STOCK_BODY(delta, ver)],
+  ['gate', `AdminGuard ✓ · assertCatalogEnabled ✓ · forAdmin → { companyId }\nAdjustProductStockDto: deltaOnHand int ≠ 0, reason 1..500 ✓`],
+  ['cmd', `commands.execute('ADJUST_STOCK', { productId, variantId, ...dto }) · command ใหม่`],
+  ['lock', `lockProduct(tx, scope, 'p-tee') → SELECT … FROM products FOR UPDATE ✓`],
+  ['variantChk', `productVariant.findFirst({ id: 'v-wh-m', productId: 'p-tee', companyId }) ✓ · trackStock = true ✓`],
+];
+const STOCK = {
+  id: 'stock', num: '3', title: 'สต็อก',
+  intro: 'สต็อกไม่อยู่ใน meta: InventoryBalance (onHand, reserved, version) ต่อ variant และ InventoryMovement เป็น audit ที่แก้ไม่ได้ การปรับสต็อกเป็น catalog command (idempotent) ที่ล็อก product → balance FOR UPDATE ตรวจ version และห้าม onHand ต่ำกว่า reserved ฝั่งแชตอ่านสต็อกสดจาก DB ทุกครั้งที่ค้นสินค้า การเปลี่ยนสต็อกไม่ทำให้ re-embed เพราะ document ไม่มีสต็อก กล่องเส้นประคือจุดต่อขยายที่ยังไม่มีในโค้ด',
+  nodes: [
+    N('admin', 2, 0, 'start', 'POST …/stock-adjustments', 'AdminProductController.adjustStock', { f: SRC + 'admin/product/admin-product.controller.ts:157' }),
+    N('gate', 2, 1, 'dec', 'guard · flag · scope · DTO', 'deltaOnHand ≠ 0 · reason · expectedVersion', { f: P + 'dto/product.dto.ts:154', out: `AdjustProductStockDto { requestId: uuid, expectedVersion: int, deltaOnHand: int ≠ 0, reason: string ≤500 }` }),
+    N('xBad', 4.4, 1, 'end', '400 / 401 / 403', 'delta 0 · ไม่มีสิทธิ์ · catalog ปิด', { oc: 'error' }),
+    N('cmd', 2, 2, 'dec', 'execute(ADJUST_STOCK)', 'command เดิม ?', { f: P + 'product-command.service.ts:18', db: 'W productCatalogCommands' }),
+    N('xReplay', 4.4, 2, 'end', 'replay ผลเดิม', 'ไม่ปรับซ้ำ', { oc: 'reply' }),
+    N('lock', 2, 3, 'dec', 'lockProduct', 'products FOR UPDATE · มีสินค้า ?', { f: P + 'product-lock.ts:9', d: 'ลำดับล็อกเดียวกับ catalog writers (parent ก่อน) จึงไม่ deadlock กับการแก้ variant' }),
+    N('variantChk', 2, 4, 'dec', 'variant + trackStock', 'variant ของสินค้านี้ ? trackStock ?', { f: P + 'inventory.service.ts:19' }),
+    N('x404', 4.4, 3, 'end', '404 not found', 'product / variant / balance', { oc: 'error' }),
+    N('x409Track', 4.4, 4, 'end', '409 ไม่ติดตามสต็อก', 'trackStock = false', { oc: 'error' }),
+    N('balance', 2, 5, 'dec', 'balance FOR UPDATE', 'version === expectedVersion ?', { d: 'SELECT id, "onHand", reserved, version FROM "inventoryBalances" WHERE variantId AND companyId FOR UPDATE', db: 'R inventoryBalances (row lock)' }),
+    N('x409Ver', 4.4, 5, 'end', '409 Inventory version changed', 'มีคนปรับก่อน', { oc: 'error' }),
+    N('rule', 2, 6, 'dec', 'onHand + delta ≥ reserved ?', 'และ ≤ 2,147,483,647', { d: 'reserved คือจำนวนที่จองไว้ (ตอนนี้ยังไม่มี flow order ที่จอง จึงเป็น 0) available = onHand − reserved', out: `onHand ใหม่ | ConflictException('Stock adjustment would violate available inventory')` }),
+    N('x409Avail', 4.4, 6, 'end', '409 ต่ำกว่าที่จอง', 'ลดเกินของที่มี', { oc: 'error' }),
+    N('update', 2, 7, 'svc', 'update balance + movement', 'version+1 · movement append-only', { db: 'W inventoryBalances, inventoryMovements (operationKey unique, commandId unique)', out: `inventoryBalance { onHand, reserved, version+1 }\ninventoryMovement { deltaOnHand, onHandAfter, reservedAfter, reason, operationKey: 'product-stock:{companyId}:{requestId}' }` }),
+    N('result', 2, 8, 'svc', 'command.result + COMMIT', '{ …balance, available, movementId }', { out: `{ id, variantId, onHand, reserved, version, available, updatedAt, movementId }` }),
+    N('resp', 2, 9, 'end', 'HTTP 201', 'แสดงยอดใหม่', { oc: 'reply' }),
+    N('future', 4.4, 8, 'dec', 'จุดต่อขยาย: stock rule (ยังไม่มี)', 'หลัง COMMIT: available ≤ 0 ? ≤ เกณฑ์ ?', { d: 'ข้อเสนอ: เขียน outbox row ใน tx เดียวกับ update แล้วให้ worker แยกส่งแจ้งเตือน (ไม่เรียก LINE/Socket ใน tx) เงื่อนไขอ่าน inventoryBalances ไม่ใช่ meta', out: `StockEvent { variantId, availableBefore, availableAfter } → rule(available ≤ 0) → AdminNotification` }),
+    N('xAlert', 4.4, 9, 'end', 'แจ้งแอดมิน: สินค้าหมด (อนาคต)', 'AdminNotification / Socket.IO', { oc: 'handoff' }),
+    N('chatSearch', 7, 4, 'start', 'แชต: ProductSearchService.evidence', 'include inventory ทุกครั้งที่ค้น', { f: P + 'search/product-search.service.ts:583', d: 'อ่านใน RepeatableRead tx เดียวกับ product/variant ค่าเป็น snapshot ณ ตอนค้น' }),
+    N('stockState', 7, 5, 'dec', 'stock status', 'trackStock ? balance ? onHand > reserved ?', { out: `stock = !trackStock ? 'NOT_TRACKED' : !inventory ? 'UNKNOWN' : onHand > reserved ? 'IN_STOCK' : 'OUT_OF_STOCK'\npurchasable = price !== null && stock ∉ {UNKNOWN, OUT_OF_STOCK}` }),
+    N('inStock', 8.6, 6, 'dec', 'inStockOnly ?', 'ลูกค้าขอ “พร้อมส่ง/มีของ” (ไม่ใช่ DETAIL)', { f: P + 'search/product-plan-policy.ts:16', d: 'groundStockFilter: ต้องมีคำในข้อความลูกค้าเอง ไม่เชื่อ planner · DETAIL ไม่กรอง (ต้องบอกว่าหมด ไม่ใช่ถามกลับว่ารุ่นไหน)' }),
+    N('xDropped', 8.6, 7, 'end', 'ตัด variant ที่ไม่ IN_STOCK', 'LIST/COUNT ที่ขอเฉพาะของพร้อมส่ง', { oc: 'pass' }),
+    N('tokens', 7, 7, 'svc', 'productFactTokens', 'stockStatus · stockQuantity (เมื่อถาม STOCK)', { f: KP + 'product-answer.policy.ts:137', d: 'stockQuantity = available (หรือ onHand ถ้าลูกค้าพูด “ในคลัง”) ให้ LLM ใช้ token เท่านั้น prose ห้ามมีคำ “หมด/มีของ/เหลือ” เอง', out: `{ 'e1.stockStatus': 'สินค้าหมด ณ เวลาตรวจสอบ', 'e1.stockQuantity': '0' }` }),
+    N('chatOut', 7, 8, 'end', 'ลูกค้าเห็นสถานะสต็อก', 'จาก token ของ DB', { oc: 'reply' }),
+  ],
+  edges: [
+    E('admin', 'gate'), E('gate', 'xBad', 'ไม่ผ่าน'), E('gate', 'cmd'),
+    E('cmd', 'xReplay', 'requestId เดิม'), E('cmd', 'lock', 'ใหม่'),
+    E('lock', 'x404', 'ไม่พบ'), E('lock', 'variantChk'), E('variantChk', 'x409Track', 'trackStock false'), E('variantChk', 'balance'),
+    E('balance', 'x409Ver', 'version ไม่ตรง'), E('balance', 'rule'), E('rule', 'x409Avail', '< reserved'), E('rule', 'update', 'ผ่าน'),
+    E('update', 'result'), E('result', 'resp'),
+    E('update', 'future', 'อนาคต: after commit', { soft: true }), E('future', 'xAlert', 'available ≤ 0', { soft: true }),
+    E('chatSearch', 'stockState'), E('stockState', 'inStock'), E('stockState', 'tokens', 'evidence.stock'),
+    E('inStock', 'xDropped', 'ใช่ + ไม่ IN_STOCK'), E('inStock', 'tokens', 'ไม่กรอง'), E('tokens', 'chatOut'),
+  ],
+  events: [
+    { id: 's-in', g: 'ปรับสต็อก', t: 'รับของเข้า +20', ex: 'TEE-WH-M onHand 0 → 20', oc: 'reply', llm: 0,
+      p: [...sPre(20), ['balance', `{ onHand: 0, reserved: 0, version: 3 } · expectedVersion 3 ✓`], ['rule', `0 + 20 = 20 ≥ reserved 0 ✓`], ['update', `inventoryBalance.update({ where: { id, version: 3 }, data: { onHand: 20, version: 4 } })\ninventoryMovement.create({ deltaOnHand: 20, onHandAfter: 20, reservedAfter: 0, reason: 'รับของเข้า' })`], ['result', `{ onHand: 20, reserved: 0, version: 4, available: 20, movementId: 'mv-…' }`], ['resp', `HTTP 201 · ไม่มี re-embed (สต็อกไม่อยู่ใน document)`]] },
+    { id: 's-out', g: 'ปรับสต็อก', t: 'ลดจนหมด', ex: 'TEE-WH-M onHand 3 → 0', oc: 'reply', llm: 0, note: 'ตอนนี้ไม่มีการแจ้งเตือนอัตโนมัติ ลูกค้าจะเห็นว่า “สินค้าหมด” ในแชตครั้งถัดไปที่ค้นเท่านั้น',
+      p: [...sPre(-3, 5), ['balance', `{ onHand: 3, reserved: 0, version: 5 } ✓`], ['rule', `3 − 3 = 0 ≥ 0 ✓`], ['update', `onHand 0, version 6 · movement deltaOnHand −3`], ['result', `{ onHand: 0, available: 0 }`], ['resp', `HTTP 201`]] },
+    { id: 's-neg', g: 'ปรับสต็อก', t: 'ลดเกินของที่มี', ex: 'onHand 2, delta −5', oc: 'error', llm: 0,
+      p: [...sPre(-5, 5), ['balance', `{ onHand: 2, reserved: 0, version: 5 } ✓`], ['rule', `2 − 5 = −3 < reserved 0`], ['x409Avail', `409 'Stock adjustment would violate available inventory' · ROLLBACK (command ไม่ถูกบันทึก)`]] },
+    { id: 's-ver', g: 'ปรับสต็อก', t: 'ปรับพร้อมกัน', ex: 'expectedVersion 3 แต่ DB เป็น 4', oc: 'error', llm: 0,
+      p: [...sPre(-1, 3), ['balance', `FOR UPDATE → version 4 ≠ 3`], ['x409Ver', `409 'Inventory version changed'`]] },
+    { id: 's-notrack', g: 'ปรับสต็อก', t: 'variant ไม่ติดตามสต็อก', ex: 'trackStock = false', oc: 'error', llm: 0,
+      p: [...sPre(5).slice(0, 4), ['variantChk', `variant พบ แต่ trackStock = false`], ['x409Track', `409 'Variant does not track stock'`]] },
+    { id: 's-replay', g: 'ปรับสต็อก', t: 'ส่งซ้ำ requestId เดิม', ex: 'กดปุ่มสองครั้ง', oc: 'reply', llm: 0,
+      p: [['admin', STOCK_BODY(20)], ['gate', `ผ่าน`], ['cmd', `productCatalogCommand { requestId: 'c9…' } มีแล้ว fingerprint ตรง`], ['xReplay', `คืน { onHand: 20, movementId } เดิม · onHand ไม่เพิ่มเป็น 40`]] },
+    { id: 's-chat-out', g: 'แชตอ่านสต็อก', t: 'ลูกค้าถามของที่หมด', ex: 'เสื้อยืด Basic สีขาว M มีของไหม', oc: 'reply', llm: 2,
+      p: [['chatSearch', `variant TEE-WH-M { trackStock: true, inventory: { onHand: 0, reserved: 0 } } (ผ่าน option สีขาว/M)`], ['stockState', `onHand 0 > reserved 0 ? ไม่ → 'OUT_OF_STOCK' · purchasable false`], ['tokens', `asks STOCK → { 'e1.stockStatus': 'สินค้าหมด ณ เวลาตรวจสอบ', 'e1.stockQuantity': '0' }`], ['chatOut', `"เสื้อยืด Basic Cotton ขาว ไซส์ M สินค้าหมด ณ เวลาตรวจสอบ ค่ะ"`]] },
+    { id: 's-chat-filter', g: 'แชตอ่านสต็อก', t: 'ขอเฉพาะของพร้อมส่ง', ex: 'มีเสื้อยืดอะไรบ้างที่พร้อมส่ง', oc: 'pass', llm: 2,
+      p: [['chatSearch', `plan { operation: 'LIST', inStockOnly: true } · keyset scan ทุก variant ของหมวด`], ['stockState', `TEE-BK-L IN_STOCK · TEE-WH-M OUT_OF_STOCK`], ['inStock', `groundStockFilter: มีคำ "พร้อมส่ง" ✓ และไม่ใช่ DETAIL → inStockOnly true`], ['xDropped', `evidence เหลือ TEE-BK-L เท่านั้น`]] },
+    { id: 's-future', g: 'อนาคต (ยังไม่มี)', t: 'แจ้งเตือนเมื่อสินค้าหมด', ex: 'available ≤ 0 → แจ้งแอดมิน', oc: 'handoff', llm: 0, note: 'ยังไม่มีในโค้ด เส้นประคือจุดที่ควรต่อ ใช้ inventoryBalances ไม่ใช่ meta.onhand (key นี้ถูกห้ามใน meta)',
+      p: [...sPre(-3, 5), ['balance', `{ onHand: 3, reserved: 0 }`], ['rule', `→ 0 ✓`], ['update', `onHand 0 + (ข้อเสนอ) stockEvent outbox { variantId, availableBefore: 3, availableAfter: 0 }`], ['future', `worker: availableAfter ≤ 0 && availableBefore > 0 → แจ้งครั้งเดียว (idempotency key = movementId)`], ['xAlert', `AdminNotification { type: 'STOCK_OUT', metadata: { productId, variantId, sku } }`]] },
+  ],
+};
+
+/* ===================== VIEW 4 · index ===================== */
+const INDEX = {
+  id: 'index', num: '4', title: 'Index / embedding',
+  intro: 'Vector ของสินค้าใช้ใน semantic fallback เท่านั้น (PRODUCT_SEMANTIC_ENABLED) งานถูกเขียนเป็น outbox ใน transaction ของ catalog (productIndexJobs) แล้ว ProductIndexService ดึงทุก 5 วินาที claim ด้วย lease เรียก embedding นอก transaction และตรวจซ้ำว่า document ยังตรงก่อน upsert vector ไม่งั้นทิ้งเป็น SUPERSEDED',
+  nodes: [
+    N('tWrite', 1, 0, 'start', 'catalog write', 'create / searchChanged (แท็บ 2)', { f: P + 'product.service.ts:413' }),
+    N('tReindex', 3, 0, 'start', 'POST /:id/reindex', 'REINDEX_PRODUCT command · FAILED → PENDING', { f: P + 'search/product-index.service.ts:90', d: 'ไม่ reset job ที่ lastErrorCode = PENDING_AI_USAGE (ต้อง reconcile billing ก่อน)' }),
+    N('tTick', 5.4, 0, 'start', 'ProductIndexService.tick (5s)', 'backfill ACTIVE ที่ไม่มี job ของ revision นี้ (≤20)', { f: P + 'search/product-index.service.ts:152', d: 'เช่นหลัง applyPreset bump searchRevision ทุกสินค้า หรือเปลี่ยน embedding model' }),
+    N('semantic', 2, 1, 'dec', 'productSemanticEnabled ?', 'PRODUCT_ENABLED && PRODUCT_RAG_ENABLED && PRODUCT_SEMANTIC_ENABLED', { f: SRC + 'commerce/commerce-feature.service.ts:23' }),
+    N('xOff', 0, 2, 'end', 'ไม่สร้าง job', 'semantic ปิด', { oc: 'silent' }),
+    N('enqueue', 3, 2, 'svc', 'enqueueProductIndex(tx)', 'buildProductDocument(meta + preset) → hash → upsert job', { f: P + 'search/product-index-outbox.ts:6', d: 'upsert update:{} → job ของ (productId, searchRevision, model) มีได้ตัวเดียว เรียกซ้ำไม่สร้างซ้ำ', out: `productIndexJob { state: 'PENDING', document, contentHash: sha256, searchRevision, embeddingModel }`, db: 'W productIndexJobs' }),
+    N('pick', 4, 3, 'svc', 'tick: เลือกงาน', 'PENDING หรือ RUNNING ที่ lease หมด · retryAt ≤ now · ≤10', { db: 'R productIndexJobs (index state, retryAt, leaseUntil)' }),
+    N('claim', 4, 4, 'dec', 'process: claim', 'updateMany → RUNNING lease 120s, attempts+1 · ได้ ?', { f: P + 'search/product-index.service.ts:201' }),
+    N('xClaimed', 6.2, 4, 'end', 'worker อื่นได้ไป', 'count 0', { oc: 'silent' }),
+    N('stale', 4, 5, 'dec', 'ยังเป็นงานล่าสุด ?', 'ACTIVE · searchRevision ตรง · model ตรง', {}),
+    N('xSuper', 6.2, 5, 'end', 'SUPERSEDED', 'DRAFT/ARCHIVED หรือมี revision ใหม่', { oc: 'silent' }),
+    N('embed', 4, 6, 'llm', 'EmbeddingService.embedDocument', 'นอก transaction · billing EMBEDDING (document)', { tag: 'EMB', d: 'turnId = product-index:{jobId}:{model} เป็น key ของ usage จึงไม่คิดเงินซ้ำเมื่อ retry ที่ provider ตอบไปแล้ว', db: 'billing EMBEDDING scope document' }),
+    N('errDec', 6.2, 7, 'dec', 'error', 'pending usage ? attempts ≥ 5 ?', { out: `state FAILED (lastErrorCode PENDING_AI_USAGE | error name) | PENDING retryAt = now + min(300s, 5s·2^attempts)` }),
+    N('fresh', 4, 7, 'dec', 'tx: ตรวจซ้ำก่อนเขียน', 'lock product · rebuild document · hash === job.contentHash ?', { d: 'กันกรณีแก้สินค้า/เปลี่ยน preset ระหว่าง embed: document ใหม่ต่าง → SUPERSEDED (มี job ของ revision ใหม่อยู่แล้ว)' }),
+    N('xFailed', 5.4, 8, 'end', 'FAILED', 'ต้องตรวจ / reindex', { oc: 'error' }),
+    N('xRetry', 7, 8, 'end', 'PENDING (backoff)', 'tick รอบถัดไป', { oc: 'pass' }),
+    N('upsert', 3, 8, 'svc', 'productVectors upsert + DONE', 'vector(1536) · model · searchRevision · contentHash', { f: P + 'search/product-vector.repository.ts:47', db: 'W productVectors, productIndexJobs.state' }),
+    N('xSuper2', 1.4, 8, 'end', 'SUPERSEDED', 'document เปลี่ยนระหว่าง embed', { oc: 'silent' }),
+    N('done', 3, 9, 'end', 'vector พร้อมใช้', 'semantic fallback ในแชต', { oc: 'reply' }),
+  ],
+  edges: [
+    E('tWrite', 'semantic'), E('tReindex', 'enqueue', 'command'), E('tTick', 'enqueue', 'ไม่มี job'), E('tTick', 'pick', 'ทุก 5s'),
+    E('semantic', 'xOff', 'ปิด'), E('semantic', 'enqueue', 'เปิด'),
+    E('enqueue', 'pick', 'COMMIT แล้ว'), E('pick', 'claim'), E('claim', 'xClaimed', 'ไม่ได้'), E('claim', 'stale', 'ได้'),
+    E('stale', 'xSuper', 'ไม่ใช่'), E('stale', 'embed', 'ใช่'), E('embed', 'errDec', 'error'), E('embed', 'fresh', 'vector'),
+    E('errDec', 'xFailed', 'pending / ≥5'), E('errDec', 'xRetry', 'อื่น ๆ'),
+    E('fresh', 'upsert', 'ตรง'), E('fresh', 'xSuper2', 'ต่าง'), E('upsert', 'done'),
+  ],
+  events: [
+    { id: 'i-new', g: 'ปกติ', t: 'สินค้าใหม่ ACTIVE', ex: 'สร้างเสื้อยืด Basic Cotton', oc: 'reply', llm: 0,
+      p: [['tWrite', `ProductService.create → this.index(tx, scope, productId)`], ['semantic', `productSemanticEnabled = true`], ['enqueue', `document = buildProductDocument(product, ECOMMERCE fields)\nupsert job { searchRevision: 1, embeddingModel: 'gemini-embedding-2', state: 'PENDING' }`], ['pick', `job PENDING retryAt ≤ now`], ['claim', `→ RUNNING, leaseOwner 'w-1…', attempts 1`], ['stale', `status ACTIVE · searchRevision 1 · model ตรง ✓`], ['embed', `embedDocument(document) → { model: 'gemini-embedding-2', values: number[1536] }`], ['fresh', `rebuild document → hash ตรง ✓`], ['upsert', `INSERT … ON CONFLICT → productVectors { searchRevision: 1, contentHash } · job DONE`], ['done', `ProductVectorRepository.search จะเจอสินค้านี้ (cosine ≥ PRODUCT_VECTOR_MIN_SIMILARITY 0.65 ใน RRF)`]] },
+    { id: 'i-draft', g: 'ปกติ', t: 'สินค้า DRAFT', ex: 'สร้างแบบร่าง', oc: 'silent', llm: 0, note: 'create enqueue ทุกครั้ง แต่ worker ข้ามเพราะไม่ ACTIVE ไม่เสียค่า embedding',
+      p: [['tWrite', `create status DRAFT`], ['semantic', `เปิด`], ['enqueue', `job PENDING`], ['pick', `เลือก`], ['claim', `RUNNING`], ['stale', `status DRAFT ≠ ACTIVE`], ['xSuper', `state SUPERSEDED · ไม่เรียก embedding`]] },
+    { id: 'i-race', g: 'Concurrency', t: 'แก้สินค้าระหว่าง embed', ex: 'admin แก้ meta ขณะ worker กำลังเรียก provider', oc: 'silent', llm: 0,
+      p: [['tWrite', `update variant meta → searchRevision 1 → 2 + job ใหม่ (revision 2)`], ['semantic', `เปิด`], ['enqueue', `job rev 2 PENDING (job rev 1 RUNNING อยู่)`], ['pick', `job rev 1 (เลือกไปก่อนแก้)`], ['claim', `rev 1 RUNNING`], ['stale', `ตอนอ่าน searchRevision ยังเป็น 1 ✓`], ['embed', `embedDocument(document rev 1)`], ['fresh', `tx: lock product · searchRevision ตอนนี้ 2 ≠ 1 → fresh = false`], ['xSuper2', `job rev 1 SUPERSEDED · ไม่ upsert vector เก่า · job rev 2 จะทำต่อ`]] },
+    { id: 'i-error', g: 'Error', t: 'provider ล้ม', ex: 'embedding 503', oc: 'pass', llm: 0,
+      p: [['tTick', `tick`], ['pick', `job PENDING`], ['claim', `attempts 2`], ['stale', `✓`], ['embed', `throw ServiceUnavailable`], ['errDec', `ไม่ใช่ pending usage · attempts 2 < 5`], ['xRetry', `state PENDING · retryAt = now + 20s`]] },
+    { id: 'i-pending', g: 'Error', t: 'billing ไม่แน่นอน', ex: 'provider อาจรับไปแล้ว (PendingAiUsage)', oc: 'error', llm: 0,
+      p: [['tTick', `tick`], ['pick', `job`], ['claim', `RUNNING`], ['stale', `✓`], ['embed', `rethrowPendingAiUsage → pending`], ['errDec', `pending = true`], ['xFailed', `FAILED lastErrorCode 'PENDING_AI_USAGE' · reindex จะไม่รีเซ็ตจนกว่า billing reconcile`]] },
+    { id: 'i-off', g: 'ปกติ', t: 'semantic ปิด', ex: 'PRODUCT_SEMANTIC_ENABLED=false', oc: 'silent', llm: 0,
+      p: [['tWrite', `this.index(tx…)`], ['semantic', `false → return`], ['xOff', `ไม่มี job · แชตใช้ lexical/BM25 อย่างเดียว`]] },
+    { id: 'i-preset', g: 'ปกติ', t: 'apply preset → re-embed ทั้งร้าน', ex: 'POST …/presets/ECOMMERCE/apply', oc: 'reply', llm: 0, note: 'จำเป็นหลัง deploy migration 20261020000000 เพื่อให้ vector ใช้ label ของ ECOMMERCE',
+      p: [['tTick', `applyPreset เปลี่ยน type → product.updateMany searchRevision++\ntick: anti-join หา ACTIVE ที่ไม่มี job ของ revision ใหม่ (ทีละ 20)`], ['enqueue', `lock product → document จาก preset ใหม่ → job PENDING`], ['pick', `≤10 ต่อรอบ`], ['claim', `RUNNING`], ['stale', `✓`], ['embed', `vector`], ['fresh', `✓`], ['upsert', `DONE`], ['done', `vector ใช้ field ใหม่`]] },
+    { id: 'i-reindex', g: 'ปกติ', t: 'admin สั่ง reindex', ex: 'job FAILED หลังแก้ปัญหา provider', oc: 'reply', llm: 0,
+      p: [['tReindex', `POST /api/admin/products/p-tee/reindex { requestId, expectedVersion }\ncommand REINDEX_PRODUCT → lockProduct · revision ✓`], ['enqueue', `upsert (มีแล้ว) · FAILED (ไม่ใช่ PENDING_AI_USAGE) → PENDING attempts 0`], ['pick', `เลือก`], ['claim', `RUNNING`], ['stale', `✓`], ['embed', `vector`], ['fresh', `✓`], ['upsert', `DONE`], ['done', `พร้อมใช้`]] },
+  ],
+};
+
+/* ===================== VIEW 5 · chat product RAG ===================== */
+const EVID = (o = {}) => `ProductEvidence {\n  ref: 'PRODUCT:${o.v || 'v-bk-l'}', productId: '${o.p || 'p-tee'}', variantId: '${o.v || 'v-bk-l'}', sku: '${o.sku || 'TEE-BK-L'}',\n  name: ${q(o.name || 'เสื้อยืด Basic Cotton')}, category: ${q(o.cat || 'เสื้อยืด')}, aliases: ${o.aliases || "['เสื้อยืด Basic']"},\n  options: ${o.options || "[{ key: 'color', label: 'สี', value: 'ดำ' }, { key: 'size', label: 'ขนาด / ไซส์', value: 'L' }]"},\n  details: ${o.details || "[{ key: 'brand', label: 'แบรนด์', value: 'Basic' }, { key: 'material', label: 'วัสดุ', value: 'cotton 100%' }, { key: 'weight_g', label: 'น้ำหนัก', value: '180 g' }, …]"},\n  price: '${o.price || '290.00'}', currency: 'THB', stock: '${o.stock || 'IN_STOCK'}', onHand: ${o.onHand ?? 8}, reserved: 0, availableStock: ${o.onHand ?? 8},\n  purchasable: ${o.stock === 'OUT_OF_STOCK' ? 'false' : 'true'}, fetchedAt: '2026-10-22T09:12:03Z', sourceRevision: 4\n}`;
+const PLAN = (o) => `ProductPlan {\n  mode: '${o.mode || 'PRODUCT'}', query: ${q(o.query || '')}, policyQuery: ${q(o.policyQuery || '')},\n  productIds: ${o.ids || '[]'}, variantIds: [], options: ${o.options || '[]'}, filters: ${o.filters || '[]'}, listOptions: ${o.list || '[]'},\n  category: ${o.category || 'null'}, minPrice: null, maxPrice: null, inStockOnly: ${o.inStock || 'false'},\n  operation: '${o.op || 'DETAIL'}', countUnit: 'PRODUCTS', asks: ${o.asks || '[]'}, ambiguous: ${o.amb || 'false'}\n}`;
+const STORE = `storeOptions = [{ key: 'color', label: 'สี', values: ['ขาว','ดำ'] }, { key: 'size', label: 'ขนาด / ไซส์', values: ['L','M'] }]\nstoreFields = [brand, tags, model, color, size, material, weight_g (NUMBER g, EQ/GTE/LTE), dimensions, features (TAGS), origin, warranty, package_contents]\nstoreCategories = ['เสื้อยืด', 'กระเป๋า']`;
+const cPre = (msg, found = 'null') => [
+  ['kr', `retrieve(${q(msg)}, { userId: 'Uf3c…', lineMemberId, conversationId, turnId: '01JA…', recentMessages })\n→ products.retrieveProduct(message, context, knowledge(q, emb, forceGrounded), runLegacy)  // legacy memoized`],
+  ['pGate', `productRagEnabled ✓ · userId/turnId/lineMemberId/conversationId ครบ ✓ · ไม่ใช่ regex นโยบายทั้งข้อความ`],
+  ['pScope', `forLineDeployment → company เดียว → { companyId: 'co-1…' }`],
+  ['pFind', `commerceTurn.findUnique({ companyId, connectionKey: 'standalone-line', externalEventId: '01JA…' }) → ${found}`],
+];
+const cOpen = (msg, why = "productSignal") => [
+  ['pRoute', `${why} → 'PLAN'`],
+  ['pOpen', `ownership: lineConversation ↔ lineMember ↔ lineUserId ✓ · pin provider/model\ncommerceTurn { id: 'ct-7…', input: { message: ${q(msg)}, recentMessages, embeddingModel }, plan: null, retrieval: null, response: null }`],
+  ['pLease', `lease 'ls-1…' 180s · heartbeat 30s · turn.retrieval = null`],
+  ['pPlanDec', `turn.plan = null · ไม่ใช่ broad inquiry`],
+];
+const cCatalog = (probe = '[]') => ['pCatalog', `probe(message) → ${probe}\nplannerCatalog() → businessType 'ECOMMERCE'\n${STORE}`];
+const cAnswer = (template, text, refs = "['PRODUCT:v-bk-l']") => [
+  ['pRouter', `decideFromRetrieval: retrieval.product → { action: 'ANSWER_KNOWLEDGE', source: 'DATABASE', reason: 'product plan PRODUCT' }\nChatbotService → AnswerService → productAnswers.answer(retrieval, setting, context)`],
+  ['pAnsLease', `withLease(ct-7…) · response = null · status FOUND → LLM`],
+  ['pAnsLLM', `system = setting + buildProductAnswerPrompt('ECOMMERCE') + dataSections { question, productEvidence (e1…), policyEvidence }\n→ { decision: 'ANSWER', directlyAnswered: true, answerTemplate: ${q(template)}, evidenceIds: ${refs} }`],
+  ['pRender', `token ∈ productFactTokens และ ref ตรง ✓ · prose ไม่มีตัวเลข/คำสต็อก ✓ · มี {{e1.name}} ✓ · ครอบคลุม asks ✓ · ไม่พูดค่า option เอง ✓`],
+  ['pOut', `save response → AiAnswerResult { text: ${q(text)}, isFallback: false, catalogRefs: [{ companyId, productId: 'p-tee', variantId: 'v-bk-l' }] }`],
+  ['xMain', `ChatResponse { source: 'KNOWLEDGE', contextPolicy: 'INCLUDE', catalogRefs } → saveReply → deliver`],
+];
+const CHAT = {
+  id: 'chat', num: '5', title: 'แชต → Product RAG',
+  intro: 'จากข้อความลูกค้าถึงคำตอบเรื่องสินค้า: gate กัน FAQ/small talk ไม่ให้เสีย planner call, CommerceTurn เป็น snapshot ต่อ webhook event (replay ได้), planner LLM ได้รายการ field/ตัวเลือกจาก preset + ค่าจริงใน meta, ProductSearchService ค้นใน RepeatableRead (lexical/BM25 บน name/alias/description/category + meta ที่ searchable, vector เป็น fallback) แล้วตรวจ options/filters บน meta ของ variant เดียวกัน ราคา/สต็อกอ่านสดจาก DB และ renderer แทนค่าทุกตัวจาก token ของ DB เท่านั้น LLM สูงสุด 3 slot ต่อ turn (PLAN, ANSWER, CRITICAL_REPAIR)',
+  nodes: [
+    N('kr', 5, 0, 'start', 'KnowledgeRetrievalService.retrieve', 'จาก IntentRouterService · product gate ก่อน legacy', { f: SRC + 'chatbot/knowledge/knowledge-retrieval.service.ts:103', out: `KnowledgeRetrievalResult (product ?? legacy)` }),
+    N('pGate', 5, 1, 'dec', 'retrieveProduct · gate', 'flag · verified LINE context · regex นโยบายทั้งข้อความ', { f: KP + 'product-retrieval.service.ts:84', d: 'PRODUCT_ENABLED + PRODUCT_RAG_ENABLED และต้องมี userId/turnId/lineMemberId/conversationId · ข้อความล้วนเช่น “ส่งฟรีไหม” “คืนสินค้าได้ไหม” ข้าม product เพื่อให้ DIRECT preset ทำงาน' }),
+    N('pScope', 5, 2, 'dec', 'CommerceScopeService.forLineDeployment', 'ต้องมีบริษัทเดียว', { f: SRC + 'commerce/commerce-scope.service.ts:51', out: `CommerceScope { companyId } | 403/503 → legacy` }),
+    N('pFind', 5, 3, 'dec', 'CommerceTurnService.find', 'มี turn ของ webhook event นี้แล้ว ?', { f: SRC + 'commerce/commerce-turn.service.ts:39', d: 'unique (companyId, connectionKey, externalEventId = webhookEventId) + ตรวจ lineMemberId/conversationId ตรง event เดิมได้ผลเดิมเสมอ', db: 'R commerceTurns' }),
+    N('pRoute', 3.4, 4, 'dec', 'routeWithoutPlanner', 'productSignal · refs · probe · mentionsCatalog ? → legacy ?', { f: KP + 'product-retrieval.service.ts:479', d: 'PLAN ทันทีเมื่อ: regex คำสินค้า (ราคา สี ไซส์ เสื้อ …), อ้างของที่เคยแสดง, probe เจอชื่อ/alias/SKU, หรือ mentionsCatalog (คำในข้อความตรง name/alias/category/meta searchable ของสินค้า) ไม่งั้นรัน legacy: DIRECT/RAG หรือ settled → legacy; คำนโยบาย → plannerIntent KNOWLEDGE; ที่เหลือ → PLAN (แทน classifier)', out: `'PLAN' | undefined | { …legacy, plannerIntent: 'KNOWLEDGE' }`, db: 'R products, productVariants.meta (mentionsCatalog)' }),
+    N('xLegacy', 8.2, 4, 'end', 'ใช้ legacy route', 'retrieveProduct คืน undefined', { oc: 'pass' }),
+    N('pIntentK', 1.4, 5, 'svc', 'plannerIntent = KNOWLEDGE', 'ผล legacy LOW_CONFIDENCE + ติดป้าย · 0 LLM', { out: `{ ...legacy, plannerIntent: 'KNOWLEDGE' }  // router ข้าม classifier` }),
+    N('pOpen', 5, 5, 'svc', 'CommerceTurnService.open', 'ownership · pin provider/model · snapshot input', { f: SRC + 'commerce/commerce-turn.service.ts:65', out: `CommerceTurn { id, input: { message (redactPii), recentMessages ≤6 ไม่รวม REGISTRATION, embeddingModel }, plan: null, retrieval: null, response: null }`, db: 'W commerceTurns' }),
+    N('pLease', 5, 6, 'dec', 'withLease (180s)', 'lease ว่าง ? · retrieval มีแล้ว ?', { f: SRC + 'commerce/commerce-turn.service.ts:136', db: 'W commerceTurns.leaseOwner/leaseUntil' }),
+    N('xBusy', 7.4, 6, 'end', '503 → webhook RETRY', 'worker อื่นถือ turn', { oc: 'error' }),
+    N('pPlanDec', 5, 7, 'dec', 'Plan stage', 'plan เดิม ? · broad inquiry ?', { f: KP + 'product-retrieval.service.ts:177' }),
+    N('pPlanBroad', 2.6, 8, 'svc', 'plan broad (0 LLM)', '“สอบถามเรื่องสินค้าหน่อย” → ambiguous', { out: PLAN({ query: 'สอบถามเรื่องสินค้าหน่อยค่ะ', amb: 'true' }) }),
+    N('pCatalog', 5.4, 8, 'svc', 'probe + plannerCatalog', 'ชื่อ/alias/SKU ที่อยู่ในข้อความ + field/ตัวเลือกจาก preset & meta', { f: P + 'search/product-search.service.ts:176', d: 'probe: ข้อความมี SKU (ขอบเขตคำ) / ชื่อสินค้าเต็ม / alias ≥2 ตัวอักษร · plannerCatalog: แท็บ 1 · asks เติมจาก regex (ราคา → PRICE, มีของ/หมด → STOCK, ส่งฟรี/คืนสินค้า → POLICY)', db: 'R products, productVariants (meta)' }),
+    N('pPlanRule', 3.6, 9, 'svc', 'plan จาก rule (0 LLM)', 'exact SKU ขึ้นต้นข้อความ · หรือ policy-only', { out: `exact SKU → { mode: PRODUCT|BOTH, productIds: [probe[0].id], asks }\npolicy-only → { mode: 'KNOWLEDGE', asks: ['POLICY'] }` }),
+    N('pPlanLLM', 6.4, 9, 'llm', 'LLM slot PLAN', 'buildProductPlannerPrompt · productPlannerSchema · temp 0.1', { tag: 'LLM', f: SRC + 'commerce/commerce-turn.service.ts:195', d: 'commerceLlmCall (turnId, slot PLAN) ถูกสร้างก่อนเรียก provider ด้วย provider/model ที่ pin · operationKey ของ billing ผูกกับ turn+slot จึงไม่คิดเงินซ้ำเมื่อ replay', db: 'W commerceLlmCalls · billing LINE_AI_REPLY' }),
+    N('pValidate', 6.4, 10, 'dec', 'validate plan', 'IDs ∈ probe/refs · option/listOptions key ∈ storeOptions · filter key+operator ∈ storeFields · ราคา', { f: KP + 'product-retrieval.service.ts:274', d: 'ล้มข้อใด = plan failed (ไม่เดา) · ใหม่: filter EQ ค่า string ที่ key เป็น option (สี/ไซส์) ถูกย้ายเป็น options (ถ้ายังไม่มี key นั้นและมี < 6) · probe เจอแต่ planner ตอบ GENERAL → บังคับ PRODUCT/BOTH · query ว่างและไม่มี filter → ใช้ข้อความลูกค้า' }),
+    N('pFailedPlan', 8.2, 11, 'svc', 'plan ล้ม', 'PRODUCT ambiguous · failed = true', { out: `{ plan: { mode: 'PRODUCT', query: message, ambiguous: true }, failed: true }` }),
+    N('pSavePlan', 5, 11, 'svc', 'groundStockFilter → save plan', 'inStockOnly ต้องมาจากคำลูกค้า · ไม่ใช่ DETAIL', { f: P + 'search/product-plan-policy.ts:16', db: 'W commerceTurns.plan { plan, failed, businessType }' }),
+    N('pModeDec', 5, 12, 'dec', 'mode / failed ?', 'broad · PRODUCT/BOTH · KNOWLEDGE · GENERAL/failed', {}),
+    N('pBroad', 0.8, 13, 'svc', 'MISSING_INPUT', 'คำถามกว้าง ไม่ค้น', { out: `ProductSearchResult { status: 'MISSING_INPUT', evidence: [], choices: [] }` }),
+    N('pSearchTx', 3.4, 13, 'dec', 'search(): RepeatableRead 15s', 'loadCatalogContext · businessType ตรงตอน plan ? · validateBusinessFilters', { tag: 'DB', f: P + 'search/product-search.service.ts:229', d: 'อ่าน preset ใน tx เดียวกับข้อมูล ถ้าร้านเปลี่ยนธุรกิจระหว่าง plan กับ search → Conflict · filter ต้องเป็น field ACTIVE + searchable และ operator ตรงชนิด (NUMBER ต้องเป็นเลข ≤4 ทศนิยม)', out: `ProductSearchResult & { businessType }` }),
+    N('pKnowledge', 7, 13, 'svc', 'knowledge(policyQuery)', 'legacy route + plannerIntent KNOWLEDGE', { out: `{ ...KnowledgeRetrievalResult, plannerIntent: 'KNOWLEDGE' }`, db: 'W commerceTurns.retrieval' }),
+    N('pSearchFail', 1.6, 14, 'svc', 'UNAVAILABLE', 'business เปลี่ยน / filter ผิด / DB error', { out: `{ status: 'UNAVAILABLE', evidence: [], choices: [] }  // ตอบแบบ fallback` }),
+    N('pSubject', 3.4, 14, 'dec', 'read(): subject', 'terms = query − ค่า option/filter − label field − คำถาม · DETAIL ไม่มี ID → probe', { f: P + 'search/product-search.service.ts:261', d: 'productContentTerms ตัดคำคำถาม (ราคา มี ไหม สี ไซส์ …) · probe เจอ >1 → MISSING_INPUT (choices) · เจอ 1 → ids, reliable · ไม่มี subject และไม่มีข้อจำกัด → MISSING_INPUT' }),
+    N('pAgg', 2.2, 15, 'svc', 'aggregate scan', 'LIST/COUNT/CHEAPEST หรือ filter ไม่มี subject · keyset 100/หน้า', { d: 'subject ทุกคำต้องตรง identity (name/alias/category/meta searchable ที่ไม่ใช่ option) ไม่งั้น NO_MATCH · แต่ละหน้าผ่าน evidence() · total นับ PRODUCTS หรือ VARIANTS · เก็บ evidence ≤12 (CHEAPEST เรียงราคา)' }),
+    N('pLexical', 4.6, 15, 'svc', 'candidates', 'lexical SQL (≤60) + vector rows (ถ้ามี embedding)', { d: 'position(term) ใน name/alias/description/category/searchableValues(meta) · relevance name/alias = 4, อื่น = 1 · identityHits นับ term ที่ตรง identity · ids จาก plan/probe ข้ามขั้นนี้', db: 'R products, productVariants.meta (jsonb_each_text), productVectors' }),
+    N('pRank', 4.6, 16, 'dec', 'rank + เลือก', 'BM25 (meta searchable) RRF vector · identity hits ชนะขาด ?', { d: 'BM25 บน name/sku/alias/category/description/ค่า meta · RRF k=60 กับ vector ≥ 0.65 · DETAIL ที่ไม่ reliable: ใช้ variant constraint ตัดก่อน แล้ว identity hits มากสุดต้องมีตัวเดียว เสมอ = ถามกลับ · ambiguous + หลายตัว = ถามกลับ · DETAIL เลือก 1 ตัว อื่น ๆ ≤5' }),
+    N('pEvidence', 3.4, 17, 'dec', 'evidence() ต่อ variant', 'variantIds · matchesBusinessFields(meta) · SKU · ช่วงราคา · stock · inStockOnly', { f: P + 'search/product-search.service.ts:583', d: 'options + filters ทุกตัวต้องจริงบน meta ของ variant เดียวกัน · SKU ที่พิมพ์มาเลือกเฉพาะ variant นั้น · CHEAPEST/ช่วงราคาต้องมีราคา · stock จาก inventoryBalances', out: `ProductEvidence[] (details/options จาก meta aiVisible)` }),
+    N('pStatus', 3.4, 18, 'dec', 'สถานะผล', 'FOUND · MISSING_INPUT · VARIANT_UNAVAILABLE · NO_MATCH · NO_RELIABLE_CANDIDATE', { d: 'ไม่มี evidence แต่สินค้าถูกระบุและมี variant ถ้าไม่สนตัวเลือก → VARIANT_UNAVAILABLE พร้อมค่าตัวเลือกจริงจาก meta · COMPARE ต้อง ≥ 2 variants', out: `ProductSearchResult { status, evidence ≤12, choices, identified, options?, total?, truncated?, businessType }` }),
+    N('pSemantic', 1.6, 19, 'llm', 'semantic fallback', 'embedQuery(plan.query) แล้ว search ซ้ำพร้อม vector', { tag: 'EMB', d: 'PRODUCT_SEMANTIC_ENABLED · ไม่มี productIds · NO_MATCH/NO_RELIABLE_CANDIDATE หรือ RECOMMEND · model ต้องตรงที่ pin ไม่งั้น UNAVAILABLE', db: 'billing EMBEDDING query · R productVectors' }),
+    N('pPolicy', 4.6, 19, 'svc', 'knowledge(policyQuery, forceGrounded)', 'BOTH: หลักฐานนโยบาย (ไม่ใช้ DIRECT)', { out: `KnowledgeRetrievalResult (selectedItems = policy evidence)` }),
+    N('pSaveRet', 3.4, 20, 'svc', 'save retrieval', "{ route: 'RAG', selectedItems: PRODUCT + policy, product: ProductWorkflow }", { f: KP + 'product-retrieval.service.ts:445', out: `KnowledgeRetrievalResult { route: 'RAG', matchType: 'EXACT'|'HYBRID'|…, selectedItems,\n  product: { turnId, scope, plan, result: ProductSearchResult, failed } }`, db: 'W commerceTurns.retrieval' }),
+    N('pRouter', 5, 21, 'dec', 'decideFromRetrieval', 'product → ANSWER_KNOWLEDGE · plannerIntent → มีหลักฐาน ?', { f: SRC + 'chatbot/intent/utils/route-stages.ts:115' }),
+    N('xKnowAns', 7, 22, 'end', 'ตอบ knowledge (legacy)', 'DIRECT / grounded / CLARIFY', { oc: 'pass' }),
+    N('xKnowHandoff', 8.4, 22, 'end', 'CONTACT_ADMIN', 'KNOWLEDGE แต่ไม่มีหลักฐาน', { oc: 'handoff' }),
+    N('pAnsLease', 4, 22, 'dec', 'ProductAnswerService.answer', 'response เดิม ? · failed ? · FOUND ? · mode', { f: KP + 'product-answer.service.ts:33', d: 'ใน withLease ของ turn เดิม · BOTH ไม่มี policy evidence → ตอบส่วนสินค้า + POLICY_UNVERIFIED_NOTE' }),
+    N('pFallback', 0.8, 23, 'svc', 'fallbackMessage', 'failed / KNOWLEDGE ไม่มี policy → handoff', { out: `{ text: setting.fallbackMessage, isFallback: true }` }),
+    N('pSafe', 2.2, 23, 'svc', 'safeProductAnswer', 'MISSING_INPUT · VARIANT_UNAVAILABLE · NO_MATCH · UNAVAILABLE', { f: KP + 'product-answer.policy.ts:595', d: 'ข้อความ deterministic จาก DB ไม่เรียก LLM · UNAVAILABLE = isFallback', out: `"<ชื่อ> ยังไม่มี สี แดงค่ะ\\nสีที่มี: ขาว, ดำ · ขนาด / ไซส์ที่มี: L, M"` }),
+    N('pAnsLLM', 4.4, 23, 'llm', 'LLM slot ANSWER', 'productAnswerSchema (หรือ GENERAL text)', { tag: 'LLM', d: 'system = AI setting + buildProductAnswerPrompt(businessType) + dataSections { question, productEvidence, policyEvidence } · temp 0.2 · maxOutputTokens 1800', out: `{ decision, directlyAnswered, answerTemplate: '…{{e1.price}}…', evidenceIds }` }),
+    N('pRender', 4.4, 24, 'dec', 'renderProductAnswer', 'tokens allowlist · prose ไม่มีตัวเลข/สต็อก · มีชื่อสินค้า · coverage · ไม่พูดค่า option', { f: KP + 'product-answer.policy.ts:361', d: 'token ตาม productFieldPolicy ของคำถาม (attr.<key>, opt.<key>, opts.<key>, price, stockStatus …) · ถาม PRICE/STOCK ต้องมีครบทุกสินค้าที่เอ่ยชื่อ · listOptions ต้องใช้ opts.<key> · COUNT ต้องมี catalog.count', out: `string | undefined` }),
+    N('pRepair', 2.6, 25, 'llm', 'LLM slot CRITICAL_REPAIR', 'เฉพาะ BOTH / COMPARE / PRICE+STOCK', { tag: 'LLM' }),
+    N('pSafeAfter', 4.4, 25, 'svc', 'safeProductAnswer (แทนคำตอบโมเดล)', 'แสดง facts จาก DB · รวม listOptions', {}),
+    N('pUnmatched', 6.4, 25, 'dec', 'unmatchedProductAnswer', 'identified ? → fallback : เสนอสินค้าใกล้เคียง', {}),
+    N('pOut', 3.8, 26, 'svc', 'save response → AiAnswerResult', '{ text, isFallback, catalogRefs? } · replay ได้ค่าเดิม', { w: 9.4, bus: true, db: 'W commerceTurns.response' }),
+    N('xMain', 3.8, 27, 'end', '→ ChatbotService.aiResponse', 'saveReply → LINE delivery', { oc: 'reply' }),
+  ],
+  edges: [
+    E('kr', 'pGate'), E('pGate', 'xLegacy', 'ปิด / regex นโยบาย'), E('pGate', 'pScope', 'ผ่าน'),
+    E('pScope', 'xLegacy', '0 หรือ >1 บริษัท'), E('pScope', 'pFind'),
+    E('pFind', 'pRoute', 'ยังไม่มี turn'), E('pFind', 'pLease', 'มี turn'), E('pFind', 'pRouter', 'turn.retrieval (replay)', { lane: 9.6 }),
+    E('pRoute', 'xLegacy', 'legacy มั่นใจ / settled'), E('pRoute', 'pIntentK', 'นโยบาย ไม่มั่นใจ'), E('pRoute', 'pOpen', 'PLAN'),
+    E('pIntentK', 'pRouter'), E('pOpen', 'pLease'),
+    E('pLease', 'xBusy', 'lease ไม่ว่าง'), E('pLease', 'pRouter', 'retrieval มีแล้ว', { lane: 0.1 }), E('pLease', 'pPlanDec', 'ได้ lease'),
+    E('pPlanDec', 'pPlanBroad', 'broad'), E('pPlanDec', 'pCatalog', 'ยังไม่มี plan'), E('pPlanDec', 'pModeDec', 'plan เดิม'),
+    E('pCatalog', 'pPlanRule', 'SKU / policy-only'), E('pCatalog', 'pPlanLLM', 'อื่น ๆ'),
+    E('pPlanLLM', 'pValidate'), E('pValidate', 'pSavePlan', 'ผ่าน'), E('pValidate', 'pFailedPlan', 'ไม่ผ่าน / LLM ล้ม'), E('pFailedPlan', 'pSavePlan'),
+    E('pPlanRule', 'pSavePlan'), E('pPlanBroad', 'pSavePlan'), E('pSavePlan', 'pModeDec'),
+    E('pModeDec', 'pBroad', 'broad'), E('pModeDec', 'pSearchTx', 'PRODUCT / BOTH'), E('pModeDec', 'pKnowledge', 'KNOWLEDGE'), E('pModeDec', 'pSaveRet', 'GENERAL / failed', { lane: -0.25 }),
+    E('pSearchTx', 'pSearchFail', 'conflict / error'), E('pSearchTx', 'pSubject'),
+    E('pSubject', 'pAgg', 'LIST/COUNT/CHEAPEST'), E('pSubject', 'pLexical', 'DETAIL/COMPARE/RECOMMEND'), E('pSubject', 'pEvidence', 'มี productIds'), E('pSubject', 'pStatus', 'probe >1 / ไม่มี subject', { lane: 6 }),
+    E('pAgg', 'pEvidence', 'ทีละหน้า'), E('pLexical', 'pRank'), E('pRank', 'pEvidence', 'ผู้ชนะ'), E('pRank', 'pStatus', 'เสมอ / ว่าง', { lane: 5.8 }),
+    E('pEvidence', 'pStatus'),
+    E('pStatus', 'pSemantic', 'NO_MATCH + semantic'), E('pStatus', 'pPolicy', 'BOTH'), E('pStatus', 'pSaveRet', 'PRODUCT'),
+    E('pSemantic', 'pPolicy', 'BOTH'), E('pSemantic', 'pSaveRet', 'PRODUCT'), E('pPolicy', 'pSaveRet'),
+    E('pBroad', 'pSaveRet'), E('pSearchFail', 'pSaveRet'),
+    E('pKnowledge', 'pRouter', 'plannerIntent'), E('pSaveRet', 'pRouter'),
+    E('pRouter', 'pAnsLease', 'retrieval.product'), E('pRouter', 'xKnowAns', 'มีหลักฐาน'), E('pRouter', 'xKnowHandoff', 'ไม่มีหลักฐาน'),
+    E('pAnsLease', 'pOut', 'response เดิม'), E('pAnsLease', 'pFallback', 'failed'), E('pAnsLease', 'pSafe', 'ไม่ใช่ FOUND'), E('pAnsLease', 'pAnsLLM', 'FOUND / GENERAL'),
+    E('pAnsLLM', 'pRender', 'JSON'), E('pAnsLLM', 'pOut', 'GENERAL text'),
+    E('pRender', 'pOut', 'ผ่าน'), E('pRender', 'pUnmatched', 'INSUFFICIENT'), E('pRender', 'pRepair', 'ไม่ผ่าน + critical'), E('pRender', 'pSafeAfter', 'ไม่ผ่าน'),
+    E('pRepair', 'pOut', 'ผ่าน'), E('pRepair', 'pSafeAfter', 'ไม่ผ่าน'),
+    E('pUnmatched', 'pOut'), E('pSafeAfter', 'pOut'), E('pFallback', 'pOut'), E('pSafe', 'pOut'), E('pOut', 'xMain'),
+  ],
+  events: [
+    { id: 'c-option', g: 'ค้นแล้วตอบ', t: 'ระบุสี + ไซส์ ถามราคา', ex: 'เสื้อยืด Basic สีดำไซส์ L ราคาเท่าไหร่', oc: 'reply', llm: 2,
+      p: [...cPre('เสื้อยืด Basic สีดำไซส์ L ราคาเท่าไหร่'), ...cOpen('เสื้อยืด Basic สีดำไซส์ L ราคาเท่าไหร่', "productSignal ('ราคา', 'สี', 'ไซส์', 'เสื้อ')"), cCatalog("[{ id: 'p-tee', name: 'เสื้อยืด Basic Cotton', skus: ['TEE-BK-L','TEE-BK-M','TEE-WH-M'] }]  // alias 'เสื้อยืด Basic' อยู่ในข้อความ"), ['pPlanLLM', PLAN({ query: 'เสื้อยืด Basic', ids: "['p-tee']", options: "[{ key: 'color', value: 'ดำ' }, { key: 'size', value: 'L' }]", asks: "['PRICE']" })], ['pValidate', `p-tee ∈ probe ✓ · color/size ∈ storeOptions ✓ · ไม่มี filter`], ['pSavePlan', `inStockOnly false · stockQuantitySource 'AVAILABLE' · save plan`], ['pModeDec', `PRODUCT`], ['pSearchTx', `loadCatalogContext(tx) → ECOMMERCE · businessType ตรงกับตอน plan ✓ · filters ว่าง ✓`], ['pSubject', `productIds = ['p-tee'] → reliable · ข้าม lexical`], ['pEvidence', `TEE-BK-L: matchesBusinessFields(meta, …, options color=ดำ size=L) ✓ · อื่น ✗\n${EVID()}`], ['pStatus', `FOUND · identified true`], ['pSaveRet', `{ route: 'RAG', matchType: 'EXACT', product: { plan, result } }`], ...cAnswer('{{e1.name}} {{e1.opt.color}} ไซส์ {{e1.opt.size}} ราคา {{e1.price}} ค่ะ', 'เสื้อยืด Basic Cotton ดำ ไซส์ L ราคา 290.00 บาท ค่ะ')] },
+    { id: 'c-sku', g: 'ค้นแล้วตอบ', t: 'พิมพ์ SKU ตรง', ex: 'TEE-BK-L มีของไหม', oc: 'reply', llm: 1, note: 'exact SKU ข้าม planner: LLM แค่ slot ANSWER',
+      p: [...cPre('TEE-BK-L มีของไหม'), ...cOpen('TEE-BK-L มีของไหม', "productSignal ('มีของ')"), cCatalog("[{ id: 'p-tee', skus: ['TEE-BK-L', …] }]"), ['pPlanRule', `ข้อความขึ้นต้นด้วย SKU → ${PLAN({ query: 'TEE-BK-L มีของไหม', ids: "['p-tee']", asks: "['STOCK']" })}`], ['pSavePlan', `groundStockFilter: DETAIL → inStockOnly false`], ['pModeDec', `PRODUCT`], ['pSearchTx', `ECOMMERCE ✓`], ['pSubject', `ids = ['p-tee']`], ['pEvidence', `mentionsSku('TEE-BK-L') → เฉพาะ variant นั้น\n${EVID()}`], ['pStatus', `FOUND`], ['pSaveRet', `save`], ...cAnswer('{{e1.name}} ({{e1.sku}}) {{e1.stockStatus}} ค่ะ', 'เสื้อยืด Basic Cotton (TEE-BK-L) มีสินค้าคงเหลือ ณ เวลาตรวจสอบ ค่ะ')] },
+    { id: 'c-filter', g: 'ค้นแล้วตอบ', t: 'กรองด้วย meta ตัวเลข', ex: 'มีกระเป๋าอะไรบ้างที่หนักไม่เกิน 700 กรัม', oc: 'reply', llm: 2,
+      p: [...cPre('มีกระเป๋าอะไรบ้างที่หนักไม่เกิน 700 กรัม'), ...cOpen('มีกระเป๋าอะไรบ้างที่หนักไม่เกิน 700 กรัม', "mentionsCatalog('กระเป๋า' ตรง category)"), cCatalog(), ['pPlanLLM', PLAN({ query: '', category: "'กระเป๋า'", filters: "[{ key: 'weight_g', operator: 'LTE', value: '700' }]", op: 'LIST' })], ['pValidate', `weight_g ∈ storeFields และ LTE ∈ operators (NUMBER) ✓`], ['pSavePlan', `save`], ['pModeDec', `PRODUCT`], ['pSearchTx', `validateBusinessFilters: weight_g ACTIVE searchable · '700' เป็นเลข ✓`], ['pSubject', `terms = [] · category 'กระเป๋า' ตรง storeCategories → filter category exact · LIST → allCatalogOperation`], ['pAgg', `keyset scan หมวดกระเป๋า: BAG-UR-BK (weight_g 650), BAG-TR-30 (weight_g 980)`], ['pEvidence', `Decimal(650) ≤ 700 ✓ · Decimal(980) ≤ 700 ✗\n${EVID({ v: 'v-bag', p: 'p-bag', sku: 'BAG-UR-BK', name: 'กระเป๋าเป้ Urban 20L', cat: 'กระเป๋า', aliases: "['เป้ Urban']", options: "[{ key: 'color', label: 'สี', value: 'ดำ' }]", details: "[{ key: 'brand', label: 'แบรนด์', value: 'Urban' }, { key: 'material', label: 'วัสดุ', value: 'ไนลอน' }, { key: 'weight_g', label: 'น้ำหนัก', value: '650 g' }, { key: 'warranty', label: 'การรับประกัน', value: '1 ปี' }]", price: '1290.00' })}`], ['pStatus', `FOUND · total 1 · truncated false`], ['pSaveRet', `save`], ...cAnswer('มี {{e1.name}} ราคา {{e1.price}} ค่ะ', 'มี กระเป๋าเป้ Urban 20L ราคา 1290.00 บาท ค่ะ', "['PRODUCT:v-bag']")] },
+    { id: 'c-promote', g: 'ถามกลับ / ไม่พบ', t: 'ไม่มีสีที่ถาม (filter ถูกย้ายเป็น option)', ex: 'เสื้อยืด Basic มีสีแดงไหม', oc: 'reply', llm: 1, note: 'ถ้าไม่ย้าย filter color=แดง จะกรองสินค้าทิ้งแล้วกลายเป็น “หมายถึงรุ่นไหน” แทน “ไม่มีสีแดง”',
+      p: [...cPre('เสื้อยืด Basic มีสีแดงไหม'), ...cOpen('เสื้อยืด Basic มีสีแดงไหม', "productSignal ('สี')"), cCatalog("[{ id: 'p-tee', … }]"), ['pPlanLLM', PLAN({ query: 'เสื้อยืด Basic', ids: "['p-tee']", filters: "[{ key: 'color', operator: 'EQ', value: 'แดง' }]", asks: "['STOCK']" })], ['pValidate', `filter color EQ ∈ storeFields ✓ · color เป็น option key + EQ + string → ย้าย:\nplan.filters = [] · plan.options = [{ key: 'color', value: 'แดง' }]`], ['pSavePlan', `save`], ['pModeDec', `PRODUCT`], ['pSearchTx', `✓`], ['pSubject', `ids ['p-tee']`], ['pEvidence', `ไม่มี variant ที่ meta.color ตรง 'แดง' → []`], ['pStatus', `ไม่มี evidence แต่ p-tee มี variant เมื่อไม่สน option → VARIANT_UNAVAILABLE\noptions: [{ key: 'color', label: 'สี', values: ['ดำ','ขาว'] }, { key: 'size', label: 'ขนาด / ไซส์', values: ['L','M'] }]`], ['pSaveRet', `save`], ['pRouter', `ANSWER_KNOWLEDGE`], ['pAnsLease', `status ≠ FOUND → safeProductAnswer (0 LLM)`], ['pSafe', `"เสื้อยืด Basic Cotton ยังไม่มี สี แดงค่ะ\\nสีที่มี: ดำ, ขาว · ขนาด / ไซส์ที่มี: L, M"`], ['pOut', `AiAnswerResult { isFallback: false, catalogRefs: [{ productId: 'p-tee' }] }`], ['xMain', `ส่งลูกค้า`]] },
+    { id: 'c-listopt', g: 'ค้นแล้วตอบ', t: 'ถามว่ามีตัวเลือกอะไรบ้าง', ex: 'เสื้อยืด Basic มีสีอะไรบ้าง', oc: 'reply', llm: 2,
+      p: [...cPre('เสื้อยืด Basic มีสีอะไรบ้าง'), ...cOpen('เสื้อยืด Basic มีสีอะไรบ้าง', "productSignal ('สี')"), cCatalog("[{ id: 'p-tee', … }]"), ['pPlanLLM', PLAN({ query: 'เสื้อยืด Basic', ids: "['p-tee']", list: "['color']", asks: "['ATTRIBUTES']" })], ['pValidate', `listOptions color ∈ storeOptions ✓`], ['pSavePlan', `save`], ['pModeDec', `PRODUCT`], ['pSearchTx', `✓`], ['pSubject', `ids ['p-tee']`], ['pEvidence', `ไม่มี option ที่เลือก → ทุก variant: TEE-BK-L, TEE-BK-M, TEE-WH-M`], ['pStatus', `FOUND`], ['pSaveRet', `save`], ...cAnswer('{{e1.name}} มีสี{{e1.opts.color}}ค่ะ', 'เสื้อยืด Basic Cotton มีสีขาว, ดำค่ะ')] },
+    { id: 'c-guard', g: 'ตัวกันคำตอบ', t: 'LLM พิมพ์ค่าตัวเลือกเอง', ex: 'เสื้อยืด Basic ไซส์ L ราคาเท่าไหร่ (LLM เขียน “สีขาว”)', oc: 'reply', llm: 2, note: 'asks แค่ PRICE ไม่ใช่ critical จึงไม่มี repair call: แสดง facts จาก DB แทน',
+      p: [...cPre('เสื้อยืด Basic ไซส์ L ราคาเท่าไหร่'), ...cOpen('เสื้อยืด Basic ไซส์ L ราคาเท่าไหร่'), cCatalog("[{ id: 'p-tee', … }]"), ['pPlanLLM', PLAN({ query: 'เสื้อยืด Basic', ids: "['p-tee']", options: "[{ key: 'size', value: 'L' }]", asks: "['PRICE']" })], ['pValidate', `✓`], ['pSavePlan', `save`], ['pModeDec', `PRODUCT`], ['pSearchTx', `✓`], ['pSubject', `ids`], ['pEvidence', `TEE-BK-L (สีดำ)`], ['pStatus', `FOUND`], ['pSaveRet', `save`], ['pRouter', `ANSWER_KNOWLEDGE`], ['pAnsLease', `FOUND → LLM`], ['pAnsLLM', `answerTemplate: '{{e1.name}} สีขาว ไซส์ L ราคา {{e1.price}} ค่ะ'`], ['pRender', `proseStatesOptionValue: 'สีขาว' ∈ alias ของ colorField · ลูกค้าไม่ได้เลือกสี → undefined`], ['pSafeAfter', `safeProductAnswer → "เสื้อยืด Basic Cotton · สี: ดำ · ขนาด / ไซส์: L · ราคา 290.00 บาท"`], ['pOut', `AiAnswerResult { isFallback: false }`], ['xMain', `ส่งลูกค้า`]] },
+    { id: 'c-ambiguous', g: 'ถามกลับ / ไม่พบ', t: 'ไม่ระบุว่าตัวไหน', ex: 'เสื้อราคาเท่าไหร่', oc: 'ask', llm: 1,
+      p: [...cPre('เสื้อราคาเท่าไหร่'), ...cOpen('เสื้อราคาเท่าไหร่'), cCatalog(), ['pPlanLLM', PLAN({ query: 'เสื้อ', asks: "['PRICE']", amb: 'true' })], ['pValidate', `✓`], ['pSavePlan', `save`], ['pModeDec', `PRODUCT`], ['pSearchTx', `✓`], ['pSubject', `terms ['เสื้อ'] · probe ไม่เจอชื่อเต็ม → candidates`], ['pLexical', `'เสื้อ' ตรง name/category: เสื้อยืด Basic Cotton, เสื้อเชิ้ตลินิน … (hits 1 เท่ากัน)`], ['pRank', `ไม่ reliable + DETAIL + leaders > 1 → MISSING_INPUT`], ['pStatus', `{ status: 'MISSING_INPUT', choices: [{ id, name } ×2] }`], ['pSaveRet', `save`], ['pRouter', `ANSWER_KNOWLEDGE`], ['pAnsLease', `ไม่ใช่ FOUND`], ['pSafe', `"หมายถึงสินค้ารุ่นไหนคะ: เสื้อยืด Basic Cotton / เสื้อเชิ้ตลินิน หรือระบุสีและขนาดที่ต้องการได้ค่ะ"`], ['pOut', `catalogRefs = choices (ใช้ตอบต่อ “ตัวแรก”)`], ['xMain', `ส่งลูกค้า`]] },
+    { id: 'c-count', g: 'ค้นแล้วตอบ', t: 'นับสินค้าในหมวด', ex: 'มีเสื้อยืดกี่แบบ', oc: 'reply', llm: 2,
+      p: [...cPre('มีเสื้อยืดกี่แบบ'), ...cOpen('มีเสื้อยืดกี่แบบ'), cCatalog(), ['pPlanLLM', PLAN({ category: "'เสื้อยืด'", op: 'COUNT' })], ['pValidate', `✓`], ['pSavePlan', `save`], ['pModeDec', `PRODUCT`], ['pSearchTx', `✓`], ['pSubject', `COUNT → allCatalogOperation · category exact`], ['pAgg', `keyset scan · total += 1 ต่อสินค้า (countUnit PRODUCTS)`], ['pEvidence', `ทุก variant ผ่าน (ไม่มี option/filter)`], ['pStatus', `FOUND · total 3`], ['pSaveRet', `save`], ...cAnswer('มีทั้งหมด {{catalog.count}} แบบค่ะ', 'มีทั้งหมด 3 แบบค่ะ', "['CATALOG:COUNT']")] },
+    { id: 'c-badkey', g: 'Planner ล้ม', t: 'planner คิด field เอง', ex: 'มีเสื้อที่ใช้การ์ดจอ RTX ไหม (ไม่มี field gpu)', oc: 'handoff', llm: 1,
+      p: [...cPre('มีเสื้อที่ใช้การ์ดจอ RTX ไหม'), ...cOpen('มีเสื้อที่ใช้การ์ดจอ RTX ไหม'), cCatalog(), ['pPlanLLM', PLAN({ query: 'เสื้อ', filters: "[{ key: 'gpu', operator: 'CONTAINS', value: 'RTX' }]" })], ['pValidate', `filter key 'gpu' ∉ storeFields → throw 'Unknown planner business field or operator'`], ['pFailedPlan', `{ mode: 'PRODUCT', ambiguous: true }, failed = true`], ['pSavePlan', `save { failed: true }`], ['pModeDec', `failed → ไม่ค้น`], ['pSaveRet', `product.failed = true`], ['pRouter', `ANSWER_KNOWLEDGE`], ['pAnsLease', `failed`], ['pFallback', `fallbackMessage · isFallback → requestAdmin`], ['pOut', `{ isFallback: true }`], ['xMain', `fallback + แจ้งแอดมิน`]] },
+    { id: 'c-legacy-biz', g: 'Planner ล้ม', t: 'ร้านยังไม่ apply ECOMMERCE', ex: "productBusinessType 'FASHION' · ถามเสื้อยืด Basic สีดำ", oc: 'handoff', llm: 1, risk: 'storeOptions/storeFields ว่าง: planner ที่ใส่ color ถูกตีกลับ (Unknown planner option field) → fallback ทุกคำถามที่ระบุสี/ไซส์ ต้อง apply preset หลัง deploy',
+      p: [...cPre('เสื้อยืด Basic สีดำมีไหม'), ...cOpen('เสื้อยืด Basic สีดำมีไหม'), ['pCatalog', `plannerCatalog → businessType 'FASHION' · catalogFields('FASHION') = [] → storeOptions [] · storeFields []`], ['pPlanLLM', PLAN({ query: 'เสื้อยืด Basic', options: "[{ key: 'color', value: 'ดำ' }]" })], ['pValidate', `option key 'color' ∉ storeOptions (ว่าง) → throw 'Unknown planner option field'`], ['pFailedPlan', `failed = true`], ['pSavePlan', `save`], ['pModeDec', `failed`], ['pSaveRet', `failed`], ['pRouter', `ANSWER_KNOWLEDGE`], ['pAnsLease', `failed`], ['pFallback', `fallbackMessage`], ['pOut', `isFallback true`], ['xMain', `แจ้งแอดมิน`]] },
+    { id: 'c-both', g: 'ค้นแล้วตอบ', t: 'สินค้า + นโยบาย (BOTH)', ex: 'เป้ Urban ราคาเท่าไหร่ ส่งฟรีไหม', oc: 'reply', llm: 2,
+      p: [...cPre('เป้ Urban ราคาเท่าไหร่ ส่งฟรีไหม'), ...cOpen('เป้ Urban ราคาเท่าไหร่ ส่งฟรีไหม'), cCatalog("[{ id: 'p-bag', aliases: ['เป้ Urban'] }]"), ['pPlanLLM', PLAN({ mode: 'BOTH', query: 'เป้ Urban', policyQuery: 'ส่งฟรีไหม', ids: "['p-bag']", asks: "['PRICE', 'POLICY']" })], ['pValidate', `✓`], ['pSavePlan', `save`], ['pModeDec', `BOTH`], ['pSearchTx', `✓`], ['pSubject', `ids ['p-bag']`], ['pEvidence', `BAG-UR-BK`], ['pStatus', `FOUND`], ['pPolicy', `knowledge('ส่งฟรีไหม', undefined, forceGrounded) → [ap-ship 'สั่งครบ 500 บาทส่งฟรี']`], ['pSaveRet', `selectedItems = [PRODUCT v-bag, ANSWER_PATTERN ap-ship]`], ...cAnswer('{{e1.name}} ราคา {{e1.price}} ค่ะ {{p1.answer}}', 'กระเป๋าเป้ Urban 20L ราคา 1290.00 บาท ค่ะ สั่งครบ 500 บาทส่งฟรีค่ะ', "['PRODUCT:v-bag', 'ANSWER_PATTERN:ap-ship']")] },
+    { id: 'c-faq', g: 'ไม่เข้า product', t: 'คำถามนโยบายล้วน', ex: 'ส่งฟรีไหม', oc: 'pass', llm: 0,
+      p: [['kr', `retrieve('ส่งฟรีไหม', …)`], ['pGate', `regex นโยบายทั้งข้อความ → return undefined`], ['xLegacy', `runLegacy() → DIRECT preset (cache) · ไม่เปิด CommerceTurn`]] },
+    { id: 'c-replay', g: 'ไม่เข้า product', t: 'webhook ส่งซ้ำหลังค้นแล้ว', ex: 'event เดิม retry หลัง worker ตาย', oc: 'reply', llm: 0, note: 'plan/retrieval/response อยู่ใน commerceTurns จึงไม่เรียก LLM หรือคิดเงินซ้ำ',
+      p: [...cPre('เสื้อยืด Basic สีดำไซส์ L ราคาเท่าไหร่', "CommerceTurn { retrieval: {…}, response: {…} }"), ['pRouter', `turn.retrieval → ANSWER_KNOWLEDGE`], ['pAnsLease', `turn.response มีแล้ว → คืนค่าเดิม`], ['pOut', `AiAnswerResult เดิม`], ['xMain', `ส่งข้อความเดิม`]] },
+  ],
+};
+
+/* ===================== VIEW 6 · ERD ===================== */
+const T = (id, g, label, fields, o = {}) => ({ id, g, label, fields, ...o });
+const ERD = {
+  id: 'erd', num: '6', title: 'ERD',
+  intro: 'ตารางของ feature product (prisma/models/products/product.prisma, commerce-turn.prisma, company ใน schema.prisma) และ preset ที่อยู่ในโค้ด (กรอบเส้นประ ไม่ใช่ DB) เส้นทึบ = FK จริง (ส่วนใหญ่เป็น composite id + companyId) · เส้นประ = เชื่อมด้วย key ในโค้ด/JSON ไม่มี FK',
+  groups: { id: 'Company / admin', prod: 'Catalog', bill: 'Command / stock audit', know: 'Index / vector', line: 'แชต / CommerceTurn', redis: 'Preset ในโค้ด (ไม่ใช่ DB)' },
+  columns: [
+    ['preset', 'company', 'adminMember'],
+    ['products', 'productVariants'],
+    ['inventoryBalances', 'inventoryMovements', 'productCatalogCommands'],
+    ['productIndexJobs', 'productVectors'],
+    ['commerceTurns', 'commerceLlmCalls', 'lineConversation'],
+  ],
+  tables: [
+    T('preset', 'redis', 'BUSINESS_PRESETS', [['ECOMMERCE', 'BusinessPreset'], ['label', 'string'], ['prompt.planner', 'string'], ['prompt.answer', 'string'], ['fields[].key', 'meta key'], ['fields[].type', 'TEXT|NUMBER|TAGS…'], ['fields[].variantOption', 'boolean'], ['fields[].searchable', 'boolean'], ['fields[].aiVisible', 'boolean'], ['fields[].valueAliases', 'record']], { flows: ['meta', 'catalog', 'chat', 'index'], wr: 'นักพัฒนา (ไฟล์ใน attributes/presets, prompts)', rd: 'catalog-fields.ts เท่านั้น', note: 'ไม่ใช่ตาราง: เป็นโค้ด เลือกโดย company.productBusinessType' }),
+    T('company', 'id', 'company', [['id', 'uuid', 'PK'], ['productBusinessType', 'varchar(30)'], ['productPresetCategories', 'text[]']], { flows: ['meta', 'catalog', 'chat', 'index'], wr: 'ProductAttributeService.applyPreset', rd: 'loadCatalogContext (ทุกจุด), lockProduct' }),
+    T('adminMember', 'id', 'adminMember', [['id', 'uuid', 'PK'], ['companyId', 'uuid', 'FK'], ['role', 'dev|owner|admin']], { flows: ['catalog', 'stock'], wr: '-', rd: 'ProductCommandService (actor ของบริษัท), AdminGuard' }),
+    T('products', 'prod', 'products', [['id', 'uuid', 'PK'], ['companyId', 'uuid', 'FK'], ['name', 'varchar(255)'], ['aliases', 'text[]'], ['description', 'text'], ['category', 'varchar(100)'], ['language', "'th'|'en'"], ['status', 'DRAFT|ACTIVE|ARCHIVED'], ['revision', 'int (optimistic)'], ['searchRevision', 'int (index)']], { flows: ['catalog', 'stock', 'index', 'chat'], wr: 'ProductService.create/update/createVariant/updateVariant, applyPreset (searchRevision)', rd: 'ProductSearchService, enqueueProductIndex, lockProduct', note: 'unique (id, companyId) ให้ลูก FK แบบ composite' }),
+    T('productVariants', 'prod', 'productVariants', [['id', 'uuid', 'PK'], ['productId + companyId', 'uuid', 'FK'], ['sku', 'varchar(100)', 'UK*'], ['price', 'decimal(12,2)'], ['compareAtPrice', 'decimal(12,2)'], ['meta', 'jsonb {preset keys}'], ['trackStock', 'boolean'], ['currency', "'THB'"], ['version', 'int'], ['active', 'boolean']], { flows: ['meta', 'catalog', 'stock', 'index', 'chat'], wr: 'ProductService (meta ผ่าน validateAttributeValues)', rd: 'search (jsonb_each_text(meta)), evidence, document, catalogView', note: 'UK* = (companyId, sku) · meta คือค่าของ field ธุรกิจทุกประเภท (แทน fashion/restaurant/hotelVariants ที่ถูกลบ)' }),
+    T('inventoryBalances', 'bill', 'inventoryBalances', [['id', 'uuid', 'PK'], ['variantId + companyId', 'uuid', 'FK UK'], ['onHand', 'int'], ['reserved', 'int'], ['version', 'int']], { flows: ['stock', 'chat', 'catalog'], wr: 'ProductService (สร้างเมื่อ trackStock), InventoryService.adjust', rd: 'evidence (stock), catalogView (available)' }),
+    T('inventoryMovements', 'bill', 'inventoryMovements', [['id', 'uuid', 'PK'], ['variantId + companyId', 'uuid', 'FK'], ['commandId', 'uuid', 'FK UK'], ['actorAdminId', 'uuid', 'FK'], ['deltaOnHand', 'int'], ['onHandAfter', 'int'], ['reservedAfter', 'int'], ['reason', 'varchar(500)'], ['operationKey', 'varchar', 'UK']], { flows: ['stock'], wr: 'InventoryService.adjust (append-only)', rd: 'audit' }),
+    T('productCatalogCommands', 'bill', 'productCatalogCommands', [['id', 'uuid', 'PK'], ['companyId', 'uuid', 'FK'], ['requestId', 'uuid', 'UK*'], ['actorAdminId', 'uuid', 'FK'], ['action', 'CREATE_PRODUCT…'], ['fingerprint', 'sha256'], ['result', 'json']], { flows: ['catalog', 'stock', 'index'], wr: 'ProductCommandService.execute', rd: 'ProductCommandService (replay)', note: 'UK* = (companyId, requestId) → idempotency ของทุกการเขียน catalog/สต็อก/reindex/applyPreset' }),
+    T('productIndexJobs', 'know', 'productIndexJobs', [['id', 'uuid', 'PK'], ['productId + companyId', 'uuid', 'FK'], ['searchRevision', 'int', 'UK*'], ['embeddingModel', 'varchar', 'UK*'], ['contentHash', 'sha256'], ['document', 'text'], ['state', 'PENDING|RUNNING|DONE|SUPERSEDED|FAILED'], ['leaseOwner / leaseUntil', 'uuid / ts'], ['attempts / retryAt', 'int / ts'], ['lastErrorCode', 'varchar']], { flows: ['index', 'catalog'], wr: 'enqueueProductIndex, ProductIndexService', rd: 'ProductIndexService.tick/process/status', note: 'UK* = (productId, searchRevision, embeddingModel)' }),
+    T('productVectors', 'know', 'productVectors', [['productId + companyId', 'uuid', 'PK FK'], ['embedding', 'vector(1536)'], ['embeddingModel', 'varchar'], ['searchRevision', 'int'], ['contentHash', 'sha256']], { flows: ['index', 'chat'], wr: 'ProductVectorRepository.upsert', rd: 'ProductVectorRepository.search (searchRevision ต้องตรง product)' }),
+    T('commerceTurns', 'line', 'commerceTurns', [['id', 'uuid', 'PK'], ['companyId', 'uuid', 'FK'], ['connectionKey', 'varchar', 'UK*'], ['externalEventId', 'webhookEventId', 'UK*'], ['lineMemberId', 'uuid', 'FK'], ['conversationId', 'uuid', 'FK'], ['provider / model', 'pinned'], ['input', 'json'], ['plan', 'json'], ['retrieval', 'json (evidence)'], ['response', 'json'], ['leaseOwner / leaseUntil', 'uuid / ts']], { flows: ['chat'], wr: 'CommerceTurnService.open/save/withLease', rd: 'ProductRetrievalService, ProductAnswerService', note: 'snapshot ต่อ webhook event · retrieval เก็บ ProductEvidence (ราคา/สต็อก ณ เวลาค้น)' }),
+    T('commerceLlmCalls', 'line', 'commerceLlmCalls', [['id', 'uuid', 'PK'], ['turnId', 'uuid', 'FK'], ['slot', 'PLAN|ANSWER|CRITICAL_REPAIR', 'UK'], ['ordinal', '1..3', 'UK'], ['request', 'json'], ['result', 'json'], ['failed', 'boolean']], { flows: ['chat'], wr: 'CommerceTurnService.call', rd: 'CommerceTurnService.call (replay)' }),
+    T('lineConversation', 'line', 'lineConversation', [['id', 'uuid', 'PK'], ['lineMemberId', 'uuid', 'FK'], ['status', 'open|waiting_admin']], { flows: ['chat'], wr: 'LINE channel', rd: 'CommerceTurnService.open (ownership)' }),
+  ],
+  rels: [
+    ['company', 'productBusinessType', 'preset', 'ECOMMERCE', '11', true],
+    ['productVariants', 'meta', 'preset', 'fields[].key', 'n1', true],
+    ['adminMember', 'companyId', 'company', 'id'],
+    ['products', 'companyId', 'company', 'id'],
+    ['productVariants', 'productId + companyId', 'products', 'id'],
+    ['inventoryBalances', 'variantId + companyId', 'productVariants', 'id', '11'],
+    ['inventoryMovements', 'variantId + companyId', 'productVariants', 'id'],
+    ['inventoryMovements', 'commandId', 'productCatalogCommands', 'id', '11'],
+    ['inventoryMovements', 'actorAdminId', 'adminMember', 'id'],
+    ['productCatalogCommands', 'companyId', 'company', 'id'],
+    ['productCatalogCommands', 'actorAdminId', 'adminMember', 'id'],
+    ['productIndexJobs', 'productId + companyId', 'products', 'id'],
+    ['productVectors', 'productId + companyId', 'products', 'id', '11'],
+    ['productVectors', 'searchRevision', 'productIndexJobs', 'searchRevision', 'n1', true],
+    ['commerceTurns', 'companyId', 'company', 'id'],
+    ['commerceTurns', 'conversationId', 'lineConversation', 'id'],
+    ['commerceLlmCalls', 'turnId', 'commerceTurns', 'id'],
+    ['commerceTurns', 'retrieval', 'productVariants', 'id', 'n1', true],
+  ],
+  flows: [['meta', 'แท็บ 1 · Preset → meta'], ['catalog', 'แท็บ 2 · Admin เขียนสินค้า'], ['stock', 'แท็บ 3 · สต็อก'], ['index', 'แท็บ 4 · Index'], ['chat', 'แท็บ 5 · แชต']],
+};
+
+const VIEWS = [META, CATALOG, STOCK, INDEX, CHAT, ERD, { id: 'guide', num: '7', title: 'คู่มือ preset / meta', findings: true }];
+
+/* ===================== guide ===================== */
+const FIELD_ROWS = [
+  ['brand', 'แบรนด์', 'TEXT', '', 'EQ, CONTAINS', 'details', "'Basic'"],
+  ['tags', 'แท็ก', 'TAGS', '', 'CONTAINS, NOT_CONTAINS', 'details', "['ขายดี']"],
+  ['model', 'รุ่น', 'TEXT', '', 'EQ, CONTAINS', 'details', "'Air 2'"],
+  ['color', 'สี', 'TEXT', '✓ (alias ดำ↔black …)', 'EQ, CONTAINS', 'options', "'ดำ'"],
+  ['size', 'ขนาด / ไซส์', 'TEXT', '✓', 'EQ, CONTAINS', 'options', "'L'"],
+  ['material', 'วัสดุ', 'TEXT', '', 'EQ, CONTAINS', 'details', "'cotton 100%'"],
+  ['weight_g', 'น้ำหนัก', 'NUMBER (g)', '', 'EQ, GTE, LTE', 'details', '180'],
+  ['dimensions', 'ขนาดสินค้า (กว้าง x ยาว x สูง)', 'TEXT', '', 'EQ, CONTAINS', 'details', "'30x20x10 cm'"],
+  ['features', 'คุณสมบัติเด่น', 'TAGS', '', 'CONTAINS, NOT_CONTAINS', 'details', "['กันน้ำ']"],
+  ['origin', 'แหล่งผลิต', 'TEXT', '', 'EQ, CONTAINS', 'details', "'ไทย'"],
+  ['warranty', 'การรับประกัน', 'TEXT', '', 'EQ, CONTAINS', 'details', "'1 ปี'"],
+  ['package_contents', 'สิ่งที่ได้รับในกล่อง', 'TEXT', '', 'EQ, CONTAINS', 'details', "'ตัวเครื่อง, สาย USB-C'"],
+];
+const FLAG_ROWS = [
+  ['key', 'ชื่อ key ใน meta · /^[a-z][a-z0-9_]{0,49}$/', 'ทุกที่'],
+  ['label', 'ชื่อที่ลูกค้า/AI เห็น และอยู่ใน document ที่ embed (เปลี่ยน label = re-embed)', 'document, evidence, optionMatcher (ตัดคำนำหน้า)'],
+  ['scope', 'catalogFields บังคับเป็น VARIANT เสมอ (ค่าอยู่ที่ variant)', 'validate, labelledAttributes'],
+  ['type', 'TEXT · NUMBER · BOOLEAN · SELECT · MULTI_SELECT · TAGS → ชนิดค่าและ operator ที่ planner ใช้ได้', 'checkValue, fieldOperators, matchesBusinessFields'],
+  ['options', 'รายการค่าที่อนุญาต (เฉพาะ SELECT/MULTI_SELECT ต้องมี)', 'checkValue, plannerCatalog (ถ้ายังไม่มีค่าจริง)'],
+  ['valueAliases', 'คำที่ลูกค้าใช้แทนค่าเดียวกัน { ดำ: [black] }', 'optionMatcher, proseStatesOptionValue'],
+  ['unit', 'หน่วยต่อท้ายค่า NUMBER และตัดออกตอนเทียบคำลูกค้า', 'formatAttributeValue, optionMatcher'],
+  ['required', 'ต้องมีค่าเมื่อสร้าง/แก้ variant (ECOMMERCE ไม่มี field ที่ required)', 'validateAttributeValues'],
+  ['variantOption', 'เป็นตัวเลือกของลูกค้า (สี/ไซส์) → plan.options และ evidence.options', 'planner storeOptions, evidence, VARIANT_UNAVAILABLE'],
+  ['searchable', 'ใช้ค้นและอยู่ใน document/BM25 ได้ (default true)', 'buildProductDocument, plannerCatalog, validateBusinessFilters'],
+  ['aiVisible', 'ส่งให้ LLM เห็นใน evidence ได้ (default true)', 'evidence details/options, plannerCatalog'],
+  ['categories', 'ใช้กับหมวดไหน (catalogFields ใส่ productPresetCategories ของร้านให้ทุก field)', 'appliesToCategory'],
+  ['sortOrder', 'ลำดับในฟอร์ม/เอกสาร', 'catalogFields sort'],
+  ['status', 'catalogFields บังคับ ACTIVE · ค่าใน meta ของ field ที่ไม่อยู่ใน preset ถูกเก็บไว้แต่ไม่มีใครอ่าน', 'validateAttributeValues (keep stored)'],
+];
+const tableHtml = (head, rows) => `<table class="fieldlist gt"><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c, i) => `<td${i ? '' : ''}>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+const codeHtml = (t) => `<pre class="code">${hl(t)}</pre>`;
+function guideHtml() {
+  return `<div class="wrap"><h2>คู่มือ preset / meta</h2>
+  <p class="lead">อ่านจากโค้ดใน working tree (main + ไฟล์ที่ยังไม่ commit) วันที่ 22 ต.ค. 2026 ตอนนี้ลงทะเบียนเฉพาะ ECOMMERCE ส่วนที่ติดป้าย “ข้อเสนอ” ยังไม่มีในโค้ด</p>
+
+  <article class="fcard s-good"><div class="fh"><span class="sev">1</span><span class="chip">แนวคิด</span></div><h3>ร้านรู้ได้อย่างไรว่า meta ของสินค้ามี field อะไร</h3>
+    <ol class="gl">
+      <li><b>ไฟล์ preset ในโค้ด</b> (<code>attributes/presets/*.preset.ts</code>) ประกาศ field ของธุรกิจ: key, label, type, ตัวเลือก, alias, หน่วย และข้อความ prompt ของธุรกิจนั้น (<code>attributes/prompts/*.prompt.ts</code>)</li>
+      <li><b>registry</b> <code>BUSINESS_PRESETS</code> ใน <code>presets/index.ts</code> ผูกชื่อธุรกิจ (เช่น <code>ECOMMERCE</code>) กับ preset</li>
+      <li><b>ร้านเลือกธุรกิจ</b> ด้วย <code>POST /api/admin/products/attributes/presets/:type/apply</code> → เก็บใน <code>company.productBusinessType</code> (+ หมวดที่ใช้ใน <code>productPresetCategories</code>)</li>
+      <li><b>ประตูเดียว</b> <code>search/catalog-fields.ts</code>: <code>loadCatalogFields(db, scope)</code> อ่าน type ของร้านแล้วคืน <code>AttributeDefinition[]</code> ที่เติม default แล้ว ทุกจุดใช้ฟังก์ชันนี้ ไม่มีใครอ่าน preset ตรง</li>
+      <li><b>ค่าจริง</b> อยู่ใน <code>productVariants.meta</code> (jsonb) ตาม key ของ preset ราคาอยู่ในคอลัมน์ <code>price</code> สต็อกอยู่ใน <code>inventoryBalances</code> ไม่เคยอยู่ใน meta</li>
+    </ol>
+    <p>ผลคือแต่ละธุรกิจมี field ต่างกันได้โดยไม่แตะ schema: เปลี่ยน preset → ฟอร์ม validation index planner search evidence และตัวกันคำตอบเปลี่ยนตามทันที (ดูแท็บ 1)</p></article>
+
+  <article class="fcard s-low"><div class="fh"><span class="sev">2</span><span class="chip">ECOMMERCE</span></div><h3>Field ของ ECOMMERCE และไปโผล่ที่ไหน</h3>
+    ${tableHtml(['key', 'label', 'type', 'ตัวเลือกลูกค้า', 'operator ใน filters', 'ใน evidence', 'ตัวอย่าง'], FIELD_ROWS)}
+    <p class="sub">ตัวเลือก (variantOption) ถูกส่งเป็น <code>plan.options</code> และเทียบด้วย optionMatcher (ไม่สนคำนำหน้า “สี/ไซส์”, ช่องว่าง, ตัวพิมพ์, หน่วย, alias) field อื่นใช้ <code>plan.filters</code> ตาม operator ของ type planner ใช้ key อื่นนอกตารางนี้ไม่ได้ (plan ถูกตีกลับ)</p></article>
+
+  <article class="fcard s-low"><div class="fh"><span class="sev">3</span><span class="chip">AttributeDefinition</span></div><h3>ความหมายของแต่ละ property ใน field</h3>
+    ${tableHtml(['property', 'ความหมาย', 'ใช้ที่'], FLAG_ROWS)}</article>
+
+  <article class="fcard s-med"><div class="fh"><span class="sev">4</span><span class="chip">กฎ key</span></div><h3>key ที่ห้ามใช้ใน meta และทำไม meta.onhand ใช้ไม่ได้</h3>
+    <ul>
+      <li><b>key สงวน</b> (<code>RESERVED_KEYS</code>): id, name, code, sku, description, details, category, aliases, language, status, price, base_price, price_override, effective_price, currency, stock, inventory, track_stock, company_id, tenant_id</li>
+      <li><b>คำต้องห้ามในส่วนใดของ key</b> (<code>SENSITIVE_KEY_WORDS</code>, แยกด้วย _): price, cost, stock, qty, quantity, inventory, <b>onhand</b>, password, bank, account, phone, tel, mobile, email, address, citizen, passport, tax</li>
+      <li>DTO ตรวจด้วย <code>isSafeAttributeKey</code> ตอนเขียนค่า จึงส่ง <code>meta: { onhand: 5 }</code> หรือ <code>{ cost_price: 100 }</code> ไม่ได้ (400) — เพราะเงินและสต็อกต้องมีแหล่งจริงที่เดียว (AGENTS.md: mutable facts มาจาก DB/API ไม่ใช่ข้อความ vector)</li>
+      <li>⚠ <code>assertSafeDefinition</code> ไม่ถูกเรียกที่ไหนแล้ว ไม่มีอะไรตรวจ key ใน preset: ถ้าประกาศ key ที่มีคำต้องห้าม (เช่น <code>stock_qty</code>) preset จะโหลดได้แต่เขียนค่าไม่ได้ ควรมี unit test ที่เรียก <code>assertSafeDefinition(key, label)</code> กับทุก field ของทุก preset</li>
+    </ul></article>
+
+  <article class="fcard s-low"><div class="fh"><span class="sev">5</span><span class="chip">เพิ่มธุรกิจ</span></div><h3>ขั้นตอนเพิ่มธุรกิจใหม่ (ทีละอัน)</h3>
+    <ol class="gl">
+      <li>สร้าง <code>attributes/prompts/&lt;biz&gt;.prompt.ts</code> (planner: field ไหนใช้ operator อะไร, ห้ามเดาอะไร · answer: ตอบจาก details/options เท่านั้น)</li>
+      <li>สร้าง <code>attributes/presets/&lt;biz&gt;.preset.ts</code> ใช้ shared-fields ที่มี (brand, tags, color) ตั้ง variantOption ให้ field ที่ลูกค้าเลือก, unit ให้ NUMBER, valueAliases ให้คำที่ลูกค้าพิมพ์ต่างกัน</li>
+      <li>ลงทะเบียนใน <code>presets/index.ts</code> → <code>BUSINESS_TYPES</code>, DTO <code>:type</code>, หน้า presets ได้ค่าใหม่อัตโนมัติ</li>
+      <li>เทสต์: unit (presetDefinitions('&lt;BIZ&gt;'), key ปลอดภัย, matchesBusinessFields) และ retrieval tests ด้วยคำถามไทยจริง (AGENTS.md บังคับเมื่อแก้ prompt/scoring)</li>
+      <li>ร้าน apply preset → searchRevision ของทุกสินค้า +1 → index worker re-embed · สินค้าที่มี meta key เดิมยังอยู่ ค่าที่ key ไม่อยู่ใน preset ใหม่จะไม่ถูกอ่าน</li>
+    </ol>
+    ${codeHtml(`// attributes/presets/index.ts\nexport const BUSINESS_PRESETS: Readonly<Record<string, BusinessPreset>> = {\n  ECOMMERCE: ECOMMERCE_PRESET,\n  IT: IT_PRESET,   // ← ธุรกิจใหม่ 1 บรรทัด\n};`)}</article>
+
+  <article class="fcard s-med"><div class="fh"><span class="sev">6</span><span class="chip">ข้อเสนอ · ยังไม่มีในโค้ด</span></div><h3>เงื่อนไขบนข้อมูลสินค้า (meta rules / stock rules)</h3>
+    <p><b>แยกให้ชัดก่อนว่าเงื่อนไขอ่านข้อมูลอะไร</b></p>
+    <ul>
+      <li><b>สต็อก/ราคา</b> เช่น “แจ้งเมื่อสินค้าหมด” ต้องอ่าน <code>inventoryBalances</code>: <code>available = onHand − reserved ≤ 0</code> ไม่ใช่ <code>meta.onhand &lt; 0</code> (key นี้ถูกห้าม และ onHand ติดลบไม่ได้อยู่แล้วเพราะ InventoryService ห้ามต่ำกว่า reserved)</li>
+      <li><b>คุณสมบัติสินค้า</b> เช่น “features มี กันน้ำ → แสดงป้าย” หรือ “ไม่มี warranty → AI ห้ามพูดเรื่องรับประกัน” อ่านจาก meta ได้</li>
+    </ul>
+    <p><b>Stock rule (แจ้งเตือนสินค้าหมด)</b>: จุดต่อคือหลัง update balance ใน <code>InventoryService.adjust</code> (และ flow จอง/ขายในอนาคตที่เปลี่ยน reserved) เขียน outbox ใน transaction เดียวกัน แล้วให้ worker ส่งแจ้งเตือน ไม่เรียก LINE/Socket.IO ใน transaction ใช้ movementId เป็น idempotency key และแจ้งเฉพาะตอนข้ามเส้น (availableBefore &gt; 0 และ availableAfter ≤ 0) เส้นประในแท็บ 3</p>
+    ${codeHtml(`// ข้อเสนอ: ไม่ใช่โค้ดปัจจุบัน\ntype StockEvent = { companyId: string; variantId: string; movementId: string; availableBefore: number; availableAfter: number };\nconst stockOut = (e: StockEvent) => e.availableBefore > 0 && e.availableAfter <= 0;   // pure, no I/O`)}
+    <p><b>Meta rule</b>: ถ้าจะให้แต่ละธุรกิจมีเงื่อนไขของตัวเอง ให้ประกาศใน preset เป็นข้อมูล (ไม่ใช่โค้ดอิสระ) แล้วประเมินด้วยฟังก์ชันเดียวที่ deterministic ใช้ semantics เดียวกับ <code>matchesBusinessFields</code> (operator ตาม type, ค่าไม่มี = ไม่ผ่าน) จุดที่ต่อได้: <code>evidence()</code> ใน ProductSearchService (ตอนแชต), <code>validateAttributeValues</code> (ตอนเขียน), <code>catalogView</code> (ฟอร์ม admin)</p>
+    ${codeHtml(`// ข้อเสนอ: ไม่ใช่โค้ดปัจจุบัน\ntype MetaRule = Readonly<{\n  id: string;\n  when: { key: string; operator: 'EQ' | 'CONTAINS' | 'NOT_CONTAINS' | 'GTE' | 'LTE' | 'MISSING'; value?: string | number | boolean }[];\n  then: 'HIDE_FROM_AI' | 'REQUIRE_ADMIN' | { badge: string };\n}>;\n// BusinessPreset = { label, prompt, fields, rules?: readonly MetaRule[] }`)}
+    <p class="sub">หลักการ: rule ห้ามสร้างราคา/สต็อก/สถานะบัญชี ห้ามเรียก LLM หรือ network และต้องมีเทสต์ด้วยข้อมูลจริงของธุรกิจนั้น</p></article>
+
+  <article class="fcard s-high"><div class="fh"><span class="sev">7</span><span class="chip">ข้อจำกัดตอนนี้</span></div><h3>สิ่งที่ต้องรู้ก่อนใช้งานจริง</h3>
+    <ul>
+      <li><b>ร้านที่ productBusinessType ไม่ใช่ ECOMMERCE</b> (null หรือค่าเก่า FASHION/HOTEL/…) ได้ 0 field: เขียน meta ไม่ได้, AI ไม่เห็นคุณสมบัติ, ถามสี/ไซส์แล้ว plan ล้ม → ต้อง apply ECOMMERCE หลัง deploy (แท็บ 5 event “ร้านยังไม่ apply ECOMMERCE”)</li>
+      <li><b>src/scripts/text/product.json</b> ใช้ key สเปกคอม (gpu, vram_gb, ram_gb, …) ที่ไม่อยู่ใน ECOMMERCE: ทุก variant จะได้ 400 จนกว่าจะมี preset ที่ประกาศ key เหล่านี้</li>
+      <li><b>planner filter → option</b>: filter EQ บน key ที่เป็นตัวเลือก (สี/ไซส์) ถูกย้ายเป็น option แต่ถ้า key นั้นมีใน options แล้ว หรือ options ครบ 6 ตัว filter จะหายไปเฉย ๆ (<code>product-retrieval.service.ts:319</code>)</li>
+      <li><b>bulk create</b>: item ที่ไม่ส่ง requestId จะได้ UUID สุ่ม การส่ง request เดิมซ้ำจึงไม่ replay (สร้างซ้ำหรือชน SKU) ใช้เฉพาะ role dev</li>
+      <li><b>สต็อก</b>: ยังไม่มี flow จอง (reserved = 0 เสมอ) และยังไม่มีแจ้งเตือนสินค้าหมด</li>
+    </ul></article>
+  </div>`;
+}
+
+/* ===================== app ===================== */
+const CW = 200, CH = 112, NW = 172, NH = 64, PAD = 70;
+const KIND = { start: 'จุดเริ่ม', svc: 'service', dec: 'จุดตัดสินใจ', llm: 'AI / LLM call', ext: 'external API', end: 'ปลายทาง' };
+const OUTC = { reply: 'ตอบลูกค้า', handoff: 'fallback + แจ้งแอดมิน', silent: 'ไม่ตอบ / ทิ้ง', error: 'error · retry · ตรวจมือ', ask: 'ถามกลับ', pass: 'ต่อที่ flow อื่น' };
+const SEV = { high: 'สูง', med: 'กลาง', low: 'ต่ำ' };
+const SVGNS = 'http://www.w3.org/2000/svg';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const el = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const svg = $('#svg');
+const state = { view: VIEWS[0].id, event: null, node: null, step: -1, erdFlow: null };
+let G = null;
+let vb = { x: 0, y: 0, w: 1000, h: 800 };
+
+/* ---------- code highlighting for data shapes ---------- */
+const escText = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+/** Splits a line at the first // that is not inside a quoted string. */
+function splitComment(line) {
+  let quote = null;
+  for (let i = 0; i < line.length - 1; i++) {
+    const c = line[i];
+    if (quote) { if (c === '\\') i++; else if (c === quote) quote = null; continue; }
+    if (c === "'" || c === '"') quote = c;
+    else if (c === '/' && line[i + 1] === '/' && line[i - 1] !== ':') return [line.slice(0, i), line.slice(i)];
+  }
+  return [line, ''];
+}
+function hl(text) {
+  return String(text ?? '').split('\n').map((line) => {
+    const [code, comment] = splitComment(line);
+    const out = escText(code).replace(/('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")|(\b\d[\d.,]*\b)|([A-Za-z_$][\w$.]*)(?=\s*:(?!\/))/g,
+      (m, s, n, k) => s ? `<span class="cs">${s}</span>` : n ? `<span class="cn">${n}</span>` : `<span class="ck">${k}</span>`);
+    return out + (comment ? `<span class="cc">${escText(comment)}</span>` : '');
+  }).join('\n');
+}
+const pre = (t) => `<pre class="code">${hl(t)}</pre>`;
+const fileLink = (f) => {
+  if (!f) return '';
+  const [path, line] = f.split(':');
+  return `<a href="../${esc(path)}" title="เปิดไฟล์ (relative จาก docs/)"><code>${esc(path)}${line ? ':' + esc(line) : ''}</code></a>`;
+};
+
+/* ---------- prepare flow views ---------- */
+function prep(v) {
+  if (v._prep) return v;
+  v.nodeMap = new Map(v.nodes.map((n) => [n.id, n]));
+  v.edgeMap = new Map();
+  for (const e of v.edges) { e.id = `${e.from}>${e.to}`; v.edgeMap.set(e.id, e); }
+  v.problems = [];
+  for (const ev of v.events) {
+    ev.p.forEach(([id], i) => {
+      if (!v.nodeMap.has(id)) v.problems.push(`${ev.id}: ไม่มี node ${id}`);
+      if (i === 0) return;
+      const key = `${ev.p[i - 1][0]}>${id}`;
+      if (!v.edgeMap.has(key)) {
+        v.problems.push(`${ev.id}: ไม่มี edge ${key}`);
+        const e = E(ev.p[i - 1][0], id, '', { soft: true });
+        e.id = key; v.edges.push(e); v.edgeMap.set(key, e);
+      }
+    });
+  }
+  v.byNode = new Map();
+  for (const ev of v.events) for (const [id] of ev.p) {
+    if (!v.byNode.has(id)) v.byNode.set(id, []);
+    if (!v.byNode.get(id).includes(ev)) v.byNode.get(id).push(ev);
+  }
+  layout(v);
+  v._prep = true;
+  return v;
+}
+
+function layout(v) {
+  const minX = Math.min(...v.nodes.map((n) => n.x - (n.w ? n.w / 2 : 0.5)), ...v.edges.filter((e) => e.lane != null).map((e) => e.lane - 0.3));
+  v.px = (x) => (x - minX) * CW + PAD + CW / 2;
+  for (const n of v.nodes) {
+    n.cx = v.px(n.x); n.cy = n.y * CH + PAD + NH / 2;
+    n.ww = n.w ? n.w * CW - (CW - NW) : NW;
+    n.l = n.cx - n.ww / 2; n.r = n.cx + n.ww / 2; n.t = n.cy - NH / 2; n.b = n.cy + NH / 2;
+  }
+  v.ranks = [...new Set(v.nodes.map((n) => n.y))].sort((a, b) => a - b);
+  const lanes = v.edges.filter((e) => e.lane != null).map((e) => v.px(e.lane));
+  v.W = Math.max(...v.nodes.map((n) => n.r), ...lanes) + PAD;
+  v.H = Math.max(...v.nodes.map((n) => n.b)) + PAD;
+  // spread anchors of down edges so fan-out/fan-in stays readable
+  for (const n of v.nodes) {
+    const outs = v.edges.filter((e) => e.from === n.id && e.lane == null && v.nodeMap.get(e.to)?.y > n.y)
+      .sort((a, b) => v.nodeMap.get(a.to).cx - v.nodeMap.get(b.to).cx);
+    const ins = v.edges.filter((e) => e.to === n.id && e.lane == null && v.nodeMap.get(e.from)?.y < n.y)
+      .sort((a, b) => v.nodeMap.get(a.from).cx - v.nodeMap.get(b.from).cx);
+    const spread = (list, key) => {
+      const k = list.length; const gap = k > 1 ? Math.min(20, (n.ww - 36) / (k - 1)) : 0;
+      list.forEach((e, i) => { e[key] = n.cx + (i - (k - 1) / 2) * gap; });
+    };
+    spread(outs, 'sx');
+    if (!n.bus) spread(ins, 'tx');
+  }
+  for (const e of v.edges) routeEdge(v, e);
+}
+
+function freeX(v, rank, desired) {
+  const iv = v.nodes.filter((n) => n.y === rank).map((n) => [n.l - 9, n.r + 9]);
+  let x = desired;
+  for (let guard = 0; guard < 6; guard++) {
+    const hit = iv.find(([a, b]) => x > a && x < b);
+    if (!hit) return x;
+    x = Math.abs(x - hit[0]) <= Math.abs(hit[1] - x) ? hit[0] - 1 : hit[1] + 1;
+  }
+  return x;
+}
+
+function routeEdge(v, e) {
+  const s = v.nodeMap.get(e.from), t = v.nodeMap.get(e.to);
+  if (!s || !t) { e.d = ''; return; }
+  if (e.lane != null) {
+    const lx = v.px(e.lane), right = lx > s.cx;
+    const p = [[right ? s.r : s.l, s.cy], [lx, s.cy], [lx, t.cy], [right ? t.r : t.l, t.cy]];
+    e.d = orthoD(p); return;
+  }
+  if (t.y === s.y) {
+    const dir = t.cx > s.cx ? 1 : -1;
+    const blocked = v.nodes.some((n) => n.y === s.y && n !== s && n !== t && (n.cx - s.cx) * dir > 0 && (t.cx - n.cx) * dir > 0);
+    if (!blocked) { e.d = `M${dir > 0 ? s.r : s.l},${s.cy} L${dir > 0 ? t.l : t.r},${t.cy}`; return; }
+    const ry = s.t - 22, sx = s.cx + dir * 30, tx = t.cx - dir * 30;
+    e.d = orthoD([[sx, s.t], [sx, ry], [tx, ry], [tx, t.t]]); return;
+  }
+  if (t.y < s.y) { // upward: go around on the right
+    const lx = Math.max(s.r, t.r) + 40;
+    e.d = orthoD([[s.r, s.cy], [lx, s.cy], [lx, t.cy], [t.r, t.cy]]); return;
+  }
+  const sx = e.sx ?? s.cx;
+  const goal = t.bus ? Math.min(Math.max(sx, t.l + 18), t.r - 18) : (e.tx ?? t.cx);
+  const pts = [[sx, s.b]];
+  const mids = v.ranks.filter((r) => r > s.y && r < t.y);
+  mids.forEach((r) => {
+    const f = (r - s.y) / (t.y - s.y);
+    const x = freeX(v, r, sx + (goal - sx) * f);
+    const cy = r * CH + PAD + NH / 2;
+    pts.push([x, cy - NH / 2 - 10], [x, cy + NH / 2 + 10]);
+  });
+  const last = pts[pts.length - 1][0];
+  const tx = t.bus ? Math.min(Math.max(last, t.l + 18), t.r - 18) : goal;
+  pts.push([tx, t.t]);
+  e.d = curveD(pts);
+}
+function curveD(p) {
+  let d = `M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)}`;
+  for (let i = 1; i < p.length; i++) {
+    const [x0, y0] = p[i - 1], [x1, y1] = p[i];
+    if (Math.abs(x1 - x0) < 0.5) d += ` L${x1.toFixed(1)},${y1.toFixed(1)}`;
+    else { const dy = (y1 - y0) * 0.5; d += ` C${x0.toFixed(1)},${(y0 + dy).toFixed(1)} ${x1.toFixed(1)},${(y1 - dy).toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`; }
+  }
+  return d;
+}
+function orthoD(p, r = 12) {
+  let d = `M${p[0][0]},${p[0][1]}`;
+  for (let i = 1; i < p.length - 1; i++) {
+    const [ax, ay] = p[i - 1], [bx, by] = p[i], [cx, cy] = p[i + 1];
+    const l1 = Math.hypot(bx - ax, by - ay) || 1, l2 = Math.hypot(cx - bx, cy - by) || 1;
+    const rr = Math.min(r, l1 / 2, l2 / 2);
+    d += ` L${bx - ((bx - ax) / l1) * rr},${by - ((by - ay) / l1) * rr} Q${bx},${by} ${bx + ((cx - bx) / l2) * rr},${by + ((cy - by) / l2) * rr}`;
+  }
+  const z = p[p.length - 1];
+  return d + ` L${z[0]},${z[1]}`;
+}
+
+/* ---------- render flow graph ---------- */
+function defs() {
+  const d = el('defs', {}, svg);
+  for (const [id, cls] of [['arr', 'edge'], ['arrHot', 'hot']]) {
+    const m = el('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, d);
+    el('path', { d: 'M0,0 L10,5 L0,10 z', style: `fill:var(--${cls === 'hot' ? 'accent' : 'edge'})` }, m);
+  }
+}
+function renderFlow(v) {
+  prep(v);
+  svg.innerHTML = '';
+  defs();
+  G = { v, W: v.W, H: v.H, edgeEls: new Map(), nodeEls: new Map(), badges: el('g') };
+  const gE = el('g', {}, svg), gL = el('g', {}, svg), gN = el('g', {}, svg);
+  for (const e of v.edges) {
+    const g = el('g', { class: `gedge${e.soft ? ' soft' : ''}`, 'data-id': e.id }, gE);
+    const path = el('path', { class: 'e', d: e.d, 'marker-end': 'url(#arr)' }, g);
+    el('path', { class: 'hit', d: e.d }, g).addEventListener('click', (ev) => { ev.stopPropagation(); if (!dragMoved) selectNode(e.to); });
+    if (e.label) {
+      const len = path.getTotalLength();
+      const pos = e.lp != null ? len * e.lp : len <= 200 ? len * 0.5 : 92;
+      const pt = path.getPointAtLength(pos);
+      const tl = el('text', { class: 'elabel', x: pt.x, y: pt.y + 3.5, 'text-anchor': 'middle' }, gL);
+      tl.textContent = e.label;
+      g.label = tl;
+    }
+    G.edgeEls.set(e.id, g);
+  }
+  for (const n of v.nodes) {
+    const g = el('g', { class: 'gnode', transform: `translate(${n.l},${n.t})`, 'data-id': n.id, tabindex: 0, role: 'button', 'aria-label': `${n.title} ${n.s}` }, gN);
+    const fo = el('foreignObject', { width: n.ww, height: NH }, g);
+    const cls = n.k === 'end' ? `k-end o-${n.oc || 'pass'}` : `k-${n.k}`;
+    fo.innerHTML = `<div xmlns="http://www.w3.org/1999/xhtml" class="node ${cls}${n.bus ? ' bus' : ''}">${n.tag ? `<span class="tag">${esc(n.tag)}</span>` : ''}<div class="nt">${esc(n.title)}</div><div class="ns">${esc(n.s)}</div></div>`;
+    g.addEventListener('click', (ev) => { ev.stopPropagation(); if (!dragMoved) selectNode(n.id); });
+    g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectNode(n.id); } });
+    G.nodeEls.set(n.id, g);
+  }
+  svg.appendChild(G.badges);
+}
+
+function highlight() {
+  if (!G) return;
+  const v = G.v;
+  const ev = state.event && v.events?.find((x) => x.id === state.event);
+  svg.classList.toggle('has-ev', !!ev);
+  svg.classList.toggle('has-adj', !!state.node && !ev);
+  G.badges.innerHTML = '';
+  if (v.tables) return highlightErd(ev);
+  const hotE = new Set(), onN = new Map();
+  if (ev) ev.p.forEach(([id], i) => {
+    onN.set(id, [...(onN.get(id) || []), i + 1]);
+    if (i) hotE.add(`${ev.p[i - 1][0]}>${id}`);
+  });
+  const adjE = new Set(), adjN = new Set([state.node]);
+  if (state.node) for (const e of v.edges) if (e.from === state.node || e.to === state.node) { adjE.add(e.id); adjN.add(e.from); adjN.add(e.to); }
+  for (const [id, g] of G.edgeEls) {
+    const hot = hotE.has(id);
+    g.classList.toggle('hot', hot);
+    g.classList.toggle('adj', !ev && adjE.has(id));
+    g.querySelector('path.e').setAttribute('marker-end', hot || (!ev && adjE.has(id)) ? 'url(#arrHot)' : 'url(#arr)');
+    if (hot) g.parentNode.appendChild(g);
+  }
+  for (const [id, g] of G.nodeEls) {
+    g.classList.toggle('on', onN.has(id));
+    g.classList.toggle('adjn', adjN.has(id));
+    g.classList.toggle('sel', id === state.node);
+  }
+  for (const [id, steps] of onN) {
+    const n = v.nodeMap.get(id); if (!n) continue;
+    const label = steps.join(',');
+    const w = Math.max(20, 8 + label.length * 7);
+    const g = el('g', { class: 'stepb', transform: `translate(${n.l - 6},${n.t - 7})` }, G.badges);
+    el('rect', { x: -w / 2 + 6, y: -3, width: w, height: 20, rx: 10, style: 'fill:var(--accent)' }, g);
+    const t = el('text', { x: 6, y: 7.5 }, g); t.textContent = label;
+  }
+}
+
+/* ---------- ERD ---------- */
+function prepErd(v) {
+  if (v._prep) return v;
+  v.tableMap = new Map(v.tables.map((t) => [t.id, t]));
+  const TW = 236, GAPX = 52, ROW = 19, HEAD = 28;
+  v.columns.forEach((col, ci) => {
+    let y = PAD;
+    for (const id of col) {
+      const t = v.tableMap.get(id);
+      t.x = PAD + ci * (TW + GAPX); t.y = y; t.w = TW; t.h = HEAD + t.fields.length * ROW + 6; t.ci = ci;
+      y += t.h + 30;
+    }
+  });
+  v.W = PAD * 2 + v.columns.length * (TW + GAPX);
+  v.H = Math.max(...v.tables.map((t) => t.y + t.h)) + PAD;
+  const rowY = (t, field) => {
+    const i = t.fields.findIndex((f) => f[0] === field || f[0].startsWith(field.split(' ')[0]));
+    return i < 0 ? t.y + 14 : t.y + HEAD + i * ROW + ROW / 2;
+  };
+  const loops = new Map();
+  v.relList = v.rels.map(([a, af, b, bf, card = 'n1', soft = false], i) => {
+    const s = v.tableMap.get(a), t = v.tableMap.get(b);
+    const y1 = rowY(s, af), y2 = rowY(t, bf);
+    let x1, x2, d, d1, d2;
+    if (s.ci === t.ci) {
+      const k = (loops.get(s.ci) || 0) + 1; loops.set(s.ci, k);
+      x1 = s.x + s.w; x2 = t.x + t.w; const lx = x1 + 14 + (k % 4) * 7;
+      d = `M${x1},${y1} C${lx + 20},${y1} ${lx + 20},${y2} ${x2},${y2}`; d1 = 1; d2 = 1;
+    } else {
+      const right = t.ci > s.ci;
+      x1 = right ? s.x + s.w : s.x; x2 = right ? t.x : t.x + t.w;
+      const dx = Math.max(40, Math.abs(x2 - x1) / 2);
+      d = `M${x1},${y1} C${x1 + (right ? dx : -dx)},${y1} ${x2 + (right ? -dx : dx)},${y2} ${x2},${y2}`;
+      d1 = right ? 1 : -1; d2 = right ? -1 : 1;
+    }
+    return { id: `r${i}`, a, af, b, bf, card, soft, d, x1, y1, x2, y2, d1, d2 };
+  });
+  v._prep = true;
+  return v;
+}
+function renderErd(v) {
+  prepErd(v);
+  svg.innerHTML = '';
+  G = { v, W: v.W, H: v.H, relEls: new Map(), tblEls: new Map(), badges: el('g') };
+  const gR = el('g', {}, svg), gT = el('g', {}, svg);
+  for (const r of v.relList) {
+    const g = el('g', { class: `rel${r.soft ? ' soft' : ''}` }, gR);
+    el('path', { d: r.d }, g);
+    // many side: crow's foot at the FK end; one side: bar at the referenced end
+    const foot = r.card === '11' ? `M${r.x1 + r.d1 * 8},${r.y1 - 5} L${r.x1 + r.d1 * 8},${r.y1 + 5}` : `M${r.x1 + r.d1 * 10},${r.y1} L${r.x1},${r.y1 - 5} M${r.x1 + r.d1 * 10},${r.y1} L${r.x1},${r.y1 + 5}`;
+    el('path', { d: `${foot} M${r.x2 + r.d2 * 8},${r.y2 - 5} L${r.x2 + r.d2 * 8},${r.y2 + 5}` }, g);
+    G.relEls.set(r.id, g);
+  }
+  for (const t of v.tables) {
+    const g = el('g', { class: 'gtbl', transform: `translate(${t.x},${t.y})`, tabindex: 0, role: 'button', 'aria-label': t.label }, gT);
+    const fo = el('foreignObject', { width: t.w, height: t.h }, g);
+    fo.innerHTML = `<div xmlns="http://www.w3.org/1999/xhtml" class="tbl g-${t.g}${t.g === 'redis' ? ' redis' : ''}"><div class="th">${esc(t.label)}<span>${esc(v.groups[t.g])}</span></div>${t.fields.map(([f, ty, fl]) => `<div class="tr"><span class="f">${esc(f)}</span>${fl ? `<span class="fl">${esc(fl)}</span>` : ''}<span class="ty">${esc(ty || '')}</span></div>`).join('')}</div>`;
+    g.addEventListener('click', (ev) => { ev.stopPropagation(); if (!dragMoved) { state.node = t.id; state.erdFlow = null; syncAll(); } });
+    g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { state.node = t.id; syncAll(); } });
+    G.tblEls.set(t.id, g);
+  }
+}
+function highlightErd() {
+  const v = G.v;
+  const sel = state.node && v.tableMap.get(state.node) ? state.node : null;
+  const flow = state.erdFlow;
+  const on = new Set();
+  if (sel) { on.add(sel); for (const r of v.relList) if (r.a === sel || r.b === sel) { on.add(r.a); on.add(r.b); } }
+  if (flow) for (const t of v.tables) if (t.flows?.includes(flow)) on.add(t.id);
+  const active = !!(sel || flow);
+  svg.classList.toggle('has-ev', active);
+  svg.classList.remove('has-adj');
+  for (const [id, g] of G.tblEls) { g.classList.toggle('on', on.has(id)); g.classList.toggle('sel', id === sel); }
+  for (const r of v.relList) {
+    const hot = sel ? r.a === sel || r.b === sel : flow ? on.has(r.a) && on.has(r.b) : false;
+    G.relEls.get(r.id).classList.toggle('hot', hot);
+  }
+}
+
+/* ---------- pan / zoom ---------- */
+function setVB() { svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
+function fitBox(x, y, w, h, maxScale = 1.15) {
+  const r = svg.getBoundingClientRect();
+  const cw = r.width || 900, ch = r.height || 700;
+  const s = Math.max(w / cw, h / ch, 1 / maxScale);
+  vb = { w: cw * s, h: ch * s, x: x + w / 2 - (cw * s) / 2, y: y + h / 2 - (ch * s) / 2 };
+  setVB();
+}
+const fitAll = () => G && fitBox(0, 0, G.W, G.H, 1);
+/** ERD: frame the selected table together with every table it relates to. */
+function focusTables(id) {
+  const v = G?.v;
+  if (!v?.tableMap?.has(id)) return;
+  const ids = new Set([id]);
+  for (const r of v.relList) if (r.a === id || r.b === id) { ids.add(r.a); ids.add(r.b); }
+  const ts = [...ids].map((x) => v.tableMap.get(x));
+  const x0 = Math.min(...ts.map((t) => t.x)) - 40, y0 = Math.min(...ts.map((t) => t.y)) - 40;
+  const x1 = Math.max(...ts.map((t) => t.x + t.w)) + 40, y1 = Math.max(...ts.map((t) => t.y + t.h)) + 40;
+  fitBox(x0, y0, x1 - x0, y1 - y0, 1);
+}
+function fitPath(ev) {
+  const ns = ev.p.map(([id]) => G.v.nodeMap.get(id)).filter(Boolean);
+  const x0 = Math.min(...ns.map((n) => n.l)) - 50, x1 = Math.max(...ns.map((n) => n.r)) + 50;
+  const y0 = Math.min(...ns.map((n) => n.t)) - 50, y1 = Math.max(...ns.map((n) => n.b)) + 50;
+  fitBox(x0, y0, x1 - x0, y1 - y0, 0.95);
+}
+function zoomAt(px, py, k) {
+  const nw = Math.min(Math.max(vb.w * k, 250), Math.max(G?.W || 3000, G?.H || 3000) * 2.2);
+  const kk = nw / vb.w;
+  vb = { x: px - (px - vb.x) * kk, y: py - (py - vb.y) * kk, w: nw, h: vb.h * kk };
+  setVB();
+}
+function toSvg(cx, cy) { const r = svg.getBoundingClientRect(); return [vb.x + ((cx - r.left) / r.width) * vb.w, vb.y + ((cy - r.top) / r.height) * vb.h]; }
+let drag = null, dragMoved = false;
+svg.addEventListener('wheel', (e) => { e.preventDefault(); const [x, y] = toSvg(e.clientX, e.clientY); zoomAt(x, y, Math.exp(e.deltaY * 0.0015)); }, { passive: false });
+svg.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, vb: { ...vb } }; dragMoved = false; });
+svg.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (!dragMoved && Math.hypot(dx, dy) < 4) return;
+  if (!dragMoved) { dragMoved = true; svg.setPointerCapture(e.pointerId); svg.classList.add('dragging'); }
+  const r = svg.getBoundingClientRect();
+  vb.x = drag.vb.x - (dx * vb.w) / r.width; vb.y = drag.vb.y - (dy * vb.h) / r.height; setVB();
+});
+const endDrag = () => { drag = null; svg.classList.remove('dragging'); setTimeout(() => { dragMoved = false; }, 0); };
+svg.addEventListener('pointerup', endDrag);
+svg.addEventListener('pointercancel', endDrag);
+svg.addEventListener('click', () => { if (!dragMoved && state.node) { state.node = null; state.step = -1; syncAll(); } });
+$('#fitBtn').onclick = fitAll;
+$('#zinBtn').onclick = () => zoomAt(vb.x + vb.w / 2, vb.y + vb.h / 2, 0.8);
+$('#zoutBtn').onclick = () => zoomAt(vb.x + vb.w / 2, vb.y + vb.h / 2, 1.25);
+$('#clearBtn').onclick = () => { state.event = null; state.node = null; state.step = -1; state.erdFlow = null; syncAll(); fitAll(); };
+
+/* ---------- selection ---------- */
+const view = () => VIEWS.find((v) => v.id === state.view);
+function selectEvent(id) {
+  state.event = state.event === id ? null : id;
+  state.node = null; state.step = -1;
+  syncAll();
+  const ev = view().events.find((x) => x.id === state.event);
+  if (ev) fitPath(ev); else fitAll();
+}
+function selectNode(id, step, focus = false) {
+  const v = view();
+  const ev = state.event && v.events?.find((x) => x.id === state.event);
+  state.node = id;
+  state.step = ev ? (step ?? ev.p.findIndex(([n]) => n === id)) : -1;
+  syncAll();
+  if (focus) focusNode(id);
+}
+/** Centers a box and zooms in to a readable scale; never zooms out. */
+function focusNode(id) {
+  const n = G?.v.nodeMap?.get(id);
+  if (!n) return;
+  const r = svg.getBoundingClientRect();
+  const k = Math.min(vb.w / (r.width || 900), 1.05);
+  vb = { w: r.width * k, h: r.height * k, x: n.cx - (r.width * k) / 2, y: n.cy - (r.height * k) / 2 };
+  setVB();
+}
+function stepBy(d) {
+  const ev = state.event && view().events?.find((x) => x.id === state.event);
+  if (!ev) return;
+  const i = Math.min(Math.max((state.step < 0 ? -1 : state.step) + d, 0), ev.p.length - 1);
+  selectNode(ev.p[i][0], i, true);
+}
+document.addEventListener('keydown', (e) => {
+  if (e.target.matches('input, textarea')) return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { if (state.event) { e.preventDefault(); stepBy(1); } }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { if (state.event) { e.preventDefault(); stepBy(-1); } }
+  else if (e.key === 'Escape') $('#clearBtn').click();
+});
+
+/* ---------- side panels ---------- */
+function renderTabs() {
+  $('#views').innerHTML = VIEWS.map((v) => `<button role="tab" type="button" data-v="${v.id}" aria-selected="${v.id === state.view}"><span class="num">${v.num}</span>${esc(v.title)}</button>`).join('');
+  $('#views').querySelectorAll('button').forEach((b) => (b.onclick = () => switchView(b.dataset.v)));
+}
+let filterText = '';
+function renderEvents() {
+  const v = view();
+  const box = $('#events');
+  if (v.tables) {
+    box.innerHTML = `<div class="evgroup">ไฮไลต์ตาม flow</div>${v.flows.map(([id, label]) => `<button class="ev" type="button" data-flow="${id}" aria-pressed="${state.erdFlow === id}"><span class="t"><span class="dot o-pass"></span><b>${esc(label)}</b></span></button>`).join('')}
+      ${Object.entries(v.groups).map(([g, label]) => `<div class="evgroup">${esc(label)}</div>${v.tables.filter((t) => t.g === g).map((t) => `<button class="ev" type="button" data-t="${t.id}" aria-pressed="${state.node === t.id}"><span class="t"><span class="dot" style="background:var(--g-${g})"></span><b class="mono">${esc(t.label)}</b></span></button>`).join('')}`).join('')}`;
+    box.querySelectorAll('[data-flow]').forEach((b) => (b.onclick = () => { state.erdFlow = state.erdFlow === b.dataset.flow ? null : b.dataset.flow; state.node = null; syncAll(); }));
+    box.querySelectorAll('[data-t]').forEach((b) => (b.onclick = () => { state.node = b.dataset.t; state.erdFlow = null; syncAll(); focusTables(b.dataset.t); }));
+    return;
+  }
+  const f = filterText.trim().toLowerCase();
+  const groups = [];
+  for (const ev of v.events) {
+    if (f && !`${ev.t} ${ev.ex} ${ev.g}`.toLowerCase().includes(f)) continue;
+    let g = groups.find((x) => x.name === ev.g);
+    if (!g) groups.push((g = { name: ev.g, list: [] }));
+    g.list.push(ev);
+  }
+  box.innerHTML = `<input class="evsearch" type="search" placeholder="ค้นหา event (${v.events.length})" value="${esc(filterText)}" aria-label="ค้นหา event">` +
+    groups.map((g) => `<div class="evgroup">${esc(g.name)}</div>` + g.list.map((ev) =>
+      `<button class="ev" type="button" data-e="${ev.id}" aria-pressed="${state.event === ev.id}" title="${esc(OUTC[ev.oc])} · LLM ${ev.llm}"><span class="t"><span class="dot o-${ev.oc}"></span><b>${esc(ev.t)}</b></span><span class="x">${esc(ev.ex)}</span></button>`).join('')).join('');
+  const input = box.querySelector('.evsearch');
+  input.oninput = () => { filterText = input.value; const pos = input.selectionStart; renderEvents(); const i2 = $('#events .evsearch'); i2.focus(); i2.setSelectionRange(pos, pos); };
+  box.querySelectorAll('[data-e]').forEach((b) => (b.onclick = () => selectEvent(b.dataset.e)));
+}
+function legend() {
+  const v = view();
+  if (v.tables) {
+    $('#legend').innerHTML = Object.entries(v.groups).map(([g, l]) => `<span><i style="background:var(--g-${g})"></i>${esc(l)}</span>`).join('') + '<span>── FK จริง</span><span>- - key ที่ไม่มี FK</span><span>⋔ ฝั่ง many · | ฝั่ง one</span>';
+    return;
+  }
+  $('#legend').innerHTML = ['start', 'svc', 'dec', 'llm', 'ext'].map((k) => `<span class="k-${k}"><i style="background:var(--kc)"></i>${KIND[k]}</span>`).join('') +
+    Object.entries(OUTC).map(([o, l]) => `<span class="o-${o}"><i style="background:var(--oc);border-radius:50%"></i>${l}</span>`).join('');
+}
+function panelIntro(v) {
+  if (v.tables) return `<h2>${esc(v.title)}</h2><p class="sub">${esc(v.intro)}</p><div class="chips"><span class="chip">${v.tables.length} ตาราง/กลุ่ม key</span><span class="chip">${v.rels.length} ความสัมพันธ์</span></div><p class="sub">เลือก flow ทางซ้ายเพื่อดูว่าแต่ละ flow แตะตารางไหนบ้าง หรือคลิกตารางเพื่อดูคอลัมน์ ผู้เขียน และผู้อ่าน</p>`;
+  const llm = v.nodes.filter((n) => n.k === 'llm').length;
+  return `<h2>${esc(v.title)}</h2><p class="sub">${esc(v.intro)}</p>
+    <div class="chips"><span class="chip">${v.nodes.length} nodes</span><span class="chip">${v.edges.length} เส้นทาง</span><span class="chip">${v.events.length} events</span><span class="chip k k-llm">${llm} จุดที่เรียก AI</span></div>
+    <h3>วิธีอ่าน</h3>
+    <ul class="dec"><li>เลือก event ทางซ้าย: เส้นจากต้นจนจบจะเด่นและมีเลขลำดับบนแต่ละกล่อง</li><li>คลิกกล่อง: เห็นข้อมูลที่เข้า/ออกใน event นั้น ทางเลือกทั้งหมดของกล่อง และ shape ทั่วไป</li><li>← → เดินทีละขั้น · Esc ล้าง · ลากเพื่อเลื่อน · scroll เพื่อซูม</li></ul>
+    ${v.problems.length ? `<div class="note risk">ตรวจข้อมูลพบ ${v.problems.length} จุด: ${esc(v.problems.join(' · '))}</div>` : ''}`;
+}
+function panelEvent(v, ev) {
+  return `<div class="chips"><span class="chip o o-${ev.oc}">● ${esc(OUTC[ev.oc])}</span><span class="chip k k-llm">LLM ${ev.llm} ครั้ง</span><span class="chip">${ev.p.length} ขั้น</span><span class="chip">${esc(ev.g)}</span></div>
+    <h2>${esc(ev.t)}</h2><div class="example">${esc(ev.ex)}</div>
+    ${ev.note ? `<div class="note">${esc(ev.note)}</div>` : ''}${ev.risk ? `<div class="note risk">⚠ ${esc(ev.risk)}</div>` : ''}
+    <h3>เส้นทาง · คลิกเพื่อดู data shape</h3>
+    <ol class="steps">${ev.p.map(([id], i) => {
+      const n = v.nodeMap.get(id); const nx = ev.p[i + 1]; const e = nx && v.edgeMap.get(`${id}>${nx[0]}`);
+      return `<li data-i="${i}" class="${i === state.step ? 'cur' : ''}">${esc(n?.title || id)}${e?.label ? `<span class="via">→ ${esc(e.label)}</span>` : ''}</li>`;
+    }).join('')}</ol>`;
+}
+function panelNode(v, n, ev) {
+  let s = `<div class="chips"><span class="chip k k-${n.k === 'end' ? 'svc' : n.k}">${esc(KIND[n.k])}</span>${n.k === 'end' ? `<span class="chip o o-${n.oc}">● ${esc(OUTC[n.oc])}</span>` : ''}${n.tag ? `<span class="chip">${esc(n.tag)}</span>` : ''}</div>
+    <h2>${esc(n.title)}</h2><p class="sub">${esc(n.s)}</p>${n.f ? `<p>${fileLink(n.f)}</p>` : ''}${n.d ? `<p>${esc(n.d)}</p>` : ''}`;
+  if (ev) {
+    const i = state.step >= 0 && ev.p[state.step]?.[0] === n.id ? state.step : ev.p.findIndex(([x]) => x === n.id);
+    if (i >= 0) {
+      const prev = ev.p[i - 1], next = ev.p[i + 1];
+      const pe = prev && v.edgeMap.get(`${prev[0]}>${n.id}`), ne = next && v.edgeMap.get(`${n.id}>${next[0]}`);
+      s += `<h3>ใน event “${esc(ev.t)}” · ขั้น ${i + 1}/${ev.p.length}</h3>
+        <div class="nav2"><button type="button" data-step="-1" ${i ? '' : 'disabled'}>← ${esc(prev ? v.nodeMap.get(prev[0])?.title : 'ก่อนหน้า')}</button><button type="button" data-step="1" ${next ? '' : 'disabled'}>${esc(next ? v.nodeMap.get(next[0])?.title : 'ถัดไป')} →</button></div>
+        <div class="io"><div class="h"><span>เข้า${prev ? ` จาก <b>${esc(v.nodeMap.get(prev[0])?.title)}</b>` : ''}</span><span>${esc(pe?.label || '')}</span></div>${pre(prev ? prev[1] : ev.ex)}</div>
+        <div class="io"><div class="h"><span>${next ? `ออก ไป <b>${esc(v.nodeMap.get(next[0])?.title)}</b>` : '<b>จบ event</b>'}</span><span>${esc(ne?.label || '')}</span></div>${pre(ev.p[i][1])}</div>`;
+    } else s += `<div class="note">กล่องนี้ไม่อยู่ในเส้นทางของ event ที่เลือก</div>`;
+  }
+  const outs = v.edges.filter((e) => e.from === n.id);
+  if (outs.length) s += `<h3>ทางออกที่เป็นไปได้ (${outs.length})</h3><ul class="dec">${outs.map((e) => `<li><a data-n="${e.to}">${esc(e.label || 'ต่อไป')} → ${esc(v.nodeMap.get(e.to)?.title)}</a></li>`).join('')}</ul>`;
+  const ins = v.edges.filter((e) => e.to === n.id);
+  if (ins.length) s += `<h3>เข้ามาจาก</h3><ul class="dec">${ins.map((e) => `<li><a data-n="${e.from}">${esc(v.nodeMap.get(e.from)?.title)}${e.label ? ` · ${esc(e.label)}` : ''}</a></li>`).join('')}</ul>`;
+  if (n.i) s += `<h3>Shape เข้า (ทั่วไป)</h3>${pre(n.i)}`;
+  if (n.out) s += `<h3>Shape ออก (ทั่วไป)</h3>${pre(n.out)}`;
+  if (n.db) s += `<h3>DB / Redis / billing</h3><p class="sub">${esc(n.db)}</p>`;
+  const evs = v.byNode.get(n.id) || [];
+  if (evs.length) s += `<h3>Events ที่ผ่านกล่องนี้ (${evs.length})</h3><div class="chips">${evs.map((x) => `<button type="button" class="chip btn o-${x.oc}" data-e="${x.id}"><span class="dot"></span>${esc(x.t)}</button>`).join('')}</div>`;
+  return s;
+}
+function panelTable(v, t) {
+  const rels = v.relList.filter((r) => r.a === t.id || r.b === t.id);
+  return `<div class="chips"><span class="chip g-${t.g}" style="color:var(--gc)">${esc(v.groups[t.g])}</span></div><h2 class="mono">${esc(t.label)}</h2>${t.note ? `<p class="sub">${esc(t.note)}</p>` : ''}
+    <h3>คอลัมน์ที่เกี่ยวกับ core logic</h3><table class="fieldlist">${t.fields.map(([f, ty, fl]) => `<tr><td>${esc(f)}</td><td class="ty">${esc(ty || '')}</td><td>${fl ? `<span class="chip">${esc(fl)}</span>` : ''}</td></tr>`).join('')}</table>
+    <h3>เขียนโดย</h3><p class="sub">${esc(t.wr)}</p><h3>อ่านโดย</h3><p class="sub">${esc(t.rd)}</p>
+    <h3>ใช้ใน flow</h3><div class="chips">${(t.flows || []).map((f) => `<button type="button" class="chip btn" data-goto="${f}">${esc(v.flows.find(([id]) => id === f)?.[1] || f)}</button>`).join('')}</div>
+    <h3>ความสัมพันธ์ (${rels.length})</h3><ul class="dec">${rels.map((r) => `<li><a data-t="${r.a === t.id ? r.b : r.a}"><code>${esc(r.a)}.${esc(r.af)}</code> → <code>${esc(r.b)}.${esc(r.bf)}</code> · ${r.card === '11' ? '1:1' : 'N:1'}${r.soft ? ' · ไม่มี FK' : ''}</a></li>`).join('')}</ul>`;
+}
+function renderPanel() {
+  const v = view(), box = $('#panel');
+  if (v.tables) {
+    const t = state.node && v.tableMap.get(state.node);
+    box.innerHTML = t ? panelTable(v, t) : panelIntro(v) + (state.erdFlow ? `<div class="note">ไฮไลต์ตาราง ${v.tables.filter((x) => x.flows?.includes(state.erdFlow)).length} รายการที่ ${esc(v.flows.find(([id]) => id === state.erdFlow)[1])} ใช้</div>` : '');
+  } else {
+    const ev = state.event && v.events.find((x) => x.id === state.event);
+    const n = state.node && v.nodeMap.get(state.node);
+    box.innerHTML = n ? panelNode(v, n, ev) + (ev ? `<h3>Event ที่เลือก</h3>${panelEvent(v, ev)}` : '') : ev ? panelEvent(v, ev) : panelIntro(v);
+  }
+  box.querySelectorAll('[data-step]').forEach((b) => (b.onclick = () => stepBy(Number(b.dataset.step))));
+  box.querySelectorAll('ol.steps li').forEach((li) => (li.onclick = () => { const ev = view().events.find((x) => x.id === state.event); const i = Number(li.dataset.i); selectNode(ev.p[i][0], i, true); }));
+  box.querySelectorAll('[data-n]').forEach((a) => (a.onclick = () => selectNode(a.dataset.n, undefined, true)));
+  box.querySelectorAll('[data-e]').forEach((b) => (b.onclick = () => selectEvent(b.dataset.e)));
+  box.querySelectorAll('[data-t]').forEach((a) => (a.onclick = () => { state.node = a.dataset.t; syncAll(); focusTables(a.dataset.t); }));
+  box.querySelectorAll('[data-goto]').forEach((b) => (b.onclick = () => switchView(b.dataset.goto)));
+}
+
+/* ---------- findings ---------- */
+function renderFindings() {
+  $('#findings').innerHTML = guideHtml();
+}
+
+/* ---------- orchestration ---------- */
+function switchView(id) {
+  if (!VIEWS.some((v) => v.id === id)) id = VIEWS[0].id;
+  state.view = id; state.event = null; state.node = null; state.step = -1; state.erdFlow = null; filterText = '';
+  const v = view();
+  $('#app').hidden = !!v.findings;
+  $('#findings').hidden = !v.findings;
+  renderTabs();
+  if (v.findings) { renderFindings(); writeHash(); return; }
+  if (v.tables) renderErd(v); else renderFlow(v);
+  legend();
+  syncAll();
+  fitAll();
+}
+function syncAll() {
+  const v = view();
+  if (v.findings) return;
+  renderEvents(); renderPanel(); highlight(); writeHash();
+}
+function writeHash() {
+  const h = '#' + [state.view, state.event, state.node].map((x) => x || '').join('/').replace(/\/+$/, '');
+  if (location.hash !== h) history.replaceState(null, '', h);
+}
+function readHash() {
+  const [vid, eid, nid] = decodeURIComponent(location.hash.slice(1)).split('/');
+  switchView(vid || VIEWS[0].id);
+  const v = view();
+  if (eid && v.events?.some((x) => x.id === eid)) selectEvent(eid);
+  if (nid && (v.nodeMap?.has(nid) || v.tableMap?.has(nid))) { if (v.tables) { state.node = nid; syncAll(); focusTables(nid); } else selectNode(nid, undefined, true); }
+}
+$('#themeBtn').onclick = () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('core-logic-theme', document.documentElement.dataset.theme); } catch {}
+};
+try { const t = localStorage.getItem('core-logic-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+window.addEventListener('resize', () => { if (!view().findings) fitAll(); });
+for (const v of VIEWS.filter((x) => x.nodes)) prep(v);
+$('#diag').textContent = JSON.stringify(Object.fromEntries(VIEWS.filter((x) => x.nodes).map((v) => [v.id, v.problems])));
+readHash();
+</script>
+</body>
+</html>
