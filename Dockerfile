@@ -38,6 +38,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p uploads && chown node:node uploads
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/prisma ./prisma
+COPY --from=build --chown=node:node /app/prisma.config.* ./
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node package.json ./
 USER node
