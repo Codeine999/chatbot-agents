@@ -24,9 +24,11 @@ import { LineWebhookAdapter } from './line-webhook.adapter';
 import { LineSignatureGuard } from './line-signature.guard';
 import { LineWebhookService } from './line-webhook.service';
 import { LineDeliveryService } from './line-delivery.service';
+import { LineChannelModule } from './channel/line-channel.module';
 
 @Module({
   imports: [
+    LineChannelModule,
     ChatbotModule,
     MessagingModule,
     CompanyModule,

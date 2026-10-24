@@ -12,6 +12,7 @@ import type { AiProviderImage } from '../../ai-provider/types/ai-provider.types'
 import { RateLimitService } from '../usage/rate-limit/rate-limit.service';
 import { CompanyService } from '../admin/company/company.service';
 import { LineDeliveryError } from './line-delivery.error';
+import { LineCredentialService } from './channel/line-credential.service';
 
 export type LineProfile = {
   userId: string;
@@ -53,6 +54,7 @@ export class LineService {
     private readonly configService: ConfigService,
     private readonly rateLimitService: RateLimitService,
     private readonly companyService: CompanyService,
+    private readonly credentials: LineCredentialService,
   ) {
     this.globalReplyLimitPerSec = Number(
       configService.get('LINE_GLOBAL_REPLY_LIMIT_PER_SEC') ?? 30,
@@ -85,7 +87,7 @@ export class LineService {
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${this.getAccessToken()}`,
+          Authorization: `Bearer ${await this.getAccessToken()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -107,7 +109,7 @@ export class LineService {
       {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${this.getAccessToken()}`,
+          Authorization: `Bearer ${await this.getAccessToken()}`,
         },
         signal: AbortSignal.timeout(this.httpTimeoutMs),
       },
@@ -150,6 +152,19 @@ export class LineService {
   }
 
   async replyText(replyToken: string, text: string): Promise<boolean> {
+    // Resolved before the budget and the request: a failure here never spends
+    // the single-use reply token, so delivery may treat it as not sent.
+    let accessToken: string;
+    try {
+      accessToken = await this.getAccessToken();
+    } catch (error) {
+      throw new LineDeliveryError(
+        `LINE credentials unavailable: ${(error as Error).message}`,
+        'REJECTED',
+        true,
+      );
+    }
+
     const replyBudget = await this.rateLimitService.consume(
       'rl:line:global:reply',
       this.globalReplyLimitPerSec,
@@ -162,8 +177,6 @@ export class LineService {
       );
       return false;
     }
-
-    const accessToken = this.getAccessToken();
 
     const response = await fetch('https://api.line.me/v2/bot/message/reply', {
       method: 'POST',
@@ -242,8 +255,8 @@ export class LineService {
     return null;
   }
 
-  private getAccessToken(): string {
-    return this.configService.getOrThrow<string>('LINE_CHANNEL_ACCESS_TOKEN');
+  private async getAccessToken(): Promise<string> {
+    return (await this.credentials.forDeployment()).accessToken;
   }
 
 }

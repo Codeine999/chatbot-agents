@@ -8,8 +8,9 @@ import { LineWebhookAdapter } from './line-webhook.adapter';
 export class LineWebhookController {
   constructor(private readonly webhookAdapter: LineWebhookAdapter) {}
 
+  /** `webhooks` uses the deployment's channel; `webhooks/:channelKey` a connected one. */
   @Public()
-  @Post('webhooks')
+  @Post(['webhooks', 'webhooks/:channelKey'])
   @HttpCode(200)
   @UseGuards(LineSignatureGuard)
   async handleWebhook(@Body() body: unknown) {

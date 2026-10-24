@@ -137,6 +137,7 @@ model Company {
   adminMembers      AdminMember[]
   richMenuTemplates RichMenuTemplate[]
   richMenuReplies   RichMenuReply[]
+  lineChannel       LineChannel?
 
   customers       Customer[]
   products        Product[]

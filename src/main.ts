@@ -34,7 +34,7 @@ async function bootstrap() {
     field: 'rawBody',
     global: false,
     runFirst: true,
-    routes: ['/api/line/webhooks'],
+    routes: ['/api/line/webhooks', '/api/line/webhooks/:channelKey'],
   });
 
   await app.register(fastifyMultipart, {

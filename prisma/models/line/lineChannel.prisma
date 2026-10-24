@@ -1,0 +1,37 @@
+/// LINE Messaging API credentials a company connects from the dashboard.
+///
+/// One channel per company. The secret and access token are stored only as
+/// AES-256-GCM ciphertext (see src/infra/crypto/secret-box.ts); the key lives
+/// in the environment, never in this database. A deployment without a row
+/// falls back to the LINE_CHANNEL_* environment variables.
+model LineChannel {
+  id        String  @id @default(uuid()) @db.Uuid
+  companyId String  @unique @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  /// Random and URL-safe. Not a secret, but unguessable: it selects the
+  /// channel in the webhook URL /api/line/webhooks/:channelKey.
+  channelKey String @unique @db.VarChar(32)
+
+  channelId   String? @db.VarChar(20)
+  /// The bot's userId from /v2/bot/info; LINE sends it as `destination`.
+  botUserId   String  @unique @db.VarChar(40)
+  basicId     String? @db.VarChar(40)
+  displayName String? @db.VarChar(255)
+
+  /// base64(iv | auth tag | ciphertext)
+  secretCiphertext      String
+  accessTokenCiphertext String
+  encKeyVersion         Int    @default(1)
+  secretLast4           String @db.VarChar(4)
+  accessTokenLast4      String @db.VarChar(4)
+
+  verifiedAt       DateTime?
+  webhookSetAt     DateTime?
+  updatedByAdminId String?   @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("lineChannels")
+}

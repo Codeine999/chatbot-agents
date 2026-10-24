@@ -19,6 +19,21 @@
 unsupported types ถูกข้าม `LineController` ดูแล admin routes เดิม worker/claim/
 retry/delivery ใช้เส้นทางเดิม ไม่มี external application endpoint ในชุดนี้
 
+อัปเดต LINE credentials 25 ตุลาคม 2026: owner เชื่อม LINE OA เองผ่าน
+`GET/PUT /api/admin/line/channel` (`@AdminGuard('owner')`) PUT ตรวจ token กับ
+LINE `/v2/bot/info` ก่อนบันทึก เก็บ secret/token ในตาราง `lineChannels` แบบ
+AES-256-GCM (key จาก env `CREDENTIAL_ENC_KEY_V1`) และตอบกลับเฉพาะ 4 ตัวท้าย
+ถ้ามี `PUBLIC_API_BASE_URL` จะตั้ง webhook ของ channel เป็น
+`/api/line/webhooks/:channelKey` และสั่ง LINE webhook test (ผ่าน = secret ถูก)
+`LineSignatureGuard` เลือก secret จาก `:channelKey` หรือใช้ channel ของ deployment
+สำหรับ `/api/line/webhooks` เดิม แล้วตรวจ HMAC กับ raw body และ `destination`
+ต้องตรง `botUserId` ทุกจุดที่เรียก LINE (reply, push, profile, insight, rich menu)
+อ่าน token ผ่าน `LineCredentialService` ซึ่งใช้แถวใน DB ก่อน ไม่มีแถวใช้
+`LINE_CHANNEL_SECRET`/`LINE_CHANNEL_ACCESS_TOKEN` เดิม ค่าที่ถอดรหัสแล้ว cache
+ใน memory 60 วินาที (ไม่ลง Redis) โหลด token ไม่ได้ก่อน reply → delivery เป็น
+FAILED โดยไม่ใช้ reply token, ก่อน push → retry ได้ pipeline ยังเป็น single-company
+(ตาราง LINE/chat ยังไม่มี companyId)
+
 อัปเดต catalog foundation 5 ตุลาคม 2026: เพิ่ม [Product/Commerce Phase 1](product-commerce-phase1.md)
 แบบ opt-in `PRODUCT_CATALOG_ENABLED` (default false) ตอนนี้มี admin catalog APIs
 และ atomic LINE registration identity hook: เมื่อเปิด flag RegistrationFlowService

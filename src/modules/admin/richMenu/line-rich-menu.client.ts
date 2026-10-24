@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { LineCredentialService } from '../../line/channel/line-credential.service';
 import {
   LINE_API_BASE_URL,
   LINE_DATA_API_BASE_URL,
@@ -40,7 +41,10 @@ export class LineRichMenuClient {
   private readonly logger = new Logger(LineRichMenuClient.name);
   private readonly httpTimeoutMs: number;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly credentials: LineCredentialService,
+  ) {
     this.httpTimeoutMs = Number(
       configService.get('LINE_HTTP_TIMEOUT_MS') ?? 8_000,
     );
@@ -265,7 +269,7 @@ export class LineRichMenuClient {
     const isBinary = Buffer.isBuffer(options.body);
 
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.getAccessToken()}`,
+      Authorization: `Bearer ${await this.getAccessToken()}`,
     };
 
     if (options.body !== undefined) {
@@ -334,7 +338,7 @@ export class LineRichMenuClient {
     return `LINE rich menu API returned ${status}: ${errorText.slice(0, 300)}`;
   }
 
-  private getAccessToken(): string {
-    return this.configService.getOrThrow<string>('LINE_CHANNEL_ACCESS_TOKEN');
+  private async getAccessToken(): Promise<string> {
+    return (await this.credentials.forDeployment()).accessToken;
   }
 }

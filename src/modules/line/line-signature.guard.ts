@@ -4,16 +4,18 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
+import { LineCredentialService } from './channel/line-credential.service';
 
 @Injectable()
 export class LineSignatureGuard implements CanActivate {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly credentials: LineCredentialService) {}
 
-  canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest<FastifyRequest>();
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context
+      .switchToHttp()
+      .getRequest<FastifyRequest & { params?: { channelKey?: string } }>();
     const signature = request.headers['x-line-signature'];
     const rawBody = request.rawBody;
 
@@ -21,11 +23,16 @@ export class LineSignatureGuard implements CanActivate {
       throw new UnauthorizedException('Invalid LINE signature');
     }
 
-    const channelSecret = this.configService.getOrThrow<string>(
-      'LINE_CHANNEL_SECRET',
-    );
+    // /webhooks/:channelKey selects a stored channel; the bare route keeps the
+    // deployment's channel. An unknown key answers like a bad signature.
+    const channelKey = request.params?.channelKey;
+    const channel =
+      channelKey === undefined
+        ? await this.credentials.forDeployment()
+        : await this.credentials.forChannelKey(channelKey);
+    if (!channel) throw new UnauthorizedException('Invalid LINE signature');
 
-    const expected = createHmac('sha256', channelSecret)
+    const expected = createHmac('sha256', channel.secret)
       .update(rawBody)
       .digest();
     const received = Buffer.from(signature, 'base64');
@@ -34,6 +41,13 @@ export class LineSignatureGuard implements CanActivate {
       received.length !== expected.length ||
       !timingSafeEqual(received, expected)
     ) {
+      throw new UnauthorizedException('Invalid LINE signature');
+    }
+
+    // A signed body for another bot of the same provider must not land here.
+    const destination = (request.body as { destination?: unknown } | undefined)
+      ?.destination;
+    if (channel.botUserId && destination !== channel.botUserId) {
       throw new UnauthorizedException('Invalid LINE signature');
     }
 

@@ -13,6 +13,7 @@ import { CompanyService } from '../../admin/company/company.service';
 import { AiProviderSettingsService } from '../../ai/ai-provider-settings.service';
 import type { AiProviderRuntimeSetting } from '../../../ai-provider/types/ai-provider.types';
 import { LineDeliveryError } from '../line-delivery.error';
+import { LineCredentialService } from '../channel/line-credential.service';
 import { randomUUID } from 'node:crypto';
 
 export type LineProfile = {
@@ -65,6 +66,7 @@ export class LineAdminService {
     private readonly rateLimitService: RateLimitService,
     private readonly companyService: CompanyService,
     private readonly aiProviderSettingsService: AiProviderSettingsService,
+    private readonly credentials: LineCredentialService,
   ) {
     this.globalReplyLimitPerSec = Number(
       configService.get('LINE_GLOBAL_REPLY_LIMIT_PER_SEC') ?? 30,
@@ -81,7 +83,7 @@ export class LineAdminService {
     return getJson<LineProfile>(
       `/v2/bot/profile/${encodeURIComponent(lineUserId)}`,
       'LINE profile',
-      this.getAccessToken(),
+      await this.getAccessToken(),
       this.httpTimeoutMs,
     );
   }
@@ -91,7 +93,7 @@ export class LineAdminService {
       getJson<LineBotInfo>(
         '/v2/bot/info',
         'LINE bot info',
-        this.getAccessToken(),
+        await this.getAccessToken(),
         this.httpTimeoutMs,
       ),
       this.aiProviderSettingsService.getAll(),
@@ -104,7 +106,7 @@ export class LineAdminService {
     return getJson<LineFollowerInsight>(
       `/v2/bot/insight/followers?date=${encodeURIComponent(date)}`,
       'LINE follower insight',
-      this.getAccessToken(),
+      await this.getAccessToken(),
       this.httpTimeoutMs,
     );
   }
@@ -114,7 +116,7 @@ export class LineAdminService {
     return getJson<LineMessageQuota>(
       '/v2/bot/message/quota',
       'LINE message quota',
-      this.getAccessToken(),
+      await this.getAccessToken(),
       this.httpTimeoutMs,
     );
   }
@@ -123,13 +125,14 @@ export class LineAdminService {
     return getJson<LineMessageQuotaConsumption>(
       '/v2/bot/message/quota/consumption',
       'LINE message quota consumption',
-      this.getAccessToken(),
+      await this.getAccessToken(),
       this.httpTimeoutMs,
     );
   }
 
   async pushText(lineUserId: string, text: string, retryKey: string = randomUUID()): Promise<void> {
-    const accessToken = this.getAccessToken();
+    // A failure here happens before LINE is called, so the push stays retryable.
+    const accessToken = await this.getAccessToken();
 
     const response = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
@@ -166,8 +169,8 @@ export class LineAdminService {
     );
   }
 
-  private getAccessToken(): string {
-    return this.configService.getOrThrow<string>('LINE_CHANNEL_ACCESS_TOKEN');
+  private async getAccessToken(): Promise<string> {
+    return (await this.credentials.forDeployment()).accessToken;
   }
 
 }
