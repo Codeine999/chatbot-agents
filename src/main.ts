@@ -57,7 +57,7 @@ async function bootstrap() {
       const allowedOrigins = [
         'http://localhost:5173',
         'http://45.144.164.231',
-        'https://chatbot-dashboard-vby1-git-main-codeines-projects-0adf5d1d.vercel.app'
+        'https://keela-agent.online'
       ];
 
       const isVercelPreview =
