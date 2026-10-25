@@ -7,6 +7,7 @@ import { AiChatService } from './answer/answer.service';
 import { IntentRouterService } from './intent/intent-router.service';
 import {
   ChatContextPolicy,
+  ChatChannelKind,
   ChatRequest,
   ChatResponse,
   ChatResponseSource,
@@ -60,6 +61,7 @@ export class ChatbotService {
       turnId,
       postbackData,
       preview,
+      channel,
     } = request;
 
     const input = text.trim();
@@ -109,7 +111,7 @@ export class ChatbotService {
     if (
       session?.status === 'ACTIVE' &&
       session.flow === 'REGISTER' &&
-      !this.canRegister(preview) &&
+      !this.canRegister(preview, channel) &&
       !isCancelKeyword(input)
     ) {
       await this.userSessionService.clear(userId);
@@ -150,7 +152,7 @@ export class ChatbotService {
         );
 
       case 'CONTINUE_REGISTER':
-        if (!this.canRegister(preview)) {
+        if (!this.canRegister(preview, channel)) {
           await this.userSessionService.clear(userId);
 
           return this.response(
@@ -167,7 +169,7 @@ export class ChatbotService {
         );
 
       case 'START_REGISTER':
-        if (!this.canRegister(preview)) {
+        if (!this.canRegister(preview, channel)) {
           return this.response(
             this.replyTemplateService.registerUnavailable(),
             'REGISTRATION',
@@ -396,7 +398,14 @@ export class ChatbotService {
     );
   }
 
-  private canRegister(preview = false): boolean {
-    return !preview && isRegistrationEnabled(this.configService);
+  private canRegister(
+    preview = false,
+    channel: ChatChannelKind = 'LINE',
+  ): boolean {
+    return (
+      !preview &&
+      channel === 'LINE' &&
+      isRegistrationEnabled(this.configService)
+    );
   }
 }

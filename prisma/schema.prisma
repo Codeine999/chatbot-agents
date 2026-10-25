@@ -139,6 +139,11 @@ model Company {
   richMenuReplies   RichMenuReply[]
   lineChannel       LineChannel?
 
+  channelContacts      ChannelContact[]
+  appGuestSessions     AppGuestSession[]
+  channelConversations ChannelConversation[]
+  channelMessages      ChannelMessage[]
+
   customers       Customer[]
   products        Product[]
   catalogCommands ProductCatalogCommand[]

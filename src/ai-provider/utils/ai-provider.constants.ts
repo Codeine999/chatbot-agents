@@ -22,8 +22,8 @@ export const DEFAULT_AI_RETRY_BUDGET_MS = 20_000;
 
 export const AI_PROVIDER_LABELS = {
   GEMINI: 'Google Gemini',
-  OPENAI: 'OpenAI',
-  ANTHROPIC: 'Anthropic Claude',
+  // OPENAI: 'OpenAI',
+  // ANTHROPIC: 'Anthropic Claude',
   OPENROUTER: 'OpenRouter',
 } as const satisfies Readonly<Record<AiProviderName, string>>;
 
@@ -46,20 +46,20 @@ export const AI_PROVIDER_TEXT_MODELS = {
     'gemini-3-flash-preview',
     'gemini-2.5-flash',
   ],
-  OPENAI: [
-    'gpt-5.6-sol',
-    'gpt-5.6-terra',
-    'gpt-5.6-luna',
-    'gpt-5',
-    'gpt-5-mini',
-    'gpt-5-nano',
-  ],
-  ANTHROPIC: [
-    'claude-fable-5',
-    'claude-opus-5',
-    'claude-sonnet-5',
-    'claude-haiku-4-5-20251001',
-  ],
+  // OPENAI: [
+  //   'gpt-5.6-sol',
+  //   'gpt-5.6-terra',
+  //   'gpt-5.6-luna',
+  //   'gpt-5',
+  //   'gpt-5-mini',
+  //   'gpt-5-nano',
+  // ],
+  // ANTHROPIC: [
+  //   'claude-fable-5',
+  //   'claude-opus-5',
+  //   'claude-sonnet-5',
+  //   'claude-haiku-5.5',
+  // ],
   OPENROUTER: [
     'openai/gpt-6-luna',
     'google/gemini-3.5-flash-lite',

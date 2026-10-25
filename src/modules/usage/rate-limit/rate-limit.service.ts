@@ -8,6 +8,13 @@ export type RateLimitResult = {
   limit: number;
   remaining: number;
   resetInSec: number;
+  /** True only when Redis could not be reached, so `allowed` is a fallback, not a verdict. */
+  unavailable?: boolean;
+};
+
+export type RateLimitOptions = {
+  /** When Redis is unreachable: true (default) allows the call, false denies it. */
+  failOpen?: boolean;
 };
 
 /**
@@ -28,6 +35,7 @@ export class RateLimitService {
     limit: number,
     windowSec: number,
     amount = 1,
+    options: RateLimitOptions = {},
   ): Promise<RateLimitResult> {
     try {
       const results = await this.redis
@@ -49,17 +57,21 @@ export class RateLimitService {
         resetInSec,
       };
     } catch (error) {
-      // Fail open: a Redis hiccup must not take the chatbot down with it.
+      // Fail open by default: a Redis hiccup must not take the chatbot down
+      // with it. Public endpoints opt into `failOpen: false` so an outage
+      // cannot silently remove their protection.
+      const failOpen = options.failOpen ?? true;
       this.logger.error(
         `rate limit check failed for key=${key}`,
         error instanceof Error ? error.stack : String(error),
       );
       return {
-        allowed: true,
+        allowed: failOpen,
         current: 0,
         limit,
-        remaining: limit,
+        remaining: failOpen ? limit : 0,
         resetInSec: windowSec,
+        unavailable: true,
       };
     }
   }

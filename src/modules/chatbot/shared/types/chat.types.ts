@@ -120,6 +120,9 @@ export type ChatContextMessage = Readonly<{
   catalogRefs?: readonly CatalogRef[];
 }>;
 
+/** Where a turn came from. Absent means LINE, so existing callers are unchanged. */
+export type ChatChannelKind = 'LINE' | 'APP';
+
 export type ChatContextPolicy = 'INCLUDE' | 'EXCLUDE' | 'CLEAR';
 
 export type ChatResponse = Readonly<{
@@ -145,6 +148,8 @@ export type ChatRequest = LineAiUsageContext &
      * are refused instead of writing a real member.
      */
     preview?: boolean;
+    /** Channels other than LINE cannot run flows that need a LINE identity (registration). */
+    channel?: ChatChannelKind;
   }>;
 
 export type ImageChatRequest = LineAiUsageContext &

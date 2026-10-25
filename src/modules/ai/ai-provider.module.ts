@@ -9,9 +9,11 @@ import { AiProviderSettingsController } from './ai-setting/ai-provider-settings.
 import { AiProviderSettingsService } from './ai-provider-settings.service';
 import { AiProviderService } from './ai-provider.service';
 import { UsersAiProviderService } from './users-ai-provider.service';
-import { AnthropicAiProvider } from '../../ai-provider/providers/anthropic-ai.provider';
+// OpenAI and Anthropic are switched off for now (see AI_PROVIDER_NAMES); their
+// provider files are excluded from the build in tsconfig*.json.
+// import { AnthropicAiProvider } from '../../ai-provider/providers/anthropic-ai.provider';
 import { GeminiAiProvider } from '../../ai-provider/providers/gemini-ai.provider';
-import { OpenAiProvider } from '../../ai-provider/providers/openai-ai.provider';
+// import { OpenAiProvider } from '../../ai-provider/providers/openai-ai.provider';
 import { OpenRouterProvider } from '../../ai-provider/providers/openrouter-ai.provider';
 import { AI_PROVIDER_ADAPTERS } from '../../ai-provider/providers/ai-provider.registry';
 import type { AiProviderAdapter } from '../../ai-provider/providers/ai-provider.interface';
@@ -27,8 +29,8 @@ import { CompanyModule } from '../admin/company/company.module';
 
 const AI_PROVIDER_ADAPTER_CLASSES = [
   GeminiAiProvider,
-  OpenAiProvider,
-  AnthropicAiProvider,
+  // OpenAiProvider,
+  // AnthropicAiProvider,
   OpenRouterProvider,
 ] as const;
 

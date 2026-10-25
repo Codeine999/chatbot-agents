@@ -17,6 +17,7 @@ import { AbuseModule } from './modules/abuse/abuse.module';
 import { AuthModule } from './modules/admin/auth/auth.module';
 import { AiProviderModule } from './modules/ai/ai-provider.module';
 import { ProductsModule } from './modules/products/products.module';
+import { AppMessageModule } from './modules/app-message/app-message.module';
 
 @Module({
   imports: [
@@ -56,6 +57,8 @@ import { ProductsModule } from './modules/products/products.module';
     CreditServiceModule,
 
     AdminModule,
+
+    AppMessageModule,
   ],
   controllers: [AppController],
   providers: [AppService],

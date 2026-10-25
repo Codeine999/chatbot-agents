@@ -21,6 +21,8 @@ export const notificationMetadataSchema = z.object({
   flow: z.string().nullish(),
   step: z.string().nullish(),
   status: z.string().nullish(),
+  /** Absent on LINE rows. 'APP' means conversationId is a ChannelConversation, not a LineConversation. */
+  channel: z.string().nullish(),
 });
 
 export type NotificationMetadata = z.infer<typeof notificationMetadataSchema>;

@@ -23,6 +23,7 @@ model AdminMember {
   aiUsage      AiUsageEvent[]
 
   sentLineMessages LineChatHistory[]
+  sentChannelMessages ChannelMessage[]
 
   richMenuTemplates  RichMenuTemplate[]
   catalogCommands    ProductCatalogCommand[]

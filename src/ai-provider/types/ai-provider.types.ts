@@ -1,7 +1,7 @@
 export const AI_PROVIDER_NAMES = [
   'GEMINI',
-  'OPENAI',
-  'ANTHROPIC',
+  // 'OPENAI',
+  // 'ANTHROPIC',
   'OPENROUTER',
 ] as const;
 

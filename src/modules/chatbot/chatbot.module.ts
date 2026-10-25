@@ -7,6 +7,7 @@ import { ChatbotService } from './chatbot.service';
 import { RuleIntentService } from './intent/rule-intent.service';
 import { IntentRouterService } from './intent/intent-router.service';
 import { ReplyTemplateService } from './answer/answer-template.service';
+import { ChannelHandoffRegistry } from '../users/session/channel-handoff.registry';
 import { UserSessionService } from '../users/session/user-session.service';
 import { AiModule } from './ai.module';
 import { NotificationModule } from '../admin/notification/notification.module';
@@ -23,6 +24,7 @@ import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service'
     IntentRouterService,
     ReplyTemplateService,
     UserSessionService,
+    ChannelHandoffRegistry,
     LoadContextService,
     StickerIntentService,
     RichMenuReplyCacheService,
@@ -35,6 +37,7 @@ import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service'
     RichMenuReplyCacheService,
     ReplyTemplateService,
     UserSessionService,
+    ChannelHandoffRegistry,
     LoadContextService,
   ],
 })

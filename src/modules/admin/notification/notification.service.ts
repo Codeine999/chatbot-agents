@@ -68,6 +68,43 @@ export class NotificationService {
     this.notificationGateway.emitAdminNotification(toAdminNotification(row));
   }
 
+  /**
+   * Admin request from a non-LINE channel. A separate method on purpose:
+   * notifyAdminRequired resolves the chat through LINE tables and its output
+   * must stay exactly as it was.
+   */
+  async notifyChannelAdminRequired(
+    params: Pick<ConversationSession, 'userId' | 'flow' | 'step' | 'status'> & {
+      channel: string;
+      conversationId: string;
+      displayName: string | null;
+      lastMessage: string | null;
+    },
+  ): Promise<void> {
+    const metadata: NotificationMetadata = {
+      conversationId: params.conversationId,
+      displayName: params.displayName,
+      pictureUrl: null,
+      lastMessage: params.lastMessage,
+      flow: params.flow,
+      step: params.step,
+      status: params.status,
+      channel: params.channel,
+    };
+
+    const row = await this.prisma.adminNotification.create({
+      data: {
+        type: 'CONTACT_ADMIN',
+        title: 'มีลูกค้าต้องการคำตอบจากแอดมินในขณะนี้',
+        message: `${metadata.displayName ?? 'ลูกค้า'} (${params.channel}) กำลังรอคำตอบจากแอดมิน`,
+        userId: params.userId,
+        metadata,
+      },
+    });
+
+    this.notificationGateway.emitAdminNotification(toAdminNotification(row));
+  }
+
   async list(unreadOnly = false, limit = 50): Promise<AdminNotification[]> {
     const rows = await this.prisma.adminNotification.findMany({
       where: unreadOnly ? { isRead: false } : undefined,

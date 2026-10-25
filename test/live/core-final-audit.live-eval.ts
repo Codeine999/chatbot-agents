@@ -12,9 +12,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { AiProviderService } from '../../src/modules/ai/ai-provider.service';
 import { AiProviderSettingsService } from '../../src/modules/ai/ai-provider-settings.service';
 import { GeminiAiProvider } from '../../src/ai-provider/providers/gemini-ai.provider';
-import { OpenAiProvider } from '../../src/ai-provider/providers/openai-ai.provider';
 import { OpenRouterProvider } from '../../src/ai-provider/providers/openrouter-ai.provider';
-import { AnthropicAiProvider } from '../../src/ai-provider/providers/anthropic-ai.provider';
 import { GeminiEmbeddingAdapter } from '../../src/infra/embedding/gemini-embedding.adapter';
 import { AnswerPatternVectorRepository } from '../../src/modules/ai/embeding/answer-pattern-vector.repository';
 import { MicroKnowledgeVectorRepository } from '../../src/modules/ai/embeding/micro-knowledge-vector.repository';
@@ -117,9 +115,7 @@ const out =
       {} as AiProviderSettingsService,
       [
         new GeminiAiProvider(config),
-        new OpenAiProvider(config),
         new OpenRouterProvider(config),
-        new AnthropicAiProvider(config),
       ],
       config,
     );
