@@ -238,6 +238,22 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
   },
   {
     provider: 'OPENROUTER',
+    model: 'anthropic/claude-haiku-5.5',
+    inputUsdPerMillTokens: 0.1,
+    outputUsdPerMillTokens: 0.5,
+    cachedInputUsdPerMillTokens: 0.01,
+    cacheWriteUsdPerMillTokens: 0.125,
+    // Prompts past 100k bill $0.50 / $2.50 (5x) for the whole request.
+    longContext: {
+      thresholdTokens: 100_000,
+      inputMultiplier: 5,
+      outputMultiplier: 5,
+      cachedInputMultiplier: 5,
+      cacheWriteMultiplier: 5,
+    },
+  },
+  {
+    provider: 'OPENROUTER',
     model: 'openai/gpt-6.1-sol',
     inputUsdPerMillTokens: 2,
     outputUsdPerMillTokens: 10,
