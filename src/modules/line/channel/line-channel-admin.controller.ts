@@ -11,8 +11,8 @@ import type { AdminRequest } from '../../admin/admin-jwt-auth.guard';
 import { ConnectLineChannelDto } from './dto/line-channel.dto';
 import { LineChannelAdminService } from './line-channel-admin.service';
 
-/** Owner-only: connect or rotate the company's LINE Messaging API channel. */
-@AdminGuard('owner')
+/** Owner and dev: connect or rotate the company's LINE Messaging API channel. */
+@AdminGuard('owner', 'dev')
 @Controller('api/admin/line/channel')
 export class LineChannelAdminController {
   constructor(private readonly channels: LineChannelAdminService) {}

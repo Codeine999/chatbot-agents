@@ -13,9 +13,8 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import type { AuthenticatedAdmin } from '../../../shared/guards/admin-auth.types';
 import { CommerceScopeService } from '../../commerce/commerce-scope.service';
 import { connectLineChannelSchema } from './dto/line-channel.dto';
+import { lineApiRequest, webhookUrlFor } from './line-api';
 import { LineCredentialService } from './line-credential.service';
-
-const LINE_API = 'https://api.line.me';
 
 const botInfoSchema = z.object({
   userId: z.string().min(1).max(40),
@@ -45,6 +44,12 @@ const PUBLIC_SELECT = {
 type PublicLineChannel = Prisma.LineChannelGetPayload<{
   select: typeof PUBLIC_SELECT;
 }>;
+
+/** Everything an upsert writes except the keys that identify the row. */
+type ChannelValues = Omit<
+  Prisma.LineChannelUncheckedCreateInput,
+  'companyId' | 'channelKey'
+>;
 
 export type LineWebhookSetup = {
   url: string | null;
@@ -99,31 +104,11 @@ export class LineChannelAdminService {
       secretLast4: input.channelSecret.slice(-4),
       accessTokenLast4: input.accessToken.slice(-4),
       verifiedAt: new Date(),
+      // Cleared on every save so the flag only reflects the latest credentials.
+      webhookSetAt: null,
       updatedByAdminId: admin.id,
     };
-    let row: PublicLineChannel;
-    try {
-      row = await this.prisma.lineChannel.upsert({
-        where: { companyId },
-        // The key stays fixed across updates so the webhook URL never changes.
-        create: {
-          companyId,
-          channelKey: randomBytes(16).toString('base64url'),
-          ...values,
-        },
-        update: values,
-        select: PUBLIC_SELECT,
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      )
-        throw new ConflictException(
-          'This LINE channel is already connected to another company',
-        );
-      throw error;
-    }
+    let row = await this.save(companyId, values);
     this.credentials.invalidate();
     this.logger.log(`LINE channel ${row.id} updated by admin ${admin.id}`);
 
@@ -137,35 +122,65 @@ export class LineChannelAdminService {
     return { ...this.view(row), webhook };
   }
 
+  /**
+   * Upsert that survives two writes racing for the same company, such as a
+   * client retrying a request whose first attempt is still running: the loser
+   * hits the unique key, then simply updates the row the winner created. A
+   * second conflict means the bot belongs to another company.
+   */
+  private async save(
+    companyId: string,
+    values: ChannelValues,
+  ): Promise<PublicLineChannel> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.prisma.lineChannel.upsert({
+          where: { companyId },
+          // The key stays fixed across updates so the webhook URL never changes.
+          create: {
+            companyId,
+            channelKey: randomBytes(16).toString('base64url'),
+            ...values,
+          },
+          update: values,
+          select: PUBLIC_SELECT,
+        });
+      } catch (error) {
+        const conflict =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002';
+        if (!conflict) throw error;
+        if (attempt === 1)
+          throw new ConflictException(
+            'This LINE channel is already connected to another company',
+          );
+      }
+    }
+  }
+
   private view(row: PublicLineChannel | null) {
     const envFallback = this.credentials.hasEnvFallback();
     return {
       connected: Boolean(row) || envFallback,
       source: row ? 'db' : envFallback ? 'env' : 'none',
+      channelKey: row?.channelKey ?? null,
       channelId: row?.channelId ?? null,
       botUserId: row?.botUserId ?? null,
       basicId: row?.basicId ?? null,
       displayName: row?.displayName ?? null,
       secretLast4: row?.secretLast4 ?? null,
       accessTokenLast4: row?.accessTokenLast4 ?? null,
-      webhookUrl: row ? this.webhookUrl(row.channelKey) : null,
+      webhookUrl: row ? webhookUrlFor(this.config, row.channelKey) : null,
       verifiedAt: row?.verifiedAt ?? null,
       webhookSetAt: row?.webhookSetAt ?? null,
       updatedAt: row?.updatedAt ?? null,
     };
   }
 
-  private webhookUrl(channelKey: string): string | null {
-    const base = this.config.get<string>('PUBLIC_API_BASE_URL')?.trim();
-    return base
-      ? `${base.replace(/\/+$/, '')}/api/line/webhooks/${channelKey}`
-      : null;
-  }
-
   private async fetchBotInfo(accessToken: string) {
     let response: Response;
     try {
-      response = await this.lineRequest('GET', '/v2/bot/info', accessToken);
+      response = await this.line('GET', '/v2/bot/info', accessToken);
     } catch {
       throw new BadGatewayException('LINE could not be reached');
     }
@@ -189,7 +204,7 @@ export class LineChannelAdminService {
     channelKey: string,
     accessToken: string,
   ): Promise<LineWebhookSetup> {
-    const url = this.webhookUrl(channelKey);
+    const url = webhookUrlFor(this.config, channelKey);
     if (!url)
       return {
         url,
@@ -198,7 +213,7 @@ export class LineChannelAdminService {
           'PUBLIC_API_BASE_URL is not set; enter the webhook URL in LINE Developers',
       };
     try {
-      const set = await this.lineRequest(
+      const set = await this.line(
         'PUT',
         '/v2/bot/channel/webhook/endpoint',
         accessToken,
@@ -210,7 +225,7 @@ export class LineChannelAdminService {
           ok: false,
           reason: `LINE refused the webhook URL (HTTP ${set.status})`,
         };
-      const test = await this.lineRequest(
+      const test = await this.line(
         'POST',
         '/v2/bot/channel/webhook/test',
         accessToken,
@@ -232,20 +247,12 @@ export class LineChannelAdminService {
     }
   }
 
-  private lineRequest(
+  private line(
     method: 'GET' | 'PUT' | 'POST',
     path: string,
     accessToken: string,
     body?: unknown,
   ): Promise<Response> {
-    return fetch(`${LINE_API}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(this.httpTimeoutMs),
-    });
+    return lineApiRequest(method, path, accessToken, this.httpTimeoutMs, body);
   }
 }

@@ -20,7 +20,7 @@ unsupported types ถูกข้าม `LineController` ดูแล admin rout
 retry/delivery ใช้เส้นทางเดิม ไม่มี external application endpoint ในชุดนี้
 
 อัปเดต LINE credentials 25 ตุลาคม 2026: owner เชื่อม LINE OA เองผ่าน
-`GET/PUT /api/admin/line/channel` (`@AdminGuard('owner')`) PUT ตรวจ token กับ
+`GET/PUT /api/admin/line/channel` (`@AdminGuard('owner', 'dev')`) PUT ตรวจ token กับ
 LINE `/v2/bot/info` ก่อนบันทึก เก็บ secret/token ในตาราง `lineChannels` แบบ
 AES-256-GCM (key จาก env `CREDENTIAL_ENC_KEY_V1`) และตอบกลับเฉพาะ 4 ตัวท้าย
 ถ้ามี `PUBLIC_API_BASE_URL` จะตั้ง webhook ของ channel เป็น
@@ -33,6 +33,17 @@ AES-256-GCM (key จาก env `CREDENTIAL_ENC_KEY_V1`) และตอบกล
 ใน memory 60 วินาที (ไม่ลง Redis) โหลด token ไม่ได้ก่อน reply → delivery เป็น
 FAILED โดยไม่ใช้ reply token, ก่อน push → retry ได้ pipeline ยังเป็น single-company
 (ตาราง LINE/chat ยังไม่มี companyId)
+
+ตรวจสถานะ webhook 25 ตุลาคม 2026 (`@AdminGuard('owner', 'dev')`):
+`GET /api/admin/line/channel/webhook` อ่านค่าที่ LINE Console ใช้อยู่
+(`GET /v2/bot/channel/webhook/endpoint`) เทียบกับ URL ของระบบ → state
+`ok|mismatch|inactive|missing|unknown` พร้อมจำนวน event จริงจาก
+`processedLineWebhookEvent` (ล่าสุด และ 24 ชม.) และ
+`POST /api/admin/line/channel/webhook/test` สั่ง LINE ยิง event ตัวอย่างไปยัง URL
+ที่ตั้งไว้ (`POST /v2/bot/channel/webhook/test`) แล้วคืน `success/statusCode/reason`
+(`OK`, `COULD_NOT_CONNECT`, `REQUEST_TIMEOUT`, `ERROR_STATUS_CODE`,
+`UNTRUSTED_CERTIFICATE`) ผลทดสอบเขียน `lineChannels.webhookSetAt` (ผ่าน = เวลา,
+ไม่ผ่าน = null) การนับ event ยังไม่แยกตามบริษัท เพราะตาราง dedup ไม่มี companyId
 
 อัปเดต catalog foundation 5 ตุลาคม 2026: เพิ่ม [Product/Commerce Phase 1](product-commerce-phase1.md)
 แบบ opt-in `PRODUCT_CATALOG_ENABLED` (default false) ตอนนี้มี admin catalog APIs
