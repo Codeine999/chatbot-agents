@@ -9,7 +9,6 @@ import { appUserId } from './app-session.service';
 const USER_ID_PREFIX = appUserId('');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-
 @Injectable()
 export class AppHandoffHandler implements ChannelHandoffHandler, OnModuleInit {
   readonly userIdPrefix = USER_ID_PREFIX;

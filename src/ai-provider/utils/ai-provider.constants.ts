@@ -60,14 +60,18 @@ export const AI_PROVIDER_TEXT_MODELS = {
   //   'claude-sonnet-5',
   //   'claude-haiku-5.5',
   // ],
+  // OpenRouter model ids, exactly as sent in the request body. Every id here
+  // needs a matching entry in AI_MODEL_LIST_PRICES, or it cannot be billed.
   OPENROUTER: [
     'openai/gpt-6-luna',
+    'openai/gpt-6.1-sol',
+    'google/gemini-2.5-flash-lite',
+    'google/gemini-3.1-flash-lite',
     'google/gemini-3.5-flash-lite',
+    'google/gemini-3.8-flash',
+    'qwen/qwen3.8-flash',
     'anthropic/claude-sonnet-5.5',
     'anthropic/claude-opus-5.5',
     'anthropic/claude-haiku-5.5',
-    'openai/gpt-6.1-sol',
-    'qwen/qwen3.8-omni-flash',
-    'google/gemini-3.7-flash',
   ],
 } as const satisfies Readonly<Record<AiProviderName, readonly string[]>>;

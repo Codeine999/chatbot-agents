@@ -13,7 +13,7 @@ import type { UpsertAiModelPricingDto } from './dto/admin-ai-pricing.dto';
 /** Fallbacks used only when the deployment has configured nothing. */
 const DEFAULT_USD_THB_RATE = 33;
 const DEFAULT_CREDITS_PER_THB = 10;
-const DEFAULT_CREDIT_MARKUP = 1;
+const DEFAULT_CREDIT_MARKUP = 1.102293;
 
 const RATE_SCALE = 6;
 

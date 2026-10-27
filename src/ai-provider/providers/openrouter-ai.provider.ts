@@ -198,7 +198,10 @@ export class OpenRouterProvider implements AiProviderAdapter {
     temperature: number | undefined,
   ): { temperature?: number } {
     if (temperature === undefined) return {};
-    if (/^openai\/gpt-[56](?:[.-]|$)/i.test(model)) return {};
+    // Allowlist: only families whose OpenRouter endpoints list `temperature`.
+    // Sending it elsewhere with `require_parameters` makes OpenRouter answer
+    // 404 NO_MATCHING_ENDPOINTS (GPT-6 and Claude 5.x do not accept it).
+    if (!/^(?:google\/gemini|qwen\/)/i.test(model)) return {};
     return { temperature };
   }
 

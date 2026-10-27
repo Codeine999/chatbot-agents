@@ -50,6 +50,14 @@ export class AppInboxController {
     );
   }
 
+  @Post(':conversationId/pause-bot')
+  pause(
+    @Req() request: AdminRequest,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+  ) {
+    return this.inbox.pauseBot(this.admin(request), conversationId);
+  }
+
   @Post(':conversationId/resume-bot')
   resume(
     @Req() request: AdminRequest,

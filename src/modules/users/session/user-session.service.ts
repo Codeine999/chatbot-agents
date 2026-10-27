@@ -92,9 +92,16 @@ export class UserSessionService {
     return mode === 'ADMIN' || mode === 'PAUSE';
   }
 
-  /** SET EX resets the full TTL on every push; it never accumulates. */
-  async mute(userId: string, mode: 'ADMIN' | 'PAUSE' = 'ADMIN'): Promise<void> {
-    await this.redis.set(this.muteKey(userId), mode, 'EX', this.muteTtlSec);
+  /**
+   * SET EX resets the full TTL on every push; it never accumulates.
+   * `ttlSec` defaults to AUTO_MUTE_WHEN_REPLY; a manual pause passes a longer one.
+   */
+  async mute(
+    userId: string,
+    mode: 'ADMIN' | 'PAUSE' = 'ADMIN',
+    ttlSec: number = this.muteTtlSec,
+  ): Promise<void> {
+    await this.redis.set(this.muteKey(userId), mode, 'EX', ttlSec);
   }
 
   async resume(userId: string): Promise<void> {

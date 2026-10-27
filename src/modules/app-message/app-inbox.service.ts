@@ -13,6 +13,7 @@ import { LoadContextService } from '../chatbot/context/load-context.service';
 import { CommerceScopeService } from '../commerce/commerce-scope.service';
 import { UserSessionService } from '../users/session/user-session.service';
 import { appUserId } from './app-session.service';
+import { APP_LIMITS } from './app-message.config';
 import { ADMIN_REPLY_METADATA } from './app-message.metadata';
 import { sanitizeText } from './app-text';
 import type {
@@ -176,6 +177,17 @@ export class AppInboxService {
       );
     }
     return this.historyItem(message);
+  }
+
+  /** Stops the bot answering this guest until resume; admins can still reply. */
+  async pauseBot(admin: AuthenticatedAdmin, conversationId: string) {
+    const conversation = await this.requireConversation(admin, conversationId);
+    await this.sessions.mute(
+      appUserId(conversation.contactId),
+      'PAUSE',
+      APP_LIMITS.pauseBotSec,
+    );
+    return { botMode: 'paused' as const };
   }
 
   async resumeBot(admin: AuthenticatedAdmin, conversationId: string) {
