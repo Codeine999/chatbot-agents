@@ -54,6 +54,14 @@ export type LineMessageQuota = {
   value?: number;
 };
 
+/** "anthropic/claude-haiku-5.5" -> "anthropic/claude", "gpt-5-mini" -> "gpt". */
+export function modelFamily(model: string): string {
+  const slash = model.lastIndexOf('/');
+  const name = model.slice(slash + 1);
+  const family = /^[a-z]+/i.exec(name)?.[0] ?? name;
+  return `${model.slice(0, slash + 1)}${family}`;
+}
+
 @Injectable()
 export class LineAdminService {
   private readonly logger = new Logger(LineAdminService.name);
@@ -88,7 +96,10 @@ export class LineAdminService {
     );
   }
 
-  async getBotInfo(): Promise<LineBotInfoWithAiProviderSettings> {
+  /** Non-dev callers see the model family only ("anthropic/claude"), not the exact model. */
+  async getBotInfo(
+    revealModels = false,
+  ): Promise<LineBotInfoWithAiProviderSettings> {
     const [botInfo, aiProviderSettings] = await Promise.all([
       getJson<LineBotInfo>(
         '/v2/bot/info',
@@ -99,7 +110,15 @@ export class LineAdminService {
       this.aiProviderSettingsService.getAll(),
     ]);
 
-    return { ...botInfo, aiProviderSettings };
+    return {
+      ...botInfo,
+      aiProviderSettings: revealModels
+        ? aiProviderSettings
+        : aiProviderSettings.map((setting) => ({
+            ...setting,
+            model: modelFamily(setting.model),
+          })),
+    };
   }
 
   async getFollowerInsight(date: string): Promise<LineFollowerInsight> {

@@ -12,7 +12,7 @@ import { ConnectLineChannelDto } from './dto/line-channel.dto';
 import { LineChannelAdminService } from './line-channel-admin.service';
 
 /** Owner and dev: connect or rotate the company's LINE Messaging API channel. */
-@AdminGuard('owner', 'dev')
+@AdminGuard('owner', 'dev', 'admin')
 @Controller('api/admin/line/channel')
 export class LineChannelAdminController {
   constructor(private readonly channels: LineChannelAdminService) {}

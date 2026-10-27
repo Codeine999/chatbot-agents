@@ -1,5 +1,6 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Req } from '@nestjs/common';
 import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
+import type { AdminRequest } from '../../admin/admin-jwt-auth.guard';
 import { CompanyService } from '../../admin/company/company.service';
 import { LineAdminService } from './line-admin.service';
 
@@ -11,9 +12,10 @@ export class LineAdminController {
     private readonly lineAdminService: LineAdminService,
   ) {}
 
+  /** `aiProviderSettings` carries full model ids for `dev`; others get the family only. */
   @Get('info')
-  getInfo() {
-    return this.lineAdminService.getBotInfo();
+  getInfo(@Req() request: AdminRequest) {
+    return this.lineAdminService.getBotInfo(request.admin?.role === 'dev');
   }
 
   @Get('followers')
