@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { AdminRequest } from '../admin-jwt-auth.guard';
 import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
+import { UserLimitResetService } from '../../abuse/user-limit-reset.service';
 import { AdminChatService } from './admin-chat.service';
 import { AdminAiUsageService } from './admin-ai-usage.service';
 import {
@@ -32,6 +33,7 @@ export class AdminChatController {
   constructor(
     private readonly adminChatService: AdminChatService,
     private readonly usageService: AdminAiUsageService,
+    private readonly userLimitReset: UserLimitResetService,
   ) {}
 
   @Get('rooms')
@@ -127,6 +129,13 @@ export class AdminChatController {
       params.adminMemberId,
       body.limitCredit === null ? null : String(body.limitCredit),
     );
+  }
+
+  @AdminGuard('dev', 'owner')
+  @Post('clear-all')
+  @HttpCode(200)
+  clearAll(@Req() request: AdminRequest) {
+    return this.userLimitReset.clearAll(this.adminId(request));
   }
 
   private adminId(request: AdminRequest): string {

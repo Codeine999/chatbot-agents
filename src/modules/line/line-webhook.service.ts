@@ -62,10 +62,25 @@ export class LineWebhookService {
       },
     });
 
-    const waitingAdmin = conversations.filter(
+    // Mute lives in Redis and is the only source of truth for the bot mode,
+    // so the list carries it to keep every admin's view in sync.
+    const withBotMode = await Promise.all(
+      conversations.map(async (conversation) => {
+        const mute = await this.sessions.getMuteState(
+          conversation.lineMember.lineUserId,
+        );
+        return {
+          ...conversation,
+          botMode: mute ? (mute.mode === 'ADMIN' ? 'admin' : 'paused') : 'auto',
+          botMuteUntil: mute?.expiresAt?.toISOString() ?? null,
+        };
+      }),
+    );
+
+    const waitingAdmin = withBotMode.filter(
       (conversation) => conversation.status === 'waiting_admin',
     );
-    const otherConversations = conversations.filter(
+    const otherConversations = withBotMode.filter(
       (conversation) => conversation.status !== 'waiting_admin',
     );
     return [...waitingAdmin, ...otherConversations];

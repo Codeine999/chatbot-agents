@@ -92,6 +92,22 @@ export class UserSessionService {
     return mode === 'ADMIN' || mode === 'PAUSE';
   }
 
+  /** Returns the active mute and when it lifts on its own; `null` means the bot is answering. */
+  async getMuteState(
+    userId: string,
+  ): Promise<{ mode: 'ADMIN' | 'PAUSE'; expiresAt: Date | null } | null> {
+    const key = this.muteKey(userId);
+    const [mode, ttlMs] = await Promise.all([
+      this.redis.get(key),
+      this.redis.pttl(key),
+    ]);
+    if (mode !== 'ADMIN' && mode !== 'PAUSE') return null;
+    return {
+      mode,
+      expiresAt: ttlMs > 0 ? new Date(Date.now() + ttlMs) : null,
+    };
+  }
+
   /**
    * SET EX resets the full TTL on every push; it never accumulates.
    * `ttlSec` defaults to AUTO_MUTE_WHEN_REPLY; a manual pause passes a longer one.
