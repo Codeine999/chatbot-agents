@@ -14,6 +14,8 @@ export class CompanyController {
     private readonly multipartUploadService: MultipartUploadService,
   ) {}
 
+  /** Sidebar branding: every admin role may read it. */
+  @AdminGuard()
   @Get('brand-info')
   getBrandInfo() {
     return this.companyService.getBrandInfo();

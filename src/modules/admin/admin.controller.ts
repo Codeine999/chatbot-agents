@@ -24,8 +24,8 @@ export class AdminController {
     private readonly adminAuthService: AdminAuthService,
   ) {}
 
-  /** Owner/dev view: every admin account in the caller's company. */
-  @AdminGuard('dev', 'owner')
+  /** Every admin account in the caller's company; all roles may read it. */
+  @AdminGuard('dev', 'owner', 'admin')
   @Get('all')
   getAllAdmin(@Req() request: AdminRequest) {
     return this.adminService.getAllAdmin(request.admin!.companyId);

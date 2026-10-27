@@ -11,7 +11,7 @@ import type { AdminRequest } from '../../admin/admin-jwt-auth.guard';
 import { LineWebhookHealthService } from './line-webhook-health.service';
 
 /** Is the LINE webhook set up, reachable, and carrying real traffic? */
-@AdminGuard('owner', 'dev')
+@AdminGuard('owner', 'dev', 'admin')
 @Controller('api/admin/line/channel/webhook')
 export class LineWebhookHealthController {
   constructor(private readonly health: LineWebhookHealthService) {}
