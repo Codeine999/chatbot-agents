@@ -5,6 +5,8 @@
     "test",
     "dist",
     "**/*spec.ts",
-    "**/__fixtures__/**"
+    "**/__fixtures__/**",
+    "src/ai-provider/providers/openai-ai.provider.ts",
+    "src/ai-provider/providers/anthropic-ai.provider.ts"
   ]
 }

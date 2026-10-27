@@ -31,57 +31,43 @@ const GPT_5_6_LONG_CONTEXT = {
   cachedInputMultiplier: 2,
 } as const;
 
-/**
- * Verified against each provider's official pricing page on 2026-08-30.
- *
- * Standard (non-batch, non-priority) tier only — every adapter in this module
- * makes synchronous request/response calls.
- *
- * Sources:
- * - https://ai.google.dev/gemini-api/docs/pricing
- * - https://developers.openai.com/api/docs/pricing
- * - https://platform.claude.com/docs/en/about-claude/pricing
- *
- * Known expiry: Gemini 3.x standard rates hold through 2026-12-31 and double
- * on 2027-01-01. Re-run the pricing seed after that date.
- */
 export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
   // --- Google Gemini ---------------------------------------------------
-  {
-    provider: 'GEMINI',
-    model: 'gemini-3.7-flash',
-    inputUsdPerMillTokens: 0.75,
-    outputUsdPerMillTokens: 4.5,
-    cachedInputUsdPerMillTokens: 0.075,
-  },
-  {
-    provider: 'GEMINI',
-    model: 'gemini-3.6-flash',
-    inputUsdPerMillTokens: 0.75,
-    outputUsdPerMillTokens: 3.75,
-    cachedInputUsdPerMillTokens: 0.075,
-  },
-  {
-    provider: 'GEMINI',
-    model: 'gemini-3.5-flash',
-    inputUsdPerMillTokens: 1.5,
-    outputUsdPerMillTokens: 9,
-    cachedInputUsdPerMillTokens: 0.15,
-  },
-  {
-    provider: 'GEMINI',
-    model: 'gemini-3.5-flash-lite',
-    inputUsdPerMillTokens: 0.3,
-    outputUsdPerMillTokens: 2.5,
-    cachedInputUsdPerMillTokens: 0.03,
-  },
-  {
-    provider: 'GEMINI',
-    model: 'gemini-3.1-flash-lite',
-    inputUsdPerMillTokens: 0.25,
-    outputUsdPerMillTokens: 1.5,
-    cachedInputUsdPerMillTokens: 0.025,
-  },
+  // {
+  //   provider: 'GEMINI',
+  //   model: 'gemini-3.7-flash',
+  //   inputUsdPerMillTokens: 0.75,
+  //   outputUsdPerMillTokens: 4.5,
+  //   cachedInputUsdPerMillTokens: 0.075,
+  // },
+  // {
+  //   provider: 'GEMINI',
+  //   model: 'gemini-3.6-flash',
+  //   inputUsdPerMillTokens: 0.75,
+  //   outputUsdPerMillTokens: 3.75,
+  //   cachedInputUsdPerMillTokens: 0.075,
+  // },
+  // {
+  //   provider: 'GEMINI',
+  //   model: 'gemini-3.5-flash',
+  //   inputUsdPerMillTokens: 1.5,
+  //   outputUsdPerMillTokens: 9,
+  //   cachedInputUsdPerMillTokens: 0.15,
+  // },
+  // {
+  //   provider: 'GEMINI',
+  //   model: 'gemini-3.5-flash-lite',
+  //   inputUsdPerMillTokens: 0.3,
+  //   outputUsdPerMillTokens: 2.5,
+  //   cachedInputUsdPerMillTokens: 0.03,
+  // },
+  // {
+  //   provider: 'GEMINI',
+  //   model: 'gemini-3.1-flash-lite',
+  //   inputUsdPerMillTokens: 0.25,
+  //   outputUsdPerMillTokens: 1.5,
+  //   cachedInputUsdPerMillTokens: 0.025,
+  // },
   // {
   //   provider: 'GEMINI',
   //   model: 'gemini-3.1-pro-preview',
@@ -102,94 +88,94 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
   //   outputUsdPerMillTokens: 3,
   //   cachedInputUsdPerMillTokens: 0.05,
   // },
-  {
-    provider: 'GEMINI',
-    model: 'gemini-2.5-flash',
-    inputUsdPerMillTokens: 0.3,
-    outputUsdPerMillTokens: 2.5,
-    cachedInputUsdPerMillTokens: 0.03,
-  },
-  {
-    provider: 'GEMINI',
-    model: 'gemini-2.5-flash-lite',
-    inputUsdPerMillTokens: 0.1,
-    outputUsdPerMillTokens: 0.4,
-    cachedInputUsdPerMillTokens: 0.01,
-  },
+  // {
+  //   provider: 'GEMINI',
+  //   model: 'gemini-2.5-flash',
+  //   inputUsdPerMillTokens: 0.3,
+  //   outputUsdPerMillTokens: 2.5,
+  //   cachedInputUsdPerMillTokens: 0.03,
+  // },
+  // {
+  //   provider: 'GEMINI',
+  //   model: 'gemini-2.5-flash-lite',
+  //   inputUsdPerMillTokens: 0.1,
+  //   outputUsdPerMillTokens: 0.4,
+  //   cachedInputUsdPerMillTokens: 0.01,
+  // },
 
   // --- OpenAI -----------------------------------------------------------
-  {
-    provider: 'OPENAI',
-    model: 'gpt-5.6-sol',
-    inputUsdPerMillTokens: 4,
-    outputUsdPerMillTokens: 20,
-    cachedInputUsdPerMillTokens: 0.4,
-    longContext: GPT_5_6_LONG_CONTEXT,
-  },
-  {
-    provider: 'OPENAI',
-    model: 'gpt-5.6-terra',
-    inputUsdPerMillTokens: 2,
-    outputUsdPerMillTokens: 12,
-    cachedInputUsdPerMillTokens: 0.2,
-    longContext: GPT_5_6_LONG_CONTEXT,
-  },
-  {
-    provider: 'OPENAI',
-    model: 'gpt-5.6-luna',
-    inputUsdPerMillTokens: 0.2,
-    outputUsdPerMillTokens: 1.2,
-    cachedInputUsdPerMillTokens: 0.02,
-    longContext: GPT_5_6_LONG_CONTEXT,
-  },
-  {
-    provider: 'OPENAI',
-    model: 'gpt-5',
-    inputUsdPerMillTokens: 1.25,
-    outputUsdPerMillTokens: 10,
-    cachedInputUsdPerMillTokens: 0.125,
-  },
-  {
-    provider: 'OPENAI',
-    model: 'gpt-5-mini',
-    inputUsdPerMillTokens: 0.25,
-    outputUsdPerMillTokens: 2,
-    cachedInputUsdPerMillTokens: 0.025,
-  },
-  {
-    provider: 'OPENAI',
-    model: 'gpt-5-nano',
-    inputUsdPerMillTokens: 0.05,
-    outputUsdPerMillTokens: 0.4,
-    cachedInputUsdPerMillTokens: 0.005,
-  },
+  // {
+  //   provider: 'OPENAI',
+  //   model: 'gpt-5.6-sol',
+  //   inputUsdPerMillTokens: 4,
+  //   outputUsdPerMillTokens: 20,
+  //   cachedInputUsdPerMillTokens: 0.4,
+  //   longContext: GPT_5_6_LONG_CONTEXT,
+  // },
+  // {
+  //   provider: 'OPENAI',
+  //   model: 'gpt-5.6-terra',
+  //   inputUsdPerMillTokens: 2,
+  //   outputUsdPerMillTokens: 12,
+  //   cachedInputUsdPerMillTokens: 0.2,
+  //   longContext: GPT_5_6_LONG_CONTEXT,
+  // },
+  // {
+  //   provider: 'OPENAI',
+  //   model: 'gpt-5.6-luna',
+  //   inputUsdPerMillTokens: 0.2,
+  //   outputUsdPerMillTokens: 1.2,
+  //   cachedInputUsdPerMillTokens: 0.02,
+  //   longContext: GPT_5_6_LONG_CONTEXT,
+  // },
+  // {
+  //   provider: 'OPENAI',
+  //   model: 'gpt-5',
+  //   inputUsdPerMillTokens: 1.25,
+  //   outputUsdPerMillTokens: 10,
+  //   cachedInputUsdPerMillTokens: 0.125,
+  // },
+  // {
+  //   provider: 'OPENAI',
+  //   model: 'gpt-5-mini',
+  //   inputUsdPerMillTokens: 0.25,
+  //   outputUsdPerMillTokens: 2,
+  //   cachedInputUsdPerMillTokens: 0.025,
+  // },
+  // {
+  //   provider: 'OPENAI',
+  //   model: 'gpt-5-nano',
+  //   inputUsdPerMillTokens: 0.05,
+  //   outputUsdPerMillTokens: 0.4,
+  //   cachedInputUsdPerMillTokens: 0.005,
+  // },
 
   // --- Anthropic --------------------------------------------------------
   // Cache write is the 5-minute rate (1.25x input); cache read is 0.1x input.
-  {
-    provider: 'ANTHROPIC',
-    model: 'claude-opus-5',
-    inputUsdPerMillTokens: 5,
-    outputUsdPerMillTokens: 25,
-    cachedInputUsdPerMillTokens: 0.5,
-    cacheWriteUsdPerMillTokens: 6.25,
-  },
-  {
-    provider: 'ANTHROPIC',
-    model: 'claude-sonnet-5',
-    inputUsdPerMillTokens: 2,
-    outputUsdPerMillTokens: 10,
-    cachedInputUsdPerMillTokens: 0.2,
-    cacheWriteUsdPerMillTokens: 2.5,
-  },
-  {
-    provider: 'ANTHROPIC',
-    model: 'claude-haiku-4-5-20251001',
-    inputUsdPerMillTokens: 1,
-    outputUsdPerMillTokens: 5,
-    cachedInputUsdPerMillTokens: 0.1,
-    cacheWriteUsdPerMillTokens: 1.25,
-  },
+  // {
+  //   provider: 'ANTHROPIC',
+  //   model: 'claude-opus-5',
+  //   inputUsdPerMillTokens: 5,
+  //   outputUsdPerMillTokens: 25,
+  //   cachedInputUsdPerMillTokens: 0.5,
+  //   cacheWriteUsdPerMillTokens: 6.25,
+  // },
+  // {
+  //   provider: 'ANTHROPIC',
+  //   model: 'claude-sonnet-5',
+  //   inputUsdPerMillTokens: 2,
+  //   outputUsdPerMillTokens: 10,
+  //   cachedInputUsdPerMillTokens: 0.2,
+  //   cacheWriteUsdPerMillTokens: 2.5,
+  // },
+  // {
+  //   provider: 'ANTHROPIC',
+  //   model: 'claude-haiku-5.5',
+  //   inputUsdPerMillTokens: 1,
+  //   outputUsdPerMillTokens: 5,
+  //   cachedInputUsdPerMillTokens: 0.1,
+  //   cacheWriteUsdPerMillTokens: 1.25,
+  // },
 
   // --- OpenRouter --------------------------------------------------------
   // Verified 2026-10-02: official Standard prices, exact OpenRouter model IDs.
@@ -215,17 +201,64 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
   },
   {
     provider: 'OPENROUTER',
+    model: 'openai/gpt-6.1-sol',
+    inputUsdPerMillTokens: 2,
+    outputUsdPerMillTokens: 10,
+    cachedInputUsdPerMillTokens: 0.1,
+    cacheWriteUsdPerMillTokens: 2.5,
+    longContext: {
+      thresholdTokens: 272_000,
+      inputMultiplier: 2,
+      outputMultiplier: 1.5,
+      cachedInputMultiplier: 2,
+      cacheWriteMultiplier: 2,
+    },
+  },
+  {
+    provider: 'OPENROUTER',
+    model: 'google/gemini-2.5-flash-lite',
+    inputUsdPerMillTokens: 0.1,
+    outputUsdPerMillTokens: 0.4,
+    cachedInputUsdPerMillTokens: 0.01,
+    cacheWriteUsdPerMillTokens: 0.083333,
+  },
+  {
+    provider: 'OPENROUTER',
+    model: 'google/gemini-3.1-flash-lite',
+    inputUsdPerMillTokens: 0.25,
+    outputUsdPerMillTokens: 1.5,
+    cachedInputUsdPerMillTokens: 0.025,
+    cacheWriteUsdPerMillTokens: 0.083333,
+  },
+  {
+    provider: 'OPENROUTER',
     model: 'google/gemini-3.5-flash-lite',
     inputUsdPerMillTokens: 0.3,
     outputUsdPerMillTokens: 2.5,
     cachedInputUsdPerMillTokens: 0.03,
+    cacheWriteUsdPerMillTokens: 0.083333,
+  },
+  {
+    provider: 'OPENROUTER',
+    model: 'google/gemini-3.8-flash',
+    inputUsdPerMillTokens: 0.825,
+    outputUsdPerMillTokens: 4.125,
+    cachedInputUsdPerMillTokens: 0.0825,
+    cacheWriteUsdPerMillTokens: 0.041667,
+  },
+  {
+    provider: 'OPENROUTER',
+    model: 'qwen/qwen3.8-flash',
+    inputUsdPerMillTokens: 0.15,
+    outputUsdPerMillTokens: 0.47,
+    cachedInputUsdPerMillTokens: 0.016,
   },
   {
     provider: 'OPENROUTER',
     model: 'anthropic/claude-sonnet-5.5',
     inputUsdPerMillTokens: 2,
     outputUsdPerMillTokens: 10,
-    cachedInputUsdPerMillTokens: 0.2,
+    cachedInputUsdPerMillTokens: 0.1,
     cacheWriteUsdPerMillTokens: 2.5,
   },
   {
@@ -243,7 +276,6 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
     outputUsdPerMillTokens: 0.5,
     cachedInputUsdPerMillTokens: 0.01,
     cacheWriteUsdPerMillTokens: 0.125,
-    // Prompts past 100k bill $0.50 / $2.50 (5x) for the whole request.
     longContext: {
       thresholdTokens: 100_000,
       inputMultiplier: 5,
@@ -251,35 +283,6 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
       cachedInputMultiplier: 5,
       cacheWriteMultiplier: 5,
     },
-  },
-  {
-    provider: 'OPENROUTER',
-    model: 'openai/gpt-6.1-sol',
-    inputUsdPerMillTokens: 2,
-    outputUsdPerMillTokens: 10,
-    cachedInputUsdPerMillTokens: 0.1,
-    cacheWriteUsdPerMillTokens: 2.5,
-    longContext: {
-      thresholdTokens: 272_000,
-      inputMultiplier: 2,
-      outputMultiplier: 1.5,
-      cachedInputMultiplier: 2,
-      cacheWriteMultiplier: 2,
-    },
-  },
-  {
-    provider: 'OPENROUTER',
-    model: 'qwen/qwen3.8-omni-flash',
-    inputUsdPerMillTokens: 0.15,
-    outputUsdPerMillTokens: 0.47,
-    cachedInputUsdPerMillTokens: 0.016,
-  },
-  {
-    provider: 'OPENROUTER',
-    model: 'google/gemini-3.7-flash',
-    inputUsdPerMillTokens: 0.75,
-    outputUsdPerMillTokens: 3.75,
-    cachedInputUsdPerMillTokens: 0.075,
   },
 
   // --- Embeddings (input-only) -----------------------------------------

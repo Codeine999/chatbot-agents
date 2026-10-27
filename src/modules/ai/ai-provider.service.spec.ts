@@ -5,14 +5,14 @@ import {
 } from '@nestjs/common';
 import { RetryableAiProviderException } from '../../ai-provider/errors/ai-provider-error';
 import type { AiGenerateResponse } from '../../ai-provider/types/ai-provider.types';
-import { AnthropicAiProvider } from '../../ai-provider/providers/anthropic-ai.provider';
+import { OpenRouterProvider } from '../../ai-provider/providers/openrouter-ai.provider';
 import { GeminiAiProvider } from '../../ai-provider/providers/gemini-ai.provider';
 import { AiProviderSettingsService } from './ai-provider-settings.service';
 import { AiProviderService } from './ai-provider.service';
 
 const RESPONSE: AiGenerateResponse = {
   text: 'ok',
-  provider: 'ANTHROPIC',
+  provider: 'OPENROUTER',
   model: 'model-a',
   usage: {
     inputTokens: 10,
@@ -26,11 +26,11 @@ function createService(
   generate: jest.Mock,
   config: Record<string, unknown> = {},
 ) {
-  const anthropic = {
-    name: 'ANTHROPIC',
+  const openrouter = {
+    name: 'OPENROUTER',
     isConfigured: () => true,
     generate,
-  } as unknown as AnthropicAiProvider;
+  } as unknown as OpenRouterProvider;
   const stub = (name: string) =>
     ({
       name,
@@ -44,7 +44,7 @@ function createService(
 
   return new AiProviderService(
     {} as AiProviderSettingsService,
-    [stub('GEMINI'), stub('OPENAI'), anthropic],
+    [stub('GEMINI'), openrouter],
     configService,
   );
 }
@@ -60,7 +60,7 @@ describe('AiProviderService.generateWith', () => {
     });
 
     await expect(
-      service.generateWith('ANTHROPIC', 'model-a', {
+      service.generateWith('OPENROUTER', 'model-a', {
         messages: [{ role: 'user', text: 'hi' }],
       }),
     ).resolves.toBe(RESPONSE);
@@ -79,7 +79,7 @@ describe('AiProviderService.generateWith', () => {
     });
 
     await expect(
-      service.generateWith('ANTHROPIC', 'model-a', {
+      service.generateWith('OPENROUTER', 'model-a', {
         messages: [{ role: 'user', text: 'hi' }],
       }),
     ).rejects.toBeInstanceOf(BadGatewayException);
@@ -97,7 +97,7 @@ describe('AiProviderService.generateWith', () => {
     });
 
     await expect(
-      service.generateWith('ANTHROPIC', 'model-a', {
+      service.generateWith('OPENROUTER', 'model-a', {
         messages: [{ role: 'user', text: 'hi' }],
       }),
     ).rejects.toBeInstanceOf(RetryableAiProviderException);
@@ -120,7 +120,7 @@ describe('AiProviderService.generateWith', () => {
       });
 
       await expect(
-        service.generateWith('ANTHROPIC', 'model-a', {
+        service.generateWith('OPENROUTER', 'model-a', {
           messages: [{ role: 'user', text: 'hi' }],
         }),
       ).rejects.toBeInstanceOf(RetryableAiProviderException);

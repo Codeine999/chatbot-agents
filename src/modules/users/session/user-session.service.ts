@@ -9,6 +9,7 @@ import {
 } from './types/session.types';
 import { NotificationService } from '../../admin/notification/notification.service';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { ChannelHandoffRegistry } from './channel-handoff.registry';
 
 export type { ConversationSession } from './types/session.types';
 
@@ -26,6 +27,7 @@ export class UserSessionService {
     configService: ConfigService,
     private readonly notificationService: NotificationService,
     private readonly prisma: PrismaService,
+    private readonly handoffs: ChannelHandoffRegistry,
   ) {
     this.sessionTtlSec = this.positiveInteger(
       configService.get('CHAT_SESSION_TTL_SEC'),
@@ -90,9 +92,16 @@ export class UserSessionService {
     return mode === 'ADMIN' || mode === 'PAUSE';
   }
 
-  /** SET EX resets the full TTL on every push; it never accumulates. */
-  async mute(userId: string, mode: 'ADMIN' | 'PAUSE' = 'ADMIN'): Promise<void> {
-    await this.redis.set(this.muteKey(userId), mode, 'EX', this.muteTtlSec);
+  /**
+   * SET EX resets the full TTL on every push; it never accumulates.
+   * `ttlSec` defaults to AUTO_MUTE_WHEN_REPLY; a manual pause passes a longer one.
+   */
+  async mute(
+    userId: string,
+    mode: 'ADMIN' | 'PAUSE' = 'ADMIN',
+    ttlSec: number = this.muteTtlSec,
+  ): Promise<void> {
+    await this.redis.set(this.muteKey(userId), mode, 'EX', ttlSec);
   }
 
   async resume(userId: string): Promise<void> {
@@ -100,6 +109,9 @@ export class UserSessionService {
   }
 
   async requestAdmin(userId: string): Promise<void> {
+    const handler = this.handoffs.find(userId);
+    if (handler) return handler.requestAdmin(userId);
+
     const changed = await this.prisma.lineConversation.updateMany({
       where: {
         lineMember: { lineUserId: userId },

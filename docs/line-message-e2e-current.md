@@ -274,6 +274,10 @@ Notification read state กับ conversation unread/history เป็นคน
 - `preview: true` ทำให้ ChatbotService ปฏิเสธ registration (ไม่สร้าง member จริง)
 - `clientRequestId` replay คำตอบเดิม 10 นาที และเป็นส่วนของ `turnId` ที่ billing ใช้กันตัดซ้ำ; ส่งซ้อนใน session เดียวได้ 409; ต้องมี `AdminMember.aiEnabled`
 
+### 7.2 ช่องทางที่ไม่ใช่ LINE (App Message API, 25 ต.ค. 2026)
+
+`MessageProcessorService` เป็น pipeline กลางที่ LINE และ App Message ใช้ร่วมกัน: `AppChannelAdapter` เข้ามาแทน `LineChannelAdapter`, ไม่มี webhook/BullMQ/`LineDelivery` (ตอบใน HTTP response), idempotency ใช้ `channelMessages (conversationId, clientMessageId)` และลำดับ/claim ของ turn ใช้ lock ของห้อง (`channelConversations.activeTurnId`), ประวัติอยู่ใน `channel*` ไม่ใช่ `line*`. core เห็น userId รูป `app:<contactId>` และ `ChatRequest.channel = 'APP'` (ปิดสมัครสมาชิก); `requestAdmin` ของ userId ที่มี prefix นี้ถูกส่งต่อผ่าน `ChannelHandoffRegistry` ไม่แตะ `lineConversation`. พฤติกรรมของ LINE ในหัวข้อ 1–7.1 ไม่เปลี่ยน รายละเอียดอยู่ใน [app-message-flow.md](app-message-flow.md)
+
 ## 8. หลักฐานและ source
 
 [System E2E](mvp-system-e2e-results-2026-09-07.md): 42/42, PostgreSQL/Redis/BullMQ/Mongo จริง แต่ provider/LINE fixtures ไม่มี live message; unit98/98, audit16/16, build/typecheck ผ่าน ไม่ได้ kill/restart worker จริงเพื่อพิสูจน์ทุก crash window

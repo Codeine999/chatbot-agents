@@ -30,6 +30,7 @@ import { IntentRouterService } from '../intent/intent-router.service';
 import { AiChatService } from '../answer/answer.service';
 import { ChatbotService } from '../chatbot.service';
 import { UserSessionService } from '../../users/session/user-session.service';
+import { ChannelHandoffRegistry } from '../../users/session/channel-handoff.registry';
 import { ReplyTemplateService } from '../answer/answer-template.service';
 import { StickerIntentService } from '../intent/sticker-intent.service';
 
@@ -281,6 +282,7 @@ export function buildHarness(options: HarnessOptions = {}) {
     config,
     { notifyAdminRequired } as unknown as NotificationService,
     prisma,
+    new ChannelHandoffRegistry(),
   );
 
   const registrationStart = jest.fn(() => Promise.resolve('เริ่มสมัคร'));

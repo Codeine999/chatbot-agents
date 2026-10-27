@@ -60,7 +60,9 @@ export class AiIntentClassifierService {
             lowConfidenceClassifierPrompt(input, businessContext),
           ),
           temperature: 0.1,
-          maxOutputTokens: 300,
+          // Reasoning models spend this budget on thinking before the JSON, and
+          // a cut-off reply fails to parse (-> CONTACT_ADMIN). Billed on actual use.
+          maxOutputTokens: 1000,
           reasoningEffort: 'low',
         },
         context,

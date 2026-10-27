@@ -1,0 +1,122 @@
+/// Non-LINE chat channels. LINE keeps its own tables (lineMember, lineConversation, ...).
+/// Add a value here (ALTER TYPE ... ADD VALUE) when a new channel such as
+/// Facebook or Shopee is wired in.
+enum ChatChannel {
+  APP
+}
+
+enum ChannelMessageSender {
+  USER   @map("user")
+  ADMIN  @map("admin")
+  AI     @map("ai")
+  SYSTEM @map("system")
+}
+
+/// A person on a non-LINE channel (parallel to LineMember). One guest = one row.
+model ChannelContact {
+  id          String      @id @default(uuid()) @db.Uuid
+  companyId   String      @db.Uuid
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  channel     ChatChannel
+  displayName String?     @db.VarChar(100)
+  /// Client-supplied extras. Untrusted: never put it into a prompt.
+  metadata    Json?
+  /// Reserved: links the guest to a registered Customer once sign-up exists (unused today).
+  customerId  String?     @db.Uuid
+  customer    Customer?   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  lastActiveAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  sessions     AppGuestSession[]
+  conversation ChannelConversation?
+  messages     ChannelMessage[]
+
+  @@index([customerId])
+  @@index([createdAt])
+  @@map("channelContacts")
+}
+
+/// Guest token (App channel only). One contact can hold several sessions.
+model AppGuestSession {
+  id         String         @id @default(uuid()) @db.Uuid
+  companyId  String         @db.Uuid
+  company    Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  contactId  String         @db.Uuid
+  contact    ChannelContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  /// sha256 (hex) of the token. The token itself is never stored.
+  tokenHash  String         @unique @db.VarChar(64)
+  /// sha256(ip + salt) cut to 32 chars; used to count sessions per IP.
+  ipHash     String         @db.VarChar(32)
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastSeenAt DateTime?
+  createdAt  DateTime       @default(now())
+
+  @@index([contactId])
+  @@index([expiresAt])
+  @@index([ipHash, expiresAt])
+  @@map("appGuestSessions")
+}
+
+model ChannelConversation {
+  id        String         @id @default(uuid()) @db.Uuid
+  companyId String         @db.Uuid
+  company   Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  channel   ChatChannel
+  contactId String         @unique @db.Uuid
+  contact   ChannelContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  /// open | waiting_admin
+  status        String   @default("open") @db.VarChar(20)
+  lastMessage   String
+  lastMessageAt DateTime
+  unreadCount   Int      @default(0)
+  /// Per-room lock and turn claim: one inbound message is answered at a time,
+  /// across instances. A crashed turn frees the room when activeUntil passes.
+  activeTurnId  String?  @db.Uuid
+  activeUntil   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  messages ChannelMessage[]
+
+  @@index([companyId, channel, lastMessageAt])
+  /// Finds rooms that went quiet longer than the retention window.
+  @@index([channel, lastMessageAt])
+  @@map("channelConversations")
+}
+
+model ChannelMessage {
+  id             String               @id @default(uuid()) @db.Uuid
+  companyId      String               @db.Uuid
+  company        Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  conversationId String               @db.Uuid
+  conversation   ChannelConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  contactId      String               @db.Uuid
+  contact        ChannelContact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  sender         ChannelMessageSender
+  messageType    String               @default("TEXT") @db.VarChar(20)
+  text           String?
+  /// Client idempotency key (admin messages use "admin:<hash>").
+  clientMessageId String?             @db.VarChar(64)
+  /// A bot reply points back at its inbound message 1:1 (no FK on purpose; the unique index prevents duplicates).
+  replyToId      String?              @unique @db.Uuid
+  /// Inbound: PROCESSING | ANSWERED | NO_REPLY. Outbound: SENT.
+  status         String               @db.VarChar(20)
+  /// AI | KNOWLEDGE | RULE | SYSTEM | REGISTRATION (ChatResponse.source)
+  source         String?              @db.VarChar(20)
+  sentByAdminId  String?              @db.Uuid
+  sentByAdmin    AdminMember?         @relation(fields: [sentByAdminId], references: [id], onDelete: SetNull)
+  /// Bot replies only: the turn to append to chat context after it is stored.
+  turnContext    Json?
+  /// Inbound (USER): client-supplied, untrusted, never reaches a prompt.
+  /// Outbound (AI/SYSTEM/ADMIN): built by the server from a whitelist only.
+  metadata       Json?
+  createdAt      DateTime             @default(now())
+
+  @@unique([conversationId, clientMessageId])
+  @@index([conversationId, createdAt, id])
+  /// Used by the retention purge.
+  @@index([createdAt])
+  @@map("channelMessages")
+}
