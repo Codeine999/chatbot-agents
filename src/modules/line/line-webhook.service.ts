@@ -20,6 +20,14 @@ import type {
 import { LineDeliveryService } from './line-delivery.service';
 import { randomUUID } from 'node:crypto';
 import { UserSessionService } from '../users/session/user-session.service';
+import {
+  afterRoom,
+  INBOX_ROOM_ORDER,
+  isPagedInboxQuery,
+  messageKeyset,
+  pageInboxRooms,
+  type ListInboxConversationsQuery,
+} from '../../shared/inbox/inbox-page';
 
 @Injectable()
 export class LineWebhookService {
@@ -44,7 +52,68 @@ export class LineWebhookService {
     return this.channelAdapter.saveIncomingEvent(event);
   }
 
-  async listConversations() {
+  /**
+   * Any query parameter returns one `{ items, nextCursor }` page; without
+   * any, the legacy full array is kept for dashboards not yet paging.
+   */
+  async listConversations(query: ListInboxConversationsQuery = {}) {
+    if (!isPagedInboxQuery(query)) return this.listAllConversations();
+
+    const page = await pageInboxRooms(query, (waiting, after, take) =>
+      this.prisma.lineConversation.findMany({
+        where: {
+          AND: [
+            { status: waiting ? 'waiting_admin' : { not: 'waiting_admin' } },
+            query.unread ? { unreadCount: { gt: 0 } } : {},
+            query.q
+              ? {
+                  lineMember: {
+                    displayName: { contains: query.q, mode: 'insensitive' },
+                  },
+                }
+              : {},
+            afterRoom(after),
+          ],
+        },
+        orderBy: INBOX_ROOM_ORDER,
+        take,
+        include: { lineMember: true },
+      }),
+    );
+    return { ...page, items: await this.withBotMode(page.items) };
+  }
+
+  /** Totals for the inbox tabs; independent of the loaded page. */
+  async countConversations() {
+    const [all, unread, waitingAdmin] = await Promise.all([
+      this.prisma.lineConversation.count(),
+      this.prisma.lineConversation.count({
+        where: { unreadCount: { gt: 0 } },
+      }),
+      this.prisma.lineConversation.count({
+        where: { status: 'waiting_admin' },
+      }),
+    ]);
+    return { all, unread, waitingAdmin };
+  }
+
+  /** Clears the unread badge once an admin has the room open. */
+  async markConversationRead(conversationId: string) {
+    const cleared = await this.prisma.lineConversation.updateMany({
+      where: { id: conversationId, unreadCount: { gt: 0 } },
+      data: { unreadCount: 0 },
+    });
+    if (!cleared.count) {
+      const exists = await this.prisma.lineConversation.findUnique({
+        where: { id: conversationId },
+        select: { id: true },
+      });
+      if (!exists) throw new NotFoundException('LINE conversation not found');
+    }
+    return { id: conversationId, unreadCount: 0 };
+  }
+
+  private async listAllConversations() {
     const conversations = await this.prisma.lineConversation.findMany({
       orderBy: [
         {
@@ -62,9 +131,23 @@ export class LineWebhookService {
       },
     });
 
-    // Mute lives in Redis and is the only source of truth for the bot mode,
-    // so the list carries it to keep every admin's view in sync.
-    const withBotMode = await Promise.all(
+    const withBotMode = await this.withBotMode(conversations);
+
+    const waitingAdmin = withBotMode.filter(
+      (conversation) => conversation.status === 'waiting_admin',
+    );
+    const otherConversations = withBotMode.filter(
+      (conversation) => conversation.status !== 'waiting_admin',
+    );
+    return [...waitingAdmin, ...otherConversations];
+  }
+
+  // Mute lives in Redis and is the only source of truth for the bot mode,
+  // so the list carries it to keep every admin's view in sync.
+  private withBotMode<T extends { lineMember: { lineUserId: string } }>(
+    conversations: T[],
+  ) {
+    return Promise.all(
       conversations.map(async (conversation) => {
         const mute = await this.sessions.getMuteState(
           conversation.lineMember.lineUserId,
@@ -76,14 +159,6 @@ export class LineWebhookService {
         };
       }),
     );
-
-    const waitingAdmin = withBotMode.filter(
-      (conversation) => conversation.status === 'waiting_admin',
-    );
-    const otherConversations = withBotMode.filter(
-      (conversation) => conversation.status !== 'waiting_admin',
-    );
-    return [...waitingAdmin, ...otherConversations];
   }
 
   async getConversationMessages(
@@ -111,33 +186,19 @@ export class LineWebhookService {
       throw new NotFoundException('LINE conversation not found');
     }
 
+    const keyset = messageKeyset(before, query.beforeId, after, query.afterId);
+
     if (after) {
       return this.prisma.lineChatHistory.findMany({
-        where: {
-          conversationId,
-          createdAt: {
-            gt: after,
-          },
-        },
-        orderBy: {
-          createdAt: 'asc',
-        },
+        where: { conversationId, ...keyset },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         take: limit,
       });
     }
 
     const messages = await this.prisma.lineChatHistory.findMany({
-      where: {
-        conversationId,
-        createdAt: before
-          ? {
-              lt: before,
-            }
-          : undefined,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      where: { conversationId, ...keyset },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
     });
 

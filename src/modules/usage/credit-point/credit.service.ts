@@ -18,15 +18,14 @@ import { InsufficientCreditException } from './insufficient-credit.exception';
 import { PendingAiUsageError } from '../billing/pending-ai-usage.error';
 
 const DEFAULT_MIN_AI_BALANCE_CREDIT = 20;
-/**
- * Every AI call reserves and settles on the one company wallet row, so a burst
- * of concurrent LINE turns (LINE_EVENTS_CONCURRENCY) conflicts under
- * SERIALIZABLE. Three immediate retries let half of a six-call burst fail;
- * jittered backoff spreads the retries until the burst drains.
- */
-const SERIALIZABLE_RETRY_LIMIT = 10;
-const SERIALIZABLE_RETRY_BASE_DELAY_MS = 10;
-const SERIALIZABLE_RETRY_MAX_DELAY_MS = 200;
+const TRANSACTION_RETRY_LIMIT = 10;
+const TRANSACTION_RETRY_BASE_DELAY_MS = 10;
+const TRANSACTION_RETRY_MAX_DELAY_MS = 200;
+const { ReadCommitted, Serializable } = Prisma.TransactionIsolationLevel;
+
+const isUniqueViolation = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError &&
+  error.code === 'P2002';
 
 /** Aggregate hold created before the provider is contacted. */
 export type CreditHold = Readonly<{
@@ -149,7 +148,9 @@ export class CreditService {
       },
     };
 
-    return this.runSerializable(async (tx) => {
+    // Reads then writes, so it stays SERIALIZABLE: a concurrent hold makes this
+    // edit retry and re-check instead of capping below committed credit.
+    return this.runTransaction(Serializable, async (tx) => {
       const current = await tx.creditBudget.findUnique({
         where,
         select: { usedCredit: true, reservedCredit: true },
@@ -181,8 +182,10 @@ export class CreditService {
 
   /**
    * Atomically holds the maximum expected charge in both the shared wallet and
-   * the scope budget. Serializable isolation prevents two concurrent callers
-   * from both reserving the same available credit.
+   * the scope budget. Both increments run before the checks, which read the
+   * rows the UPDATEs return: each row stays locked until commit, so a
+   * concurrent caller waits and then sees this hold, and a failed check rolls
+   * both increments back. Two callers can never reserve the same credit.
    */
   async reserveAiCredit(
     kind: UsageKind,
@@ -200,29 +203,47 @@ export class CreditService {
     const budget = await this.ensureBudget(wallet.id, kind, scopeKey);
     let reservationId: string = randomUUID();
 
-    return this.runSerializable(async (tx) => {
+    return this.runTransaction(ReadCommitted, async (tx) => {
       const existing = options.operationKey
         ? await tx.creditReservation.findUnique({ where: { operationKey: options.operationKey } })
         : null;
       if (existing && existing.status !== 'RELEASED') throw new PendingAiUsageError();
-      const [currentWallet, currentBudget] = await Promise.all([
-        tx.creditWallet.findUniqueOrThrow({
-          where: { id: wallet.id },
-          select: {
-            active: true,
-            balanceCredit: true,
-            reservedCredit: true,
-          },
-        }),
-        tx.creditBudget.findUniqueOrThrow({
-          where: { id: budget.id },
-          select: {
-            limitCredit: true,
-            usedCredit: true,
-            reservedCredit: true,
-          },
-        }),
-      ]);
+
+      // Lock order on every billing path: reservation, wallet, budget.
+      if (existing) {
+        reservationId = existing.id;
+        const reheld = await tx.creditReservation.updateMany({
+          where: { id: existing.id, status: 'RELEASED' },
+          data: { status: 'HELD', amountCredit: amount, expiresAt: new Date(Date.now() + 120_000) },
+        });
+        // Another caller re-held the same operation first.
+        if (!reheld.count) throw new PendingAiUsageError();
+      } else {
+        await tx.creditReservation.create({ data: {
+          id: reservationId, operationKey: options.operationKey ?? `usage:${reservationId}`,
+          companyId, walletId: wallet.id, budgetId: budget.id, amountCredit: amount,
+          expiresAt: new Date(Date.now() + 120_000),
+        } });
+      }
+
+      const currentWallet = await tx.creditWallet.update({
+        where: { id: wallet.id },
+        data: { reservedCredit: { increment: amount } },
+        select: {
+          active: true,
+          balanceCredit: true,
+          reservedCredit: true,
+        },
+      });
+      const currentBudget = await tx.creditBudget.update({
+        where: { id: budget.id },
+        data: { reservedCredit: { increment: amount } },
+        select: {
+          limitCredit: true,
+          usedCredit: true,
+          reservedCredit: true,
+        },
+      });
 
       if (!currentWallet.active) {
         throw new InsufficientCreditException('AI credit wallet is inactive');
@@ -234,9 +255,11 @@ export class CreditService {
         );
       }
 
-      const available = currentWallet.balanceCredit.minus(
-        currentWallet.reservedCredit,
-      );
+      // The returned totals already include this hold; take it back out so
+      // the checks and messages describe the credit as it was before.
+      const available = currentWallet.balanceCredit
+        .minus(currentWallet.reservedCredit)
+        .plus(amount);
       const availableAfterReservation = available.minus(amount);
       if (availableAfterReservation.lessThanOrEqualTo(this.minBalanceCredit)) {
         throw new InsufficientCreditException(
@@ -247,9 +270,9 @@ export class CreditService {
         );
       }
 
-      const committedBudget = currentBudget.usedCredit.plus(
-        currentBudget.reservedCredit,
-      );
+      const committedBudget = currentBudget.usedCredit
+        .plus(currentBudget.reservedCredit)
+        .minus(amount);
       if (
         currentBudget.limitCredit &&
         committedBudget.greaterThanOrEqualTo(currentBudget.limitCredit)
@@ -271,30 +294,6 @@ export class CreditService {
         );
       }
 
-      if (existing) {
-        reservationId = existing.id;
-        await tx.creditReservation.update({
-          where: { id: existing.id },
-          data: { status: 'HELD', amountCredit: amount, expiresAt: new Date(Date.now() + 120_000) },
-        });
-      } else {
-        await tx.creditReservation.create({ data: {
-          id: reservationId, operationKey: options.operationKey ?? `usage:${reservationId}`,
-          companyId, walletId: wallet.id, budgetId: budget.id, amountCredit: amount,
-          expiresAt: new Date(Date.now() + 120_000),
-        } });
-      }
-      await Promise.all([
-        tx.creditWallet.update({
-          where: { id: wallet.id },
-          data: { reservedCredit: { increment: amount } },
-        }),
-        tx.creditBudget.update({
-          where: { id: budget.id },
-          data: { reservedCredit: { increment: amount } },
-        }),
-      ]);
-
       return {
         id: reservationId,
         companyId,
@@ -302,6 +301,13 @@ export class CreditService {
         budgetId: budget.id,
         amountCredit: amount,
       };
+    }).catch((error: unknown) => {
+      // A concurrent reserve of the same operation waits on the unique key and
+      // fails here once the first commits; report it like an existing hold.
+      if (options.operationKey && isUniqueViolation(error)) {
+        throw new PendingAiUsageError();
+      }
+      throw error;
     });
   }
 
@@ -335,7 +341,8 @@ export class CreditService {
    * budget usage and ledger entry in one transaction. The wallet and budget
    * are moved with atomic SQL decrement/increment rather than a
    * read-modify-write, so concurrent LINE and admin calls cannot clobber each
-   * other's balance.
+   * other's balance, and the limits are checked on the totals those UPDATEs
+   * return while their row locks are held.
    */
   async recordAiUsage(input: RecordAiUsageInput): Promise<AiUsageSettlement> {
     const { reservation, cost } = input;
@@ -345,57 +352,23 @@ export class CreditService {
       input.status === 'success' && cost.chargedCredit.greaterThan(0);
 
     try {
-      return await this.runSerializable(async (tx) => {
-        const hold = await tx.creditReservation.findUniqueOrThrow({ where: { id: reservation.id } });
-        if (hold.status !== 'HELD') throw new PendingAiUsageError();
+      return await this.runTransaction(ReadCommitted, async (tx) => {
+        // Claiming the hold first makes a concurrent settlement or release of
+        // the same reservation wait here, then find it no longer HELD.
+        const claimed = await tx.creditReservation.updateMany({
+          where: { id: reservation.id, status: 'HELD' },
+          data: {
+            status: input.status === 'success' ? 'SETTLED' : 'RELEASED',
+            result:
+              input.status === 'success' && input.result !== undefined
+                ? { kind: input.kind, value: input.result }
+                : undefined,
+          },
+        });
+        if (!claimed.count) throw new PendingAiUsageError();
         const chargedCredit = billable
           ? cost.chargedCredit
           : new Prisma.Decimal(0);
-        const [walletBefore, budgetBefore] = await Promise.all([
-          tx.creditWallet.findUniqueOrThrow({
-            where: { id: reservation.walletId },
-            select: { balanceCredit: true, reservedCredit: true },
-          }),
-          tx.creditBudget.findUniqueOrThrow({
-            where: { id: reservation.budgetId },
-            select: {
-              limitCredit: true,
-              usedCredit: true,
-              reservedCredit: true,
-            },
-          }),
-        ]);
-
-        const otherWalletReservations = walletBefore.reservedCredit.minus(
-          reservation.amountCredit,
-        );
-        if (
-          otherWalletReservations.isNegative() ||
-          walletBefore.balanceCredit
-            .minus(otherWalletReservations)
-            .minus(chargedCredit)
-            .lessThanOrEqualTo(this.minBalanceCredit)
-        ) {
-          throw new InsufficientCreditException(
-            `Actual AI charge ${chargedCredit.toString()} exceeds reserved and available credit`,
-          );
-        }
-
-        const otherBudgetReservations = budgetBefore.reservedCredit.minus(
-          reservation.amountCredit,
-        );
-        const projectedBudget = budgetBefore.usedCredit
-          .plus(otherBudgetReservations)
-          .plus(chargedCredit);
-        if (
-          otherBudgetReservations.isNegative() ||
-          (budgetBefore.limitCredit &&
-            projectedBudget.greaterThan(budgetBefore.limitCredit))
-        ) {
-          throw new InsufficientCreditException(
-            `Actual AI charge ${chargedCredit.toString()} exceeds the remaining budget`,
-          );
-        }
 
         await tx.aiUsageEvent.create({
           data: {
@@ -422,6 +395,9 @@ export class CreditService {
           },
         });
 
+        // The shared rows move last so their locks are held only until commit.
+        // Checks read the returned totals: this hold is already released from
+        // `reservedCredit` and this charge already applied to the balance.
         const wallet = await tx.creditWallet.update({
           where: { id: reservation.walletId },
           data: {
@@ -429,16 +405,42 @@ export class CreditService {
             balanceCredit: { decrement: chargedCredit },
             lifetimeSpentCredit: { increment: chargedCredit },
           },
-          select: { balanceCredit: true },
+          select: { balanceCredit: true, reservedCredit: true },
         });
+        if (
+          wallet.reservedCredit.isNegative() ||
+          wallet.balanceCredit
+            .minus(wallet.reservedCredit)
+            .lessThanOrEqualTo(this.minBalanceCredit)
+        ) {
+          throw new InsufficientCreditException(
+            `Actual AI charge ${chargedCredit.toString()} exceeds reserved and available credit`,
+          );
+        }
 
-        await tx.creditBudget.update({
+        const budget = await tx.creditBudget.update({
           where: { id: reservation.budgetId },
           data: {
             reservedCredit: { decrement: reservation.amountCredit },
             usedCredit: { increment: chargedCredit },
           },
+          select: {
+            limitCredit: true,
+            usedCredit: true,
+            reservedCredit: true,
+          },
         });
+        if (
+          budget.reservedCredit.isNegative() ||
+          (budget.limitCredit &&
+            budget.usedCredit
+              .plus(budget.reservedCredit)
+              .greaterThan(budget.limitCredit))
+        ) {
+          throw new InsufficientCreditException(
+            `Actual AI charge ${chargedCredit.toString()} exceeds the remaining budget`,
+          );
+        }
 
         if (billable) {
           await tx.creditLedger.create({
@@ -453,17 +455,6 @@ export class CreditService {
             },
           });
         }
-
-        await tx.creditReservation.update({
-          where: { id: reservation.id },
-          data: {
-            status: input.status === 'success' ? 'SETTLED' : 'RELEASED',
-            result:
-              input.status === 'success' && input.result !== undefined
-                ? { kind: input.kind, value: input.result }
-                : undefined,
-          },
-        });
 
         return {
           usageEventId,
@@ -490,22 +481,22 @@ export class CreditService {
 
   /** Releases an aggregate hold after an unexpected billing-path failure. */
   async releaseAiCredit(reservation: CreditHold): Promise<void> {
-    await this.runSerializable(async (tx) => {
+    // The status guard re-checks after any row-lock wait, so a hold is
+    // released exactly once even when two callers race to release it.
+    await this.runTransaction(ReadCommitted, async (tx) => {
       const released = await tx.creditReservation.updateMany({
         where: { id: reservation.id, status: { in: ['HELD', 'UNKNOWN'] } },
         data: { status: 'RELEASED' },
       });
       if (!released.count) return;
-      await Promise.all([
-        tx.creditWallet.update({
-          where: { id: reservation.walletId },
-          data: { reservedCredit: { decrement: reservation.amountCredit } },
-        }),
-        tx.creditBudget.update({
-          where: { id: reservation.budgetId },
-          data: { reservedCredit: { decrement: reservation.amountCredit } },
-        }),
-      ]);
+      await tx.creditWallet.update({
+        where: { id: reservation.walletId },
+        data: { reservedCredit: { decrement: reservation.amountCredit } },
+      });
+      await tx.creditBudget.update({
+        where: { id: reservation.budgetId },
+        data: { reservedCredit: { decrement: reservation.amountCredit } },
+      });
     });
   }
 
@@ -605,35 +596,35 @@ export class CreditService {
     });
   }
 
-  private async runSerializable<T>(
+  /** Retries P2034: serialization failures and deadlocks. */
+  private async runTransaction<T>(
+    isolationLevel: Prisma.TransactionIsolationLevel,
     work: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
-    for (let attempt = 1; attempt <= SERIALIZABLE_RETRY_LIMIT; attempt += 1) {
+    for (let attempt = 1; attempt <= TRANSACTION_RETRY_LIMIT; attempt += 1) {
       try {
-        return await this.prisma.$transaction(work, {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        });
+        return await this.prisma.$transaction(work, { isolationLevel });
       } catch (error) {
         const retryable =
           error instanceof Prisma.PrismaClientKnownRequestError &&
           error.code === 'P2034';
-        if (!retryable || attempt === SERIALIZABLE_RETRY_LIMIT) throw error;
+        if (!retryable || attempt === TRANSACTION_RETRY_LIMIT) throw error;
 
         this.logger.warn(
-          `Retrying serialized AI credit transaction (${attempt}/${SERIALIZABLE_RETRY_LIMIT})`,
+          `Retrying ${isolationLevel} AI credit transaction (${attempt}/${TRANSACTION_RETRY_LIMIT})`,
         );
         // Full jitter: concurrent losers must not retry in lockstep.
         await delay(
           Math.random() *
             Math.min(
-              SERIALIZABLE_RETRY_MAX_DELAY_MS,
-              SERIALIZABLE_RETRY_BASE_DELAY_MS * 2 ** attempt,
+              TRANSACTION_RETRY_MAX_DELAY_MS,
+              TRANSACTION_RETRY_BASE_DELAY_MS * 2 ** attempt,
             ),
         );
       }
     }
 
-    throw new Error('Serializable AI credit transaction retry exhausted');
+    throw new Error('AI credit transaction retry exhausted');
   }
 
   private async findSettledUsage(

@@ -20,6 +20,14 @@ import type {
   ListAppMessagesQueryDto,
   SendAppAdminMessageDto,
 } from './dto/app-inbox.dto';
+import {
+  afterRoom,
+  INBOX_ROOM_ORDER,
+  isPagedInboxQuery,
+  messageKeyset,
+  pageInboxRooms,
+  type ListInboxConversationsQuery,
+} from '../../shared/inbox/inbox-page';
 
 /** Newest rooms only; older ones are purged after the retention window anyway. */
 const LIST_LIMIT = 200;
@@ -44,24 +52,111 @@ export class AppInboxService {
     private readonly context: LoadContextService,
   ) {}
 
-  /** Same order as the LINE inbox: rooms waiting for an admin first, then newest. */
-  async listConversations(admin: AuthenticatedAdmin) {
+  /**
+   * Same order as the LINE inbox: rooms waiting for an admin first, then
+   * newest. Any query parameter returns one `{ items, nextCursor }` page;
+   * without any, the legacy array of the newest rooms is kept.
+   */
+  async listConversations(
+    admin: AuthenticatedAdmin,
+    query: ListInboxConversationsQuery = {},
+  ) {
     const { companyId } = await this.scopes.forAdmin(admin);
+    const scope = this.roomScope(companyId);
+    const include = {
+      contact: { select: { id: true, displayName: true, metadata: true } },
+    } as const;
+
+    if (isPagedInboxQuery(query)) {
+      const page = await pageInboxRooms(query, (waiting, after, take) =>
+        this.prisma.channelConversation.findMany({
+          where: {
+            AND: [
+              scope,
+              { status: waiting ? 'waiting_admin' : { not: 'waiting_admin' } },
+              query.unread ? { unreadCount: { gt: 0 } } : {},
+              query.q
+                ? {
+                    contact: {
+                      displayName: { contains: query.q, mode: 'insensitive' },
+                    },
+                  }
+                : {},
+              afterRoom(after),
+            ],
+          },
+          orderBy: INBOX_ROOM_ORDER,
+          take,
+          include,
+        }),
+      );
+      return { ...page, items: page.items.map((row) => this.roomItem(row)) };
+    }
+
     const rows = await this.prisma.channelConversation.findMany({
-      where: {
-        companyId,
-        channel: 'APP',
-        // A room exists from the first message attempt; hide it until a
-        // message is actually stored.
-        lastMessage: { not: '' },
-      },
-      orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
+      where: scope,
+      orderBy: INBOX_ROOM_ORDER,
       take: LIST_LIMIT,
-      include: {
-        contact: { select: { id: true, displayName: true, metadata: true } },
-      },
+      include,
     });
-    const view = rows.map((row) => ({
+    const view = rows.map((row) => this.roomItem(row));
+    return [
+      ...view.filter((row) => row.status === 'waiting_admin'),
+      ...view.filter((row) => row.status !== 'waiting_admin'),
+    ];
+  }
+
+  /** Totals for the inbox tabs; independent of the loaded page. */
+  async countConversations(admin: AuthenticatedAdmin) {
+    const { companyId } = await this.scopes.forAdmin(admin);
+    const scope = this.roomScope(companyId);
+    const [all, unread, waitingAdmin] = await Promise.all([
+      this.prisma.channelConversation.count({ where: scope }),
+      this.prisma.channelConversation.count({
+        where: { ...scope, unreadCount: { gt: 0 } },
+      }),
+      this.prisma.channelConversation.count({
+        where: { ...scope, status: 'waiting_admin' },
+      }),
+    ]);
+    return { all, unread, waitingAdmin };
+  }
+
+  /** Clears the unread badge once an admin has the room open. */
+  async markConversationRead(
+    admin: AuthenticatedAdmin,
+    conversationId: string,
+  ) {
+    const conversation = await this.requireConversation(admin, conversationId);
+    await this.prisma.channelConversation.updateMany({
+      where: {
+        id: conversation.id,
+        companyId: conversation.companyId,
+        unreadCount: { gt: 0 },
+      },
+      data: { unreadCount: 0 },
+    });
+    return { id: conversation.id, unreadCount: 0 };
+  }
+
+  private roomScope(companyId: string) {
+    return {
+      companyId,
+      channel: 'APP' as const,
+      // A room exists from the first message attempt; hide it until a
+      // message is actually stored.
+      lastMessage: { not: '' },
+    };
+  }
+
+  private roomItem(
+    row: Prisma.ChannelConversationGetPayload<{
+      include: {
+        contact: { select: { id: true; displayName: true; metadata: true } };
+      };
+    }>,
+  ) {
+    return {
       id: row.id,
       channel: 'APP' as const,
       status: row.status,
@@ -70,11 +165,7 @@ export class AppInboxService {
       unreadCount: row.unreadCount,
       createdAt: row.createdAt,
       contact: row.contact,
-    }));
-    return [
-      ...view.filter((row) => row.status === 'waiting_admin'),
-      ...view.filter((row) => row.status !== 'waiting_admin'),
-    ];
+    };
   }
 
   async getMessages(
@@ -88,17 +179,18 @@ export class AppInboxService {
     const after = this.parseDate(query.after, 'after');
     const limit = query.limit ?? (after ? 100 : 30);
     await this.requireConversation(admin, conversationId);
+    const keyset = messageKeyset(before, query.beforeId, after, query.afterId);
 
     if (after) {
       const rows = await this.prisma.channelMessage.findMany({
-        where: { conversationId, createdAt: { gt: after } },
+        where: { conversationId, ...keyset },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         take: limit,
       });
       return rows.map((row) => this.historyItem(row));
     }
     const rows = await this.prisma.channelMessage.findMany({
-      where: { conversationId, createdAt: before ? { lt: before } : undefined },
+      where: { conversationId, ...keyset },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
     });

@@ -16,8 +16,11 @@
 | POST | `/messages` | Bearer | `{ clientMessageId (uuid), text, metadata? }` → `{ message, replies[], meta }` |
 | GET | `/messages?after=&limit=` | Bearer | ประวัติของห้องตัวเอง เก่า→ใหม่ · `nextCursor` = cursor ของข้อความล่าสุดที่ได้ (ไม่มีใหม่ = คืน `after` เดิม ใช้ poll ต่อได้) |
 
-**Admin (JWT ทุก role, ผูกกับบริษัทของแอดมิน):** `GET /api/admin/app-conversations` (waiting_admin ก่อน แล้วใหม่สุด, 200 ห้อง) ·
-`GET|POST /api/admin/app-conversations/:id/messages` (รูปแบบเดียวกับ LINE: `before`/`after`, `{ text, clientRequestId? }`) · `POST …/:id/resume-bot`
+**Admin (JWT ทุก role, ผูกกับบริษัทของแอดมิน):** `GET /api/admin/app-conversations` (waiting_admin ก่อน แล้วใหม่สุด · ไม่ส่ง query = array 200 ห้องแบบเดิม · ส่ง `limit/cursor/status/unread/q` = `{ items, nextCursor }`) ·
+`GET …/counts` · `POST …/:id/read` (เคลียร์ `unreadCount`) ·
+`GET|POST /api/admin/app-conversations/:id/messages` (รูปแบบเดียวกับ LINE: `before`/`after` + `beforeId`/`afterId`, `{ text, clientRequestId? }`) · รายละเอียดอยู่ที่ `docs/admin-inbox-current.md` · `POST …/:id/pause-bot` (บอทหยุดตอบจนกว่าจะ resume, สูงสุด 7 วัน; แอดมินยังตอบได้) · `POST …/:id/resume-bot`
+
+แอดมินตอบเอง = บอทหยุดชั่วคราวตาม `AUTO_MUTE_WHEN_REPLY` (เหมือน LINE) · pause = หยุดจนกว่าจะ resume
 
 error ของ guest: `{ code, message, retryAfterSec? }` + `Retry-After` · ยกเว้น JSON เสียและ body เกิน 16KB ที่ Fastify ตัดก่อนถึง controller (`{ statusCode, message }`, ไม่มีรายละเอียดภายใน)
 
@@ -85,6 +88,7 @@ POST /messages
 
 - `ChatRequest.channel?: 'LINE'|'APP'` → `ChatbotService.canRegister(preview, channel)`
 - `ChannelHandoffRegistry` + `UserSessionService.requestAdmin` ส่งต่อ userId ที่มี prefix ของช่องอื่น
+- `UserSessionService.mute(userId, mode, ttlSec?)` รับ TTL แบบ optional (ค่าเริ่มต้นเดิม) ให้ pause อยู่ได้นาน
 - `NotificationService.notifyChannelAdminRequired` (ใหม่) + `channel` ใน metadata ของ notification
 - `RateLimitService.consume(..., { failOpen })` + ฟิลด์ `unavailable`
 - `main.ts`: `trustProxy` จาก `TRUST_PROXY_HOPS`, body limit 16KB เฉพาะ `/api/app/*`, CORS ของ `/api/app/*` จาก `APP_ALLOWED_ORIGINS` (route อื่นใช้ตัวเลือกเดิม), `app.listen(port)`
@@ -95,10 +99,18 @@ POST /messages
 - ใครก็สร้าง guest ได้ (เหมือน chat widget ทั่วไป) · การป้องกันคือ rate limit/ban/เพดานรายวัน · botnet หลาย IP ใช้เพดานทั้งระบบได้จนหมดวัน
 - ค่ายมือถือไทยใช้ CGNAT: IP เดียวอาจมีหลายคน → ดู log `app gate blocked layer=…` แล้วปรับ `APP_MSG_*_IP`
 - fixed-window rate limit · ไม่มี push (client poll `GET /messages`)
-- dashboard ยังไม่มีหน้า app: notification ที่ `metadata.channel === 'APP'` ต้องเปิดผ่าน `/api/admin/app-conversations`
+- dashboard: หน้า `/ai/internal-customer-chat?channel=line-application` (repo chatbot-dashboard) ใช้ API นี้จริง — ลูกค้าจำลองเรียก guest API จากเบราว์เซอร์ (ต้องใส่ origin ของ dashboard ใน `APP_ALLOWED_ORIGINS`, dev = `http://localhost:5173`), รายการห้อง/ประวัติ/แอดมินตอบ/pause-resume ใช้ `/api/admin/app-conversations` · ยังไม่มีหน้าจัดการห้องของลูกค้าจริงแยกต่างหาก · `unreadCount` เคลียร์ด้วย `POST …/:id/read` (dashboard ต้องเรียกเอง)
 - ต้องตรวจบน VPS: nginx/Cloudflare ส่ง IP จริง และ `core-api` ไม่ publish พอร์ตออกนอก (ไม่งั้นปลอม `X-Forwarded-For` ได้)
 
 ดู log เพื่อปรับ limit:
 ```
 docker compose logs core-api | grep "app gate blocked" | sed -E 's/.*layer=([a-z-]+) ip=([0-9a-f]+).*/\1 \2/' | sort | uniq -c | sort -rn | head
 ```
+
+## 8. ตรวจสดล่าสุด (26 ต.ค. 2026)
+
+instance ทดสอบในเครื่อง + LLM จริง `openai/gpt-6-luna` ผ่าน OpenRouter รวม 30 ข้อความ (ถึง LLM จริง 3 ครั้ง) ปิด embedding ของ Gemini ไว้เพื่อไม่ให้เรียกโมเดลอื่น:
+ผ่านทุกข้อ ได้แก่ session/ส่ง/ประวัติ, ส่งซ้ำได้คำตอบเดิมไม่เรียกโมเดลซ้ำ, 409 เมื่อห้องกำลังตอบ, handoff + notification `channel=APP`,
+แอดมินตอบ/pause/resume, billing (`chargedCredit` ตรงสูตร, ledger DEBIT ครบ, wallet ลดเท่าผลรวม, ผูก `conversationId`),
+401/403/404/413/400, burst/ต่อ IP/สร้าง session เกิน → 429 และถูกแบน
+**ข้อสังเกต:** เมื่อไม่มี embedding คำถามธุรกิจจะได้ `RETRIEVAL_ERROR → CONTACT_ADMIN` (ตอบสำรอง + ส่งต่อแอดมิน) ตามออกแบบ ส่วนคำตอบจาก knowledge จริงยังไม่ได้ทดสอบสดในรอบนี้

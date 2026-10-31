@@ -15,7 +15,7 @@ export const sendMessageSchema = z
 export const listMessagesQuerySchema = z
   .object({
     after: z.string().max(200).optional(),
-    limit: z.coerce.number().int().min(1).max(100).default(30),
+    limit: z.coerce.number().int().min(1).max(200).default(30),
   })
   .strict();
 

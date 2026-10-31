@@ -290,7 +290,7 @@ model ChannelMessage {
 | GET | `/session` | – | `{ guestId, conversationId \| null, botMode, expiresAt }` |
 | DELETE | `/session` | – | 204 (revoke) |
 | POST | `/messages` | `{ clientMessageId (uuid), text, metadata? }` | ดูด้านล่าง |
-| GET | `/messages` | `?after=<cursor>&limit=` (limit 1–100 default 30) | `{ items, nextCursor }` |
+| GET | `/messages` | `?after=<cursor>&limit=` (limit 1–200 default 30) | `{ items, nextCursor }` |
 
 POST `/messages` response:
 ```json

@@ -195,7 +195,7 @@ status fields ของ conversation/delivery/claim เป็น string ไม�
 | creditReservation | id, operationKey unique, companyId/walletId/budgetId, amountCredit Decimal, status, replay result Json?, expiresAt, timestamps |
 | creditLedger | id/walletId, type, amountCredit/balanceAfterCredit Decimal, kind?, usageEventId unique?, idempotencyKey unique, note?, createdAt |
 
-Billing: quote active pricing → reserve wallet+budget ใน serializable transaction → provider นอก transaction → settle usage/debit/replay/result/release holds พร้อมกัน; result ที่ SETTLED replay ได้โดยไม่เรียก provider ซ้ำ Scope embedding QUERY/DOCUMENT แยกกันที่ EmbeddingService; ordinary LINE generation และ classifier ใช้ LINE_AI_REPLY และ fingerprint request แยก logical calls
+Billing: quote active pricing → reserve wallet+budget ใน READ COMMITTED transaction (increment ก่อนแล้วเช็กค่าที่ UPDATE คืนมาขณะถือ row lock; ตัวที่มาพร้อมกันรอคิวแทนการถูกตีกลับ) → provider นอก transaction → settle usage/debit/replay/result/release holds พร้อมกัน; result ที่ SETTLED replay ได้โดยไม่เรียก provider ซ้ำ Scope embedding QUERY/DOCUMENT แยกกันที่ EmbeddingService; ordinary LINE generation และ classifier ใช้ LINE_AI_REPLY และ fingerprint request แยก logical calls
 
 Expired HELD ไม่ได้ auto-refund: unresolved-list path เปลี่ยนเป็น UNKNOWN เพื่อ review acceptance ก่อน release ไม่อ้างว่า expiry cleanup ทำงาน background อัตโนมัติ
 
@@ -435,15 +435,15 @@ Source: [provider](../src/modules/ai/ai-provider.service.ts), [embedding](../src
 | findActivePricing / requireActivePricing | effectiveFrom≤time<effectiveTo (null=open), newest effectiveFrom → pricing row; ratesไม่ครบ→503 |
 | calculate / calculateQuote | pricing+disjoint token buckets → Decimal cost/chargedCredit/pricingId |
 | reservationCredit / rateMultipliers / total / perMillion | estimated input/outputและlong-context tier → Decimal amounts; reserve rounding up, actual rounding6 digits |
-| CreditService.reserveAiCredit | kind/scope/amount/operationKey → ensureWallet/Budget → serializable check replay/wallet/budget → create/reuse hold + increment reserved → CreditHold |
+| CreditService.reserveAiCredit | kind/scope/amount/operationKey → ensureWallet/Budget → READ COMMITTED: check replay → create/reuse hold (operationKey ซ้ำพร้อมกัน → PendingAiUsageError) → increment wallet/budget reserved → check returned totals (ไม่ผ่าน = rollback) → CreditHold |
 | findSettledAiResult | operationKey+kind → SETTLED result JSON validation → replay value/undefined |
-| recordAiUsage | hold+usage+cost+result → serializable transaction validate HELD, insert usage, release reserved, charge wallet, update budget, insert unique DEBIT, persist result+status → settlement |
+| recordAiUsage | hold+usage+cost+result → READ COMMITTED transaction: claim HELD→SETTLED/RELEASED + persist result, insert usage, release reserved + charge wallet, update budget, check returned totals, insert unique DEBIT → settlement |
 | releaseAiCredit | hold → release HELD/UNKNOWN once และลด wallet/budget reservations → void |
 | keepReservationAlive / markReservationUnknown | id → extend HELD expiry / HELD→UNKNOWN |
 | listUnresolvedReservations | company → expired HELD→UNKNOWN → unresolved rows ไม่เกิน100 |
 | releaseUnknownReservation | company+id→scoped UNKNOWN lookup→releaseAiCredit→{released:true} |
 | getWallet / listBudgets / setBudgetLimit | company wallet/scope→snapshot/list/update persistent budget; capต่ำกว่า committed usage+holds ถูกปฏิเสธ |
-| ensureWallet / ensureBudget / runSerializable / findSettledUsage | upsert defaults, serializable retry, duplicate-settlement lookup → internal accounting helpers |
+| ensureWallet / ensureBudget / runTransaction / findSettledUsage | upsert defaults, P2034 retry (serializable setBudgetLimit, deadlock), duplicate-settlement lookup → internal accounting helpers |
 
 Provider acceptance, billing settlement และ LINE delivery acceptance เป็นคนละ state. Successful model result ต้อง settle ก่อนคืนออกจาก billed call; LINE delivery ถูก persist และส่งในขั้นถัดไป
 

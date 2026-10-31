@@ -8,6 +8,9 @@ export const listAppMessagesQuerySchema = z
   .object({
     before: iso,
     after: iso,
+    // Id of the message at `before`/`after`, for a tie-safe keyset.
+    beforeId: z.string().uuid().optional(),
+    afterId: z.string().uuid().optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
   })
   .strict();

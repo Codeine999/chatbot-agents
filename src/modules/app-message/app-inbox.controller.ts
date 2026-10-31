@@ -12,6 +12,7 @@ import {
 import { AdminGuard } from '../../shared/guards/admin-guard.decorator';
 import type { AdminRequest } from '../admin/admin-jwt-auth.guard';
 import { AppInboxService } from './app-inbox.service';
+import { ListInboxConversationsQueryDto } from '../../shared/inbox/inbox-page';
 import {
   ListAppMessagesQueryDto,
   SendAppAdminMessageDto,
@@ -24,8 +25,24 @@ export class AppInboxController {
   constructor(private readonly inbox: AppInboxService) {}
 
   @Get()
-  list(@Req() request: AdminRequest) {
-    return this.inbox.listConversations(this.admin(request));
+  list(
+    @Req() request: AdminRequest,
+    @Query() query: ListInboxConversationsQueryDto,
+  ) {
+    return this.inbox.listConversations(this.admin(request), query);
+  }
+
+  @Get('counts')
+  counts(@Req() request: AdminRequest) {
+    return this.inbox.countConversations(this.admin(request));
+  }
+
+  @Post(':conversationId/read')
+  markRead(
+    @Req() request: AdminRequest,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+  ) {
+    return this.inbox.markConversationRead(this.admin(request), conversationId);
   }
 
   @Get(':conversationId/messages')

@@ -15,6 +15,7 @@ import {
   SendLineMessageDto,
 } from './dto/line-admin.dto';
 import { LineWebhookService } from './line-webhook.service';
+import { ListInboxConversationsQueryDto } from '../../shared/inbox/inbox-page';
 
 @Controller('api/line')
 export class LineController {
@@ -22,8 +23,22 @@ export class LineController {
 
   @Get('conversations')
   @AdminGuard()
-  listConversations() {
-    return this.lineWebhookService.listConversations();
+  listConversations(@Query() query: ListInboxConversationsQueryDto) {
+    return this.lineWebhookService.listConversations(query);
+  }
+
+  @Get('conversations/counts')
+  @AdminGuard()
+  countConversations() {
+    return this.lineWebhookService.countConversations();
+  }
+
+  @Post('conversations/:conversationId/read')
+  @AdminGuard()
+  markConversationRead(
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+  ) {
+    return this.lineWebhookService.markConversationRead(conversationId);
   }
 
   @Get('deliveries')
@@ -77,8 +92,20 @@ export class LineConversationController {
   constructor(private readonly lineWebhookService: LineWebhookService) {}
 
   @Get()
-  listConversations() {
-    return this.lineWebhookService.listConversations();
+  listConversations(@Query() query: ListInboxConversationsQueryDto) {
+    return this.lineWebhookService.listConversations(query);
+  }
+
+  @Get('counts')
+  countConversations() {
+    return this.lineWebhookService.countConversations();
+  }
+
+  @Post(':conversationId/read')
+  markConversationRead(
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+  ) {
+    return this.lineWebhookService.markConversationRead(conversationId);
   }
 
   @Get(':conversationId/messages')
