@@ -3,6 +3,7 @@ export const AI_PROVIDER_NAMES = [
   // 'OPENAI',
   // 'ANTHROPIC',
   'OPENROUTER',
+  'LOCAL',
 ] as const;
 
 export const AI_PROVIDER_SCOPES = ['USER', 'ADMIN'] as const;

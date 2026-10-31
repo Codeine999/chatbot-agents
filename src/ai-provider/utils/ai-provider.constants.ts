@@ -25,6 +25,7 @@ export const AI_PROVIDER_LABELS = {
   // OPENAI: 'OpenAI',
   // ANTHROPIC: 'Anthropic Claude',
   OPENROUTER: 'OpenRouter',
+  LOCAL: 'Local LLM (self-hosted)',
 } as const satisfies Readonly<Record<AiProviderName, string>>;
 
 /**
@@ -33,6 +34,7 @@ export const AI_PROVIDER_LABELS = {
  */
 export const AI_SELECTABLE_PROVIDERS: readonly AiProviderName[] = [
   'OPENROUTER',
+  'LOCAL',
 ];
 
 export const AI_PROVIDER_TEXT_MODELS = {
@@ -74,4 +76,8 @@ export const AI_PROVIDER_TEXT_MODELS = {
     'anthropic/claude-opus-5.5',
     'anthropic/claude-haiku-5.5',
   ],
+  // Self-hosted model ids depend on what the operator pulled (for example
+  // `qwen3:8b` on Ollama), so they come only from AI_LOCAL_MODELS / LOCAL_MODEL.
+  // Each one still needs an AiModelPricing row before it can be billed.
+  LOCAL: [],
 } as const satisfies Readonly<Record<AiProviderName, readonly string[]>>;
