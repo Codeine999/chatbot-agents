@@ -411,6 +411,8 @@ MaxPlus ถูกถอดจาก adapter registry, model catalog และ pr
 
 OpenRouter เป็น generation adapter เพิ่มเติม โดยอ่าน `OPEN_ROUTER_KEY` จาก env, ใช้ `AI_OPENROUTER_MODELS` เป็นรายการรุ่นที่เลือกได้ และเก็บ provider/model ที่เลือกจริงใน `AiProviderSetting` เดิมแยก USER/ADMIN ก่อนเรียก provider ต้องมี `AiModelPricing` ของ `OPENROUTER` กับ model ID นั้น รายละเอียดการเปิดใช้และ billing caveats อยู่ที่ [OpenRouter provider](openrouter-provider.md)
 
+Local LLM (`LOCAL`) เป็น generation adapter สำหรับโมเดลที่ host เอง (Ollama, vLLM, llama.cpp, LM Studio) ผ่าน OpenAI-compatible `/v1/chat/completions` อ่าน `LOCAL_LLM_BASE_URL` จาก env และใช้ `AI_LOCAL_MODELS` เป็นรายการรุ่นที่เลือกได้ ต้องมี `AiModelPricing` ของ `LOCAL` กับ model ID นั้นเช่นกัน รายละเอียดอยู่ที่ [Local LLM provider](local-llm-provider.md)
+
 Source: [provider](../src/modules/ai/ai-provider.service.ts), [embedding](../src/modules/ai/embeding/embedding.service.ts), [billing](../src/modules/usage/billing/ai-billing.service.ts), [credit](../src/modules/usage/credit-point/credit.service.ts)
 
 | Function | รับเข้า → ทำงาน/เรียกต่อ → คืนผล |
