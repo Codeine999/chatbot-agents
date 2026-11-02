@@ -3,11 +3,11 @@
 //
 //   k6 run -e BASE_URL=https://api.keela-agent.online load-test/budget.js
 //
-// Runs a 5-message smoke, then steps of 5 → 10 → 15 → 20 VUs (one guest
-// session each). Every iteration sends exactly ONE chat message, and every
-// step has a fixed iteration count, so the total can never exceed
-// MAX_MESSAGES no matter how fast the server answers. Total wall time is
-// capped at about 10 minutes.
+// Runs a 5-message smoke, then steps of 5 → 10 → 15 → 20 VUs. Each VU keeps
+// ONE guest session for the whole run (≤ 20 sessions; the server allows 30 new
+// sessions per IP per hour) and has a fixed message quota per step, so the
+// total can never exceed MAX_MESSAGES no matter how fast the server answers.
+// Total wall time is about 10 minutes.
 //
 // Safety for production:
 // - The App Message API allows 30 messages/min per client IP (APP_MSG_PER_IP_MIN)
@@ -15,6 +15,7 @@
 //   (default 25) paces every step below that limit. Raise it only after
 //   raising APP_MSG_PER_IP_MIN on the server.
 // - The first 429 (rate limited / banned) aborts the whole test.
+// - Don't run it twice within an hour from the same IP (session budget).
 // - The LINE webhook is never called.
 
 import http from 'k6/http';
@@ -33,59 +34,71 @@ const STEPS = (__ENV.STEPS || '5,10,15,20').split(',').map(Number);
 const STEP_SEC = Number(__ENV.STEP_SEC || 140);
 const SMOKE_MESSAGES = 5;
 
-// --- Plan: fixed message count per step, total ≤ MAX_MESSAGES -------------
+// --- Plan: fixed message quota per VU per step, total ≤ MAX_MESSAGES -------
+//
+// One ramping-vus scenario, so VU 1..N keep their identity across steps and
+// each creates exactly one guest session for the whole run. (The server allows
+// only APP_SESSION_CREATE_PER_IP_HOUR = 30 new sessions per IP per hour.)
 
+const SMOKE_SEC = 40;
 const stepBudget = Math.floor((MAX_MESSAGES - SMOKE_MESSAGES) / STEPS.length);
 const perStepByRate = Math.floor((RATE_PER_MIN * STEP_SEC) / 60);
-const plan = STEPS.map((vus) => {
-  const messages = Math.max(vus, Math.min(stepBudget, perStepByRate));
-  // Each VU waits this long between its own messages so the step as a whole
-  // sends about `messages` in STEP_SEC.
-  const thinkSec = (vus * STEP_SEC) / messages;
-  return { vus, messages, thinkSec };
+const plan = [{ name: 'smoke', vus: 1, start: 0, sec: SMOKE_SEC, quota: SMOKE_MESSAGES, thinkSec: 1 }];
+STEPS.forEach((vus, i) => {
+  const quota = Math.max(1, Math.floor(Math.min(stepBudget, perStepByRate) / vus));
+  plan.push({
+    name: `vu${String(vus).padStart(2, '0')}`,
+    vus,
+    start: SMOKE_SEC + i * STEP_SEC,
+    sec: STEP_SEC,
+    quota, // messages per VU in this step
+    // Spread a VU's quota over the step.
+    thinkSec: STEP_SEC / quota,
+  });
 });
-const plannedTotal = SMOKE_MESSAGES + plan.reduce((n, s) => n + s.messages, 0);
+const plannedTotal = plan.reduce((n, s) => n + s.vus * s.quota, 0);
 if (plannedTotal > MAX_MESSAGES) {
   throw new Error(`Planned ${plannedTotal} messages exceeds MAX_MESSAGES=${MAX_MESSAGES}`);
 }
+const MAX_VUS = Math.max(...plan.map((s) => s.vus));
+const TOTAL_SEC = SMOKE_SEC + STEPS.length * STEP_SEC;
 
-const SMOKE_SEC = 40;
-const scenarios = {
-  smoke: {
-    executor: 'shared-iterations',
-    exec: 'chat',
-    vus: 1,
-    iterations: SMOKE_MESSAGES,
-    maxDuration: `${SMOKE_SEC}s`,
-    env: { THINK: '1' },
-  },
-};
-plan.forEach((s, i) => {
-  scenarios[`vu${String(s.vus).padStart(2, '0')}`] = {
-    executor: 'shared-iterations',
-    exec: 'chat',
-    vus: s.vus,
-    iterations: s.messages,
-    startTime: `${SMOKE_SEC + i * STEP_SEC}s`,
-    maxDuration: `${STEP_SEC}s`,
-    env: { THINK: String(s.thinkSec) },
-  };
-});
+const stages = [];
+for (const s of plan) {
+  stages.push({ duration: '1s', target: s.vus });
+  stages.push({ duration: `${s.sec - 1}s`, target: s.vus });
+}
 
 const thresholds = {
-  // Registers per-step sub-metrics so they appear in the summary.
   chat_messages_sent: [`count<=${MAX_MESSAGES}`],
 };
-for (const name of Object.keys(scenarios)) {
-  thresholds[`chat_reply_ms{scenario:${name}}`] = [`p(95)<${TARGET_MS}`];
-  thresholds[`chat_ok{scenario:${name}}`] = ['rate>0.99'];
+// Registers per-step sub-metrics so they appear in the summary.
+for (const s of plan) {
+  thresholds[`chat_reply_ms{step:${s.name}}`] = [`p(95)<${TARGET_MS}`];
+  thresholds[`chat_ok{step:${s.name}}`] = ['rate>0.99'];
 }
 
 export const options = {
-  scenarios,
+  scenarios: {
+    chat: {
+      executor: 'ramping-vus',
+      exec: 'chat',
+      startVUs: 0,
+      stages,
+      gracefulRampDown: '0s',
+      gracefulStop: '60s',
+    },
+  },
   thresholds,
   summaryTrendStats: ['avg', 'min', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'],
 };
+
+/** The step the run is in right now, from time since the scenario started. */
+function currentStep() {
+  const sec = (Date.now() - exec.scenario.startTime) / 1000;
+  for (let i = plan.length - 1; i >= 0; i--) if (sec >= plan[i].start) return plan[i];
+  return plan[0];
+}
 
 // --- Metrics ---------------------------------------------------------------
 
@@ -137,30 +150,36 @@ export function setup() {
   const res = http.get(`${BASE_URL}/`);
   if (res.status === 0) fail(`Cannot reach ${BASE_URL}: ${res.error}`);
   console.log(
-    `target=${BASE_URL} planned_messages=${plannedTotal} (cap ${MAX_MESSAGES}) rate=${RATE_PER_MIN}/min ` +
-      plan.map((s) => `${s.vus}VU:${s.messages}msg/think${s.thinkSec.toFixed(1)}s`).join(' '),
+    `target=${BASE_URL} planned_messages<=${plannedTotal} (cap ${MAX_MESSAGES}) sessions=${MAX_VUS} ` +
+      `rate=${RATE_PER_MIN}/min duration=${TOTAL_SEC}s ` +
+      plan.map((s) => `${s.name}:${s.vus}VUx${s.quota}msg`).join(' '),
   );
 }
 
 // --- One iteration = one chat message --------------------------------------
 
-let token = null; // per VU; reused across steps
-let currentStep = null;
+let token = null; // per VU, one session for the whole run
+const sentInStep = {}; // per VU: step name -> messages sent
 
 export function chat() {
-  const think = Number(__ENV.THINK || 1);
-  // Stagger each VU's first message in a step so a new step does not fire
-  // all its VUs at once and trip the per-minute limit.
-  if (currentStep !== exec.scenario.name) {
-    currentStep = exec.scenario.name;
-    if (currentStep !== 'smoke') sleep(Math.random() * think);
+  const step = currentStep();
+  const done = sentInStep[step.name] || 0;
+  if (done === 0 && step.name !== 'smoke') {
+    // Stagger first messages so a new step does not fire all VUs at once.
+    sleep(Math.random() * Math.min(step.thinkSec, 20));
+  }
+  if (done >= step.quota) {
+    // Quota for this step used up: idle until the next step starts.
+    const left = step.start + step.sec - (Date.now() - exec.scenario.startTime) / 1000;
+    sleep(Math.max(1, Math.min(left, 10)));
+    return;
   }
 
   if (!token) {
     const res = http.post(
       `${BASE_URL}/api/app/v1/sessions`,
       JSON.stringify({ displayName: `k6-budget-${exec.vu.idInTest}` }),
-      { headers: json },
+      { headers: json, tags: { step: step.name } },
     );
     stopOn429(res, 'create session');
     if (res.status === 404) {
@@ -173,25 +192,34 @@ export function chat() {
     token = b.sessionToken;
   }
 
+  const tags = { step: step.name };
+  sentInStep[step.name] = done + 1;
   const res = http.post(
     `${BASE_URL}/api/app/v1/messages`,
     JSON.stringify({ clientMessageId: uuidv4(), text: `${pick(QUESTIONS)}${pick(['', ' 🙏', '?'])}` }),
-    { headers: Object.assign({ Authorization: `Bearer ${token}` }, json), timeout: '60s' },
+    { headers: Object.assign({ Authorization: `Bearer ${token}` }, json), timeout: '60s', tags },
   );
-  sent.add(1);
+  sent.add(1, tags);
   stopOn429(res, 'send message');
-  if (res.status === 401) token = null;
+  if (res.status === 401) {
+    // Never create a replacement session: that spends the per-IP session budget.
+    exec.test.abort('Guest session became invalid (401).');
+  }
 
   const b = body(res);
-  const good = check(res, {
-    'reply 200': (r) => r.status === 200,
-    'has meta.status': () => Boolean(b && b.meta && b.meta.status),
-  });
-  ok.add(good);
-  if (good) replyMs.add(res.timings.duration);
+  const good = check(
+    res,
+    {
+      'reply 200': (r) => r.status === 200,
+      'has meta.status': () => Boolean(b && b.meta && b.meta.status),
+    },
+    tags,
+  );
+  ok.add(good, tags);
+  if (good) replyMs.add(res.timings.duration, tags);
 
   // Spread a VU's messages over the step (±30% so VUs do not sync up).
-  sleep(Math.max(0.5, think - res.timings.duration / 1000) * (0.7 + Math.random() * 0.6));
+  sleep(Math.max(0.5, step.thinkSec - res.timings.duration / 1000) * (0.7 + Math.random() * 0.6));
 }
 
 // --- Short per-step report -------------------------------------------------
@@ -206,9 +234,9 @@ export function handleSummary(data) {
     '',
     'step    msgs   ok%     p50      p95      max     <= target?',
   ];
-  for (const name of Object.keys(scenarios)) {
-    const t = m[`chat_reply_ms{scenario:${name}}`];
-    const r = m[`chat_ok{scenario:${name}}`];
+  for (const { name } of plan) {
+    const t = m[`chat_reply_ms{step:${name}}`];
+    const r = m[`chat_ok{step:${name}}`];
     const n = r ? r.values.passes + r.values.fails : 0;
     const p95 = t && t.values['p(95)'];
     lines.push(
