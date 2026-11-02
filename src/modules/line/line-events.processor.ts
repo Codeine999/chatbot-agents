@@ -1,5 +1,10 @@
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job, Queue, UnrecoverableError } from 'bullmq';
 import { isRetryableAiProviderError } from '../../ai-provider/errors/ai-provider-error';
@@ -11,20 +16,22 @@ import {
   LINE_EVENT_JOB,
   LINE_EVENTS_CONCURRENCY,
   LINE_EVENTS_QUEUE,
+  LINE_EVENTS_RATE_LIMIT,
   LINE_EVENTS_RETRY_CONCURRENCY,
   LINE_EVENTS_RETRY_QUEUE,
+  lineEventsWorkerSettings,
   type LineEventJobData,
 } from './line-events.queue';
 import { LineWebhookService } from './line-webhook.service';
 
 @Processor(LINE_EVENTS_QUEUE, {
   concurrency: LINE_EVENTS_CONCURRENCY,
-  limiter: {
-    max: 12,
-    duration: 1000,
-  },
+  limiter: { ...LINE_EVENTS_RATE_LIMIT },
 })
-export class LineEventsProcessor extends WorkerHost implements OnModuleInit, OnModuleDestroy {
+export class LineEventsProcessor
+  extends WorkerHost
+  implements OnModuleInit, OnApplicationBootstrap, OnModuleDestroy
+{
   private recoveryTimer?: ReturnType<typeof setInterval>;
   private recovering = false;
 
@@ -51,6 +58,7 @@ export class LineEventsProcessor extends WorkerHost implements OnModuleInit, OnM
   private readonly userBurstLimit: number;
   private readonly userBurstWindowSec: number;
   private readonly userHourlyLimit: number;
+  private readonly workerSettings: ReturnType<typeof lineEventsWorkerSettings>;
 
   constructor(
     private readonly lineWebhookService: LineWebhookService,
@@ -71,6 +79,24 @@ export class LineEventsProcessor extends WorkerHost implements OnModuleInit, OnM
     this.userHourlyLimit = Number(
       configService.get('LINE_USER_HOURLY_LIMIT') ?? 60,
     );
+    this.workerSettings = lineEventsWorkerSettings(configService);
+  }
+
+  // The worker exists once every module has initialised. BullMQ reads
+  // `concurrency` and `opts.limiter` on each fetch, so this takes effect
+  // from the next job on.
+  onApplicationBootstrap() {
+    const { concurrency, rateLimit } = this.workerSettings;
+    this.worker.concurrency = concurrency;
+    this.worker.opts.limiter = { ...rateLimit };
+    this.logger.log(
+      `LINE worker concurrency=${concurrency}, limiter=${rateLimit.max}/${rateLimit.duration}ms`,
+    );
+  }
+
+  /** Read by the retry worker so both use the same configuration. */
+  get retryConcurrency() {
+    return this.workerSettings.retryConcurrency;
   }
 
   async process(job: Job<LineEventJobData>): Promise<void> {
@@ -231,9 +257,16 @@ export class LineEventsProcessor extends WorkerHost implements OnModuleInit, OnM
 @Processor(LINE_EVENTS_RETRY_QUEUE, {
   concurrency: LINE_EVENTS_RETRY_CONCURRENCY,
 })
-export class LineEventsRetryProcessor extends WorkerHost {
+export class LineEventsRetryProcessor
+  extends WorkerHost
+  implements OnApplicationBootstrap
+{
   constructor(private readonly eventsProcessor: LineEventsProcessor) {
     super();
+  }
+
+  onApplicationBootstrap() {
+    this.worker.concurrency = this.eventsProcessor.retryConcurrency;
   }
 
   process(job: Job<LineEventJobData>): Promise<void> {

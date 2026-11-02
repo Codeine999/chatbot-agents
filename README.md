@@ -34,6 +34,14 @@ $ bun install
 ## Database schema
 
 Set `DATABASE_URL` in `.env` before using a command that contacts PostgreSQL.
+`DEFAULT_POOL_MAX` (20 when unset) caps the connections one app instance opens;
+keep it times the instance count below the server's `max_connections`.
+
+LINE worker throughput (defaults in brackets, applied at bootstrap):
+`LINE_EVENTS_CONCURRENCY` [10] jobs at once per instance,
+`LINE_EVENTS_RETRY_CONCURRENCY` [3], and `LINE_EVENTS_RATE_LIMIT_MAX` [12] jobs
+started per `LINE_EVENTS_RATE_LIMIT_DURATION_MS` [1000] across the whole queue.
+Raise `DEFAULT_POOL_MAX` with concurrency: about (concurrency + retry) × 1.5.
 
 ```bash
 # Generate Prisma Client from the local schema; does not change the database.
