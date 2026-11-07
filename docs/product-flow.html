@@ -14,7 +14,7 @@
   --line:#d6dbe1;--edge:#97a3af;--accent:#1f5fd6;--accent-ink:#ffffff;--accent-soft:#e2ebfb;
   --k-svc:#5b6876;--k-dec:#b45309;--k-llm:#7c3aed;--k-ext:#0e7490;--k-start:#1f5fd6;
   --o-reply:#15803d;--o-handoff:#c2410c;--o-silent:#6b7280;--o-error:#b91c1c;--o-ask:#2563eb;
-  --g-line:#1f5fd6;--g-know:#0f766e;--g-prod:#7c3aed;--g-bill:#b45309;--g-id:#475569;--g-redis:#b91c1c;
+  --g-line:#1f5fd6;--g-know:#0f766e;--g-prod:#7c3aed;--g-bill:#b45309;--g-id:#475569;--g-redis:#b91c1c;--g-log:#0369a1;
   --code-bg:#f6f7f9;--code-key:#0b5cad;--code-str:#1d7a3a;--code-com:#8a8f98;--code-num:#a2420d;
   --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
   --font:"IBM Plex Sans Thai",system-ui,-apple-system,"Segoe UI","Noto Sans Thai",sans-serif;
@@ -25,7 +25,7 @@
   --line:#2b333d;--edge:#5d6873;--accent:#6ea2ff;--accent-ink:#0b1220;--accent-soft:#1a2a45;
   --k-svc:#8b98a6;--k-dec:#f59e0b;--k-llm:#a78bfa;--k-ext:#22b8cf;--k-start:#6ea2ff;
   --o-reply:#34c46b;--o-handoff:#fb923c;--o-silent:#8b94a0;--o-error:#f87171;--o-ask:#60a5fa;
-  --g-line:#6ea2ff;--g-know:#2dd4bf;--g-prod:#a78bfa;--g-bill:#f59e0b;--g-id:#94a3b8;--g-redis:#f87171;
+  --g-line:#6ea2ff;--g-know:#2dd4bf;--g-prod:#a78bfa;--g-bill:#f59e0b;--g-id:#94a3b8;--g-redis:#f87171;--g-log:#38bdf8;
   --code-bg:#11161d;--code-key:#79b8ff;--code-str:#85e89d;--code-com:#6a737d;--code-num:#ffab70;
   --shadow:0 1px 2px rgba(0,0,0,.4);
 }}
@@ -34,7 +34,7 @@
   --line:#2b333d;--edge:#5d6873;--accent:#6ea2ff;--accent-ink:#0b1220;--accent-soft:#1a2a45;
   --k-svc:#8b98a6;--k-dec:#f59e0b;--k-llm:#a78bfa;--k-ext:#22b8cf;--k-start:#6ea2ff;
   --o-reply:#34c46b;--o-handoff:#fb923c;--o-silent:#8b94a0;--o-error:#f87171;--o-ask:#60a5fa;
-  --g-line:#6ea2ff;--g-know:#2dd4bf;--g-prod:#a78bfa;--g-bill:#f59e0b;--g-id:#94a3b8;--g-redis:#f87171;
+  --g-line:#6ea2ff;--g-know:#2dd4bf;--g-prod:#a78bfa;--g-bill:#f59e0b;--g-id:#94a3b8;--g-redis:#f87171;--g-log:#38bdf8;
   --code-bg:#11161d;--code-key:#79b8ff;--code-str:#85e89d;--code-com:#6a737d;--code-num:#ffab70;
   --shadow:0 1px 2px rgba(0,0,0,.4);
 }
@@ -155,7 +155,7 @@ ul.dec li a{cursor:pointer;text-decoration:none}
 .tbl .tr .ty{color:var(--faint);font-size:10px;font-family:var(--mono);max-width:96px;overflow:hidden;text-overflow:ellipsis}
 .tbl .tr .fl{font:700 8px var(--mono);border-radius:3px;padding:0 3px;color:var(--gc);border:1px solid color-mix(in srgb,var(--gc) 50%,transparent)}
 .tbl.redis{border-style:dashed}
-.g-line{--gc:var(--g-line)}.g-know{--gc:var(--g-know)}.g-prod{--gc:var(--g-prod)}.g-bill{--gc:var(--g-bill)}.g-id{--gc:var(--g-id)}.g-redis{--gc:var(--g-redis)}
+.g-line{--gc:var(--g-line)}.g-know{--gc:var(--g-know)}.g-prod{--gc:var(--g-prod)}.g-bill{--gc:var(--g-bill)}.g-id{--gc:var(--g-id)}.g-redis{--gc:var(--g-redis)}.g-log{--gc:var(--g-log)}
 .rel path{fill:none;stroke:var(--edge);stroke-width:1.3;opacity:.7}
 .rel.soft path{stroke-dasharray:5 4}
 .rel.hot path{stroke:var(--accent);stroke-width:2.4;opacity:1}
@@ -207,7 +207,7 @@ table.gt{margin:8px 0}table.gt th{text-align:left;font-size:11.5px;color:var(--f
 <body>
 <header class="top">
   <h1>Product flow · preset/meta, catalog, stock, index, RAG &amp; ERD</h1>
-  <div class="meta">chatbot-agents · อ่านจาก working tree บน <code>main</code> (HEAD 6c7bc8d + ไฟล์ที่ยังไม่ commit) · 22 ต.ค. 2026 · เฉพาะ feature product (ECOMMERCE preset) · ตัวอย่างข้อมูลเป็นข้อมูลสมมติ</div>
+  <div class="meta">chatbot-agents · อ่านจาก working tree บน <code>decisionLog</code> (HEAD 509c0ed + ไฟล์ที่ยังไม่ commit) · 7 พ.ย. 2026 · เฉพาะ feature product (ECOMMERCE preset) รวมการบันทึก decision log และการข้ามในช่อง App · ตัวอย่างข้อมูลเป็นข้อมูลสมมติ</div>
   <button class="iconbtn" id="themeBtn" type="button" title="สลับธีม">◐ ธีม</button>
 </header>
 <nav class="views" id="views" role="tablist"></nav>
@@ -571,10 +571,10 @@ const cAnswer = (template, text, refs = "['PRODUCT:v-bk-l']") => [
 ];
 const CHAT = {
   id: 'chat', num: '5', title: 'แชต → Product RAG',
-  intro: 'จากข้อความลูกค้าถึงคำตอบเรื่องสินค้า: gate กัน FAQ/small talk ไม่ให้เสีย planner call, CommerceTurn เป็น snapshot ต่อ webhook event (replay ได้), planner LLM ได้รายการ field/ตัวเลือกจาก preset + ค่าจริงใน meta, ProductSearchService ค้นใน RepeatableRead (lexical/BM25 บน name/alias/description/category + meta ที่ searchable, vector เป็น fallback) แล้วตรวจ options/filters บน meta ของ variant เดียวกัน ราคา/สต็อกอ่านสดจาก DB และ renderer แทนค่าทุกตัวจาก token ของ DB เท่านั้น LLM สูงสุด 3 slot ต่อ turn (PLAN, ANSWER, CRITICAL_REPAIR)',
+  intro: 'จากข้อความลูกค้าถึงคำตอบเรื่องสินค้า: gate กัน FAQ/small talk ไม่ให้เสีย planner call, CommerceTurn เป็น snapshot ต่อ webhook event (replay ได้), planner LLM ได้รายการ field/ตัวเลือกจาก preset + ค่าจริงใน meta, ProductSearchService ค้นใน RepeatableRead (lexical/BM25 บน name/alias/description/category + meta ที่ searchable, vector เป็น fallback) แล้วตรวจ options/filters บน meta ของ variant เดียวกัน ราคา/สต็อกอ่านสดจาก DB และ renderer แทนค่าทุกตัวจาก token ของ DB เท่านั้น LLM สูงสุด 3 slot ต่อ turn (PLAN, ANSWER, CRITICAL_REPAIR) ทุก turn ที่เข้า product ถูกบันทึกใน decision log ด้วย (note product หลังค้น + answer mode หลังตอบ ผูกกับ commerceTurns ผ่าน commerceTurnId) และเส้นทางนี้ใช้เฉพาะช่อง LINE: ช่อง App ไม่มี lineMemberId จึงตกไปทาง legacy ทั้งหมด',
   nodes: [
     N('kr', 5, 0, 'start', 'KnowledgeRetrievalService.retrieve', 'จาก IntentRouterService · product gate ก่อน legacy', { f: SRC + 'chatbot/knowledge/knowledge-retrieval.service.ts:103', out: `KnowledgeRetrievalResult (product ?? legacy)` }),
-    N('pGate', 5, 1, 'dec', 'retrieveProduct · gate', 'flag · verified LINE context · regex นโยบายทั้งข้อความ', { f: KP + 'product-retrieval.service.ts:84', d: 'PRODUCT_ENABLED + PRODUCT_RAG_ENABLED และต้องมี userId/turnId/lineMemberId/conversationId · ข้อความล้วนเช่น “ส่งฟรีไหม” “คืนสินค้าได้ไหม” ข้าม product เพื่อให้ DIRECT preset ทำงาน' }),
+    N('pGate', 5, 1, 'dec', 'retrieveProduct · gate', 'flag · verified LINE context (ช่อง App ข้าม) · regex นโยบายทั้งข้อความ', { f: KP + 'product-retrieval.service.ts:84', d: 'PRODUCT_ENABLED + PRODUCT_RAG_ENABLED และต้องมี userId/turnId/lineMemberId/conversationId — ช่อง App ส่งเข้า core โดยไม่มี lineMemberId จึงคืน undefined ทันที (ใช้ legacy retrieval) · ข้อความล้วนเช่น “ส่งฟรีไหม” “คืนสินค้าได้ไหม” ข้าม product เพื่อให้ DIRECT preset ทำงาน' }),
     N('pScope', 5, 2, 'dec', 'CommerceScopeService.forLineDeployment', 'ต้องมีบริษัทเดียว', { f: SRC + 'commerce/commerce-scope.service.ts:51', out: `CommerceScope { companyId } | 403/503 → legacy` }),
     N('pFind', 5, 3, 'dec', 'CommerceTurnService.find', 'มี turn ของ webhook event นี้แล้ว ?', { f: SRC + 'commerce/commerce-turn.service.ts:39', d: 'unique (companyId, connectionKey, externalEventId = webhookEventId) + ตรวจ lineMemberId/conversationId ตรง event เดิมได้ผลเดิมเสมอ', db: 'R commerceTurns' }),
     N('pRoute', 3.4, 4, 'dec', 'routeWithoutPlanner', 'productSignal · refs · probe · mentionsCatalog ? → legacy ?', { f: KP + 'product-retrieval.service.ts:479', d: 'PLAN ทันทีเมื่อ: regex คำสินค้า (ราคา สี ไซส์ เสื้อ …), อ้างของที่เคยแสดง, probe เจอชื่อ/alias/SKU, หรือ mentionsCatalog (คำในข้อความตรง name/alias/category/meta searchable ของสินค้า) ไม่งั้นรัน legacy: DIRECT/RAG หรือ settled → legacy; คำนโยบาย → plannerIntent KNOWLEDGE; ที่เหลือ → PLAN (แทน classifier)', out: `'PLAN' | undefined | { …legacy, plannerIntent: 'KNOWLEDGE' }`, db: 'R products, productVariants.meta (mentionsCatalog)' }),
@@ -608,7 +608,7 @@ const CHAT = {
     N('pRouter', 5, 21, 'dec', 'decideFromRetrieval', 'product → ANSWER_KNOWLEDGE · plannerIntent → มีหลักฐาน ?', { f: SRC + 'chatbot/intent/utils/route-stages.ts:115' }),
     N('xKnowAns', 7, 22, 'end', 'ตอบ knowledge (legacy)', 'DIRECT / grounded / CLARIFY', { oc: 'pass' }),
     N('xKnowHandoff', 8.4, 22, 'end', 'CONTACT_ADMIN', 'KNOWLEDGE แต่ไม่มีหลักฐาน', { oc: 'handoff' }),
-    N('pAnsLease', 4, 22, 'dec', 'ProductAnswerService.answer', 'response เดิม ? · failed ? · FOUND ? · mode', { f: KP + 'product-answer.service.ts:33', d: 'ใน withLease ของ turn เดิม · BOTH ไม่มี policy evidence → ตอบส่วนสินค้า + POLICY_UNVERIFIED_NOTE' }),
+    N('pAnsLease', 4, 22, 'dec', 'ProductAnswerService.answer', 'response เดิม ? · failed ? · FOUND ? · mode', { f: KP + 'product-answer.service.ts:51', d: 'ใน withLease ของ turn เดิม · BOTH ไม่มี policy evidence → ตอบส่วนสินค้า + POLICY_UNVERIFIED_NOTE' }),
     N('pFallback', 0.8, 23, 'svc', 'fallbackMessage', 'failed / KNOWLEDGE ไม่มี policy → handoff', { out: `{ text: setting.fallbackMessage, isFallback: true }` }),
     N('pSafe', 2.2, 23, 'svc', 'safeProductAnswer', 'MISSING_INPUT · VARIANT_UNAVAILABLE · NO_MATCH · UNAVAILABLE', { f: KP + 'product-answer.policy.ts:595', d: 'ข้อความ deterministic จาก DB ไม่เรียก LLM · UNAVAILABLE = isFallback', out: `"<ชื่อ> ยังไม่มี สี แดงค่ะ\\nสีที่มี: ขาว, ดำ · ขนาด / ไซส์ที่มี: L, M"` }),
     N('pAnsLLM', 4.4, 23, 'llm', 'LLM slot ANSWER', 'productAnswerSchema (หรือ GENERAL text)', { tag: 'LLM', d: 'system = AI setting + buildProductAnswerPrompt(businessType) + dataSections { question, productEvidence, policyEvidence } · temp 0.2 · maxOutputTokens 1800', out: `{ decision, directlyAnswered, answerTemplate: '…{{e1.price}}…', evidenceIds }` }),
@@ -617,7 +617,8 @@ const CHAT = {
     N('pSafeAfter', 4.4, 25, 'svc', 'safeProductAnswer (แทนคำตอบโมเดล)', 'แสดง facts จาก DB · รวม listOptions', {}),
     N('pUnmatched', 6.4, 25, 'dec', 'unmatchedProductAnswer', 'identified ? → fallback : เสนอสินค้าใกล้เคียง', {}),
     N('pOut', 3.8, 26, 'svc', 'save response → AiAnswerResult', '{ text, isFallback, catalogRefs? } · replay ได้ค่าเดิม', { w: 9.4, bus: true, db: 'W commerceTurns.response' }),
-    N('xMain', 3.8, 27, 'end', '→ ChatbotService.aiResponse', 'saveReply → LINE delivery', { oc: 'reply' }),
+    N('pLog', 3.8, 27, 'svc', 'DecisionTraceService · product + answer', 'note product · answer mode · commerceTurnId → decisionLogs', { f: KP + 'product-answer.service.ts:38', d: 'ไม่ทำ I/O ใน turn แค่ note ลง trace (AsyncLocalStorage) แล้ว MessageProcessor เขียน decisionLogs 1 แถวตอนจบ: ProductRetrievalService ใส่ note product (commerceTurnId, mode, operation, asks, options, filters, ambiguous, plannerFailed, semantic, status, evidence, choices, total) และ ProductAnswerService.report ใส่ answer mode PRODUCT_LLM_TEMPLATE · PRODUCT_SAFE_TEMPLATE (renderer ปฏิเสธ template ของโมเดล) · PRODUCT_<status> (NO_MATCH, MISSING_INPUT, VARIANT_UNAVAILABLE … ไม่นับเป็น fallback) · PRODUCT_UNMATCHED_SUGGESTIONS · PRODUCT_REPLAY · FALLBACK + เหตุผล (PRODUCT_PLAN_FAILED, NO_POLICY_EVIDENCE, PRODUCT_INSUFFICIENT_CONTEXT …) แถวสินค้าไม่มีคะแนน topScore/topVectorSimilarity จึงเป็น null รายละเอียด planner/answer LLM อยู่ใน commerceTurns + commerceLlmCalls ไม่ซ้ำใน log', out: `answer({ mode, fallbackReason?, commerceTurnId })  +  note { stage: 'product', … }`, db: 'W decisionLogs (ตอนจบ turn ที่ MessageProcessor)' }),
+    N('xMain', 3.8, 28, 'end', '→ ChatbotService.aiResponse', 'saveReply → delivery ของช่อง (LINE / App)', { oc: 'reply' }),
   ],
   edges: [
     E('kr', 'pGate'), E('pGate', 'xLegacy', 'ปิด / regex นโยบาย'), E('pGate', 'pScope', 'ผ่าน'),
@@ -644,7 +645,7 @@ const CHAT = {
     E('pAnsLLM', 'pRender', 'JSON'), E('pAnsLLM', 'pOut', 'GENERAL text'),
     E('pRender', 'pOut', 'ผ่าน'), E('pRender', 'pUnmatched', 'INSUFFICIENT'), E('pRender', 'pRepair', 'ไม่ผ่าน + critical'), E('pRender', 'pSafeAfter', 'ไม่ผ่าน'),
     E('pRepair', 'pOut', 'ผ่าน'), E('pRepair', 'pSafeAfter', 'ไม่ผ่าน'),
-    E('pUnmatched', 'pOut'), E('pSafeAfter', 'pOut'), E('pFallback', 'pOut'), E('pSafe', 'pOut'), E('pOut', 'xMain'),
+    E('pUnmatched', 'pOut'), E('pSafeAfter', 'pOut'), E('pFallback', 'pOut'), E('pSafe', 'pOut'), E('pOut', 'pLog'), E('pLog', 'xMain'),
   ],
   events: [
     { id: 'c-option', g: 'ค้นแล้วตอบ', t: 'ระบุสี + ไซส์ ถามราคา', ex: 'เสื้อยืด Basic สีดำไซส์ L ราคาเท่าไหร่', oc: 'reply', llm: 2,
@@ -676,18 +677,50 @@ const CHAT = {
   ],
 };
 
+/* decision log: ทุก turn ที่เข้า product ใส่ note product + answer mode (ใส่ขั้น pLog ก่อน xMain) */
+const PLOG = {
+  'c-option': { m: 'PRODUCT_LLM_TEMPLATE', st: 'FOUND', mode: 'PRODUCT', op: 'DETAIL', asks: "['PRICE']", opts: "['color=ดำ', 'size=L']", l: 2 },
+  'c-sku': { m: 'PRODUCT_LLM_TEMPLATE', st: 'FOUND', mode: 'PRODUCT', op: 'DETAIL', asks: "['STOCK']", opts: '[]', l: 1, note: 'plan จาก rule (SKU ตรง) จึงมี LLM แค่ slot ANSWER' },
+  'c-filter': { m: 'PRODUCT_LLM_TEMPLATE', st: 'FOUND', mode: 'PRODUCT', op: 'LIST', asks: '[]', opts: '[]', l: 2, filters: "['weight_g LTE 500']", total: 1 },
+  'c-promote': { m: 'PRODUCT_VARIANT_UNAVAILABLE', st: 'VARIANT_UNAVAILABLE', mode: 'PRODUCT', op: 'DETAIL', asks: "['PRICE']", opts: "['color=แดง']", l: 1, note: 'ไม่นับเป็น fallback (isFallback = false) แต่ลูกค้าไม่ได้คำตอบเรื่องสินค้า ใช้ answerMode นับคำถามสินค้าที่ตอบไม่ได้' },
+  'c-listopt': { m: 'PRODUCT_LLM_TEMPLATE', st: 'FOUND', mode: 'PRODUCT', op: 'LIST_OPTIONS', asks: '[]', opts: '[]', l: 2 },
+  'c-guard': { m: 'PRODUCT_SAFE_TEMPLATE', st: 'FOUND', mode: 'PRODUCT', op: 'DETAIL', asks: "['PRICE']", opts: '[]', l: 2, note: 'template ของ LLM ถูก renderer ปฏิเสธ (พิมพ์ค่าตัวเลือกเอง) → แสดง facts จาก DB แทน · ไม่ใช่ fallback' },
+  'c-ambiguous': { m: 'PRODUCT_MISSING_INPUT', st: 'MISSING_INPUT', mode: 'PRODUCT', op: 'DETAIL', asks: '[]', opts: '[]', l: 1, choices: 2 },
+  'c-count': { m: 'PRODUCT_LLM_TEMPLATE', st: 'FOUND', mode: 'PRODUCT', op: 'COUNT', asks: '[]', opts: '[]', l: 2, total: 3 },
+  'c-badkey': { m: 'FALLBACK', st: 'NO_MATCH', mode: 'PRODUCT', op: 'DETAIL', asks: '[]', opts: '[]', l: 1, fb: 'PRODUCT_PLAN_FAILED', failed: true },
+  'c-legacy-biz': { m: 'FALLBACK', st: 'NO_MATCH', mode: 'PRODUCT', op: 'DETAIL', asks: '[]', opts: '[]', l: 1, fb: 'PRODUCT_PLAN_FAILED', failed: true },
+  'c-both': { m: 'PRODUCT_LLM_TEMPLATE', st: 'FOUND', mode: 'BOTH', op: 'DETAIL', asks: "['PRICE']", opts: '[]', l: 2, note: 'answerType = PRODUCT (plan mode BOTH)' },
+  'c-replay': { m: 'PRODUCT_REPLAY', st: 'FOUND', mode: 'PRODUCT', op: 'DETAIL', asks: '[]', opts: '[]', l: 0, replay: true },
+};
+function plogStep(d) {
+  const lines = d.replay
+    ? ['// retry ของ event เดิม: ใช้ response ที่ snapshot ไว้ ไม่เรียก LLM — ตัว trace รอบใหม่ใส่แค่ answer mode', "ProductAnswerService.report(turnId, replay, 'PRODUCT_REPLAY')"]
+    : [`note('product', { commerceTurnId: 'ct-7…', mode: '${d.mode}', operation: '${d.op}', asks: ${d.asks}, options: ${d.opts}, filters: ${d.filters || '[]'},\n  ambiguous: false, plannerFailed: ${Boolean(d.failed)}, semantic: false, status: '${d.st}', evidence: ${d.st === 'FOUND' ? 1 : 0}, choices: ${d.choices || 0}, total: ${d.total ?? 'null'} })`, `ProductAnswerService.report(turnId, answer, '${d.m}'${d.fb ? `, '${d.fb}'` : ''})`];
+  return ['pLog', `${lines.join('\n')}\n→ answer({ mode: '${d.fb ? 'FALLBACK' : d.m}'${d.fb ? `, fallbackReason: '${d.fb}'` : ''}, commerceTurnId: 'ct-7…' })\n// decisionLogs: answerType PRODUCT · llmCallCount ${d.l} · topScore / topVectorSimilarity = null${d.fb ? ' · isFallback true · handoffRequested true' : ''}${d.note ? '\n// ' + d.note : ''}`];
+}
+for (const ev of CHAT.events) {
+  const d = PLOG[ev.id];
+  if (!d) continue;
+  const at = ev.p.findIndex(([id]) => id === 'xMain');
+  if (at >= 0) ev.p.splice(at, 0, plogStep(d));
+}
+CHAT.events.push(
+  { id: 'c-app', g: 'ไม่เข้า product', t: 'ช่อง App ไม่ใช้ Product RAG', ex: 'ลูกค้าถามราคาสินค้าผ่านแชต web/mobile', oc: 'pass', llm: 0, note: 'ช่อง App ส่ง userId = app:<contactId> และไม่มี lineMemberId เข้า core เส้นทางสินค้าจึงปิดทั้งหมดและไปทาง FAQ/knowledge (legacy) แทน — เป็นข้อจำกัดปัจจุบันของช่อง App',
+    p: [['kr', `retrieve('เสื้อยืดสีดำราคาเท่าไหร่', { userId: 'app:ct-5…', turnId: 'app:ms-9…', conversationId: 'cv-8…', lineMemberId: undefined })`], ['pGate', `!context.lineMemberId → return undefined  // ไม่เปิด CommerceTurn ไม่เรียก planner`], ['xLegacy', `runLegacy() → knowledge retrieval ตามปกติ (แท็บ 1) · decision log: channel APPLICATION, commerceTurnId null`]] },
+);
+
 /* ===================== VIEW 6 · ERD ===================== */
 const T = (id, g, label, fields, o = {}) => ({ id, g, label, fields, ...o });
 const ERD = {
   id: 'erd', num: '6', title: 'ERD',
   intro: 'ตารางของ feature product (prisma/models/products/product.prisma, commerce-turn.prisma, company ใน schema.prisma) และ preset ที่อยู่ในโค้ด (กรอบเส้นประ ไม่ใช่ DB) เส้นทึบ = FK จริง (ส่วนใหญ่เป็น composite id + companyId) · เส้นประ = เชื่อมด้วย key ในโค้ด/JSON ไม่มี FK',
-  groups: { id: 'Company / admin', prod: 'Catalog', bill: 'Command / stock audit', know: 'Index / vector', line: 'แชต / CommerceTurn', redis: 'Preset ในโค้ด (ไม่ใช่ DB)' },
+  groups: { id: 'Company / admin', prod: 'Catalog', bill: 'Command / stock audit', know: 'Index / vector', line: 'แชต / CommerceTurn', log: 'Decision log', redis: 'Preset ในโค้ด (ไม่ใช่ DB)' },
   columns: [
     ['preset', 'company', 'adminMember'],
     ['products', 'productVariants'],
     ['inventoryBalances', 'inventoryMovements', 'productCatalogCommands'],
     ['productIndexJobs', 'productVectors'],
-    ['commerceTurns', 'commerceLlmCalls', 'lineConversation'],
+    ['commerceTurns', 'commerceLlmCalls', 'lineConversation', 'decisionLogs'],
   ],
   tables: [
     T('preset', 'redis', 'BUSINESS_PRESETS', [['ECOMMERCE', 'BusinessPreset'], ['label', 'string'], ['prompt.planner', 'string'], ['prompt.answer', 'string'], ['fields[].key', 'meta key'], ['fields[].type', 'TEXT|NUMBER|TAGS…'], ['fields[].variantOption', 'boolean'], ['fields[].searchable', 'boolean'], ['fields[].aiVisible', 'boolean'], ['fields[].valueAliases', 'record']], { flows: ['meta', 'catalog', 'chat', 'index'], wr: 'นักพัฒนา (ไฟล์ใน attributes/presets, prompts)', rd: 'catalog-fields.ts เท่านั้น', note: 'ไม่ใช่ตาราง: เป็นโค้ด เลือกโดย company.productBusinessType' }),
@@ -703,6 +736,7 @@ const ERD = {
     T('commerceTurns', 'line', 'commerceTurns', [['id', 'uuid', 'PK'], ['companyId', 'uuid', 'FK'], ['connectionKey', 'varchar', 'UK*'], ['externalEventId', 'webhookEventId', 'UK*'], ['lineMemberId', 'uuid', 'FK'], ['conversationId', 'uuid', 'FK'], ['provider / model', 'pinned'], ['input', 'json'], ['plan', 'json'], ['retrieval', 'json (evidence)'], ['response', 'json'], ['leaseOwner / leaseUntil', 'uuid / ts']], { flows: ['chat'], wr: 'CommerceTurnService.open/save/withLease', rd: 'ProductRetrievalService, ProductAnswerService', note: 'snapshot ต่อ webhook event · retrieval เก็บ ProductEvidence (ราคา/สต็อก ณ เวลาค้น)' }),
     T('commerceLlmCalls', 'line', 'commerceLlmCalls', [['id', 'uuid', 'PK'], ['turnId', 'uuid', 'FK'], ['slot', 'PLAN|ANSWER|CRITICAL_REPAIR', 'UK'], ['ordinal', '1..3', 'UK'], ['request', 'json'], ['result', 'json'], ['failed', 'boolean']], { flows: ['chat'], wr: 'CommerceTurnService.call', rd: 'CommerceTurnService.call (replay)' }),
     T('lineConversation', 'line', 'lineConversation', [['id', 'uuid', 'PK'], ['lineMemberId', 'uuid', 'FK'], ['status', 'open|waiting_admin']], { flows: ['chat'], wr: 'LINE channel', rd: 'CommerceTurnService.open (ownership)' }),
+    T('decisionLogs', 'log', 'decisionLogs', [['id', 'uuid', 'PK'], ['companyId', 'uuid', 'FK'], ['channel', 'LINE | APPLICATION …'], ['eventId', 'webhookEventId | app:<id>', 'UK*'], ['commerceTurnId', 'uuid?', 'soft'], ['answerType', "'PRODUCT' …"], ['answerMode', 'PRODUCT_LLM_TEMPLATE …'], ['isFallback / fallbackReason', 'boolean / PRODUCT_PLAN_FAILED …'], ['topScore / topVectorSimilarity', 'null เมื่อเป็น product'], ['llmCallCount / tokens / latencyMs', 'int'], ['trace', 'json (note product / answer / llm)']], { flows: ['chat'], wr: 'DecisionLogService.save (ตอนจบ turn)', rd: 'DecisionLogQueryService (GET /api/admin/decision-logs)', note: 'UK* = (companyId, eventId) · รายละเอียด planner/answer LLM ดูที่ commerceTurns ผ่าน commerceTurnId' }),
   ],
   rels: [
     ['company', 'productBusinessType', 'preset', 'ECOMMERCE', '11', true],
@@ -723,6 +757,8 @@ const ERD = {
     ['commerceTurns', 'conversationId', 'lineConversation', 'id'],
     ['commerceLlmCalls', 'turnId', 'commerceTurns', 'id'],
     ['commerceTurns', 'retrieval', 'productVariants', 'id', 'n1', true],
+    ['decisionLogs', 'commerceTurnId', 'commerceTurns', 'id', 'n1', true],
+    ['decisionLogs', 'companyId', 'company', 'id'],
   ],
   flows: [['meta', 'แท็บ 1 · Preset → meta'], ['catalog', 'แท็บ 2 · Admin เขียนสินค้า'], ['stock', 'แท็บ 3 · สต็อก'], ['index', 'แท็บ 4 · Index'], ['chat', 'แท็บ 5 · แชต']],
 };

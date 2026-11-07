@@ -27,6 +27,8 @@ Product/Customer ใช้ companyId non-null และ tenantId=null ใน sta
 
 อัปเดต 7 ตุลาคม 2026: [store-defined fields](product-attributes.md) เพิ่ม ProductAttributeDefinition (Company 1–N; unique (companyId, key); enums ProductAttributeScope/Type/Status; CHECK key slug, variantOption เฉพาะ VARIANT, options เฉพาะ SELECT/MULTI_SELECT) ค่ายังอยู่ใน Product.attributes/ProductVariant.attributes (JSONB) ไม่มี FK ระดับค่า service ตรวจค่ากับนิยามใน transaction เดียวกับการบันทึก
 
+อัปเดต 5 พฤศจิกายน 2026: [decision log](decision-log-current.md) เพิ่ม DecisionLog (`decisionLogs`) Company 1–N RESTRICT, unique (companyId, eventId), index (companyId, createdAt), (conversationId, createdAt), (companyId, answerType, createdAt), (companyId, isFallback, createdAt), (companyId, userId, createdAt) userId คือ id ผู้ใช้ของ channel นั้น conversationId/commerceTurnId ไม่มี FK (log ไม่ควรบล็อกการลบ) channel เป็น enum MessageChannel (LINE, FACEBOOK, INSTAGRAM, APPLICATION, TIKTOK, SHOPEE, TELEGRAM, ANOTHER) เป็น additive ไม่มี backfill
+
 ## Entity-Relationship Diagram
 
 ```mermaid

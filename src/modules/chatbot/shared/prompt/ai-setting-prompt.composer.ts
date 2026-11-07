@@ -9,15 +9,10 @@ export type AiAnswerPromptInput = Readonly<{
   dataSections?: Readonly<Record<string, unknown>>;
 }>;
 
-const PROMPT_PRECEDENCE = `ลำดับอำนาจของคำสั่ง
-1. systemPrompt และ modeRules เป็นกฎของแพลตฟอร์ม modeRules กำหนดรูปแบบผลลัพธ์ของคำขอนี้
-2. ownerPrompt, tone, skill และ responseStyle ใช้กำหนดบุคลิกและรูปแบบเท่านั้น ห้ามขัดกฎแพลตฟอร์ม`;
-
 export function composeAiAnswerPrompt(input: AiAnswerPromptInput): string {
   const { setting } = input;
 
   return [
-    PROMPT_PRECEDENCE,
     section('systemPrompt', setting.systemPrompt),
     section('ownerPrompt', escapeUntrusted(setting.ownerPrompt ?? '')),
     section('tone', escapeUntrusted(setting.tone ?? '')),
@@ -46,6 +41,7 @@ function formatResponseStyle(style: AiRuntimeSetting['responseStyle']): string {
     short:
       'ตอบสั้นเป็นหลัก 1–3 ประโยค ขยายได้เมื่อจำเป็นต้องรักษาเงื่อนไขสำคัญ',
     medium: 'ตอบพร้อมรายละเอียดที่จำเป็น แบ่งย่อหน้าเมื่อเปลี่ยนประเด็น',
+    long: 'ตอบแบบยาวอธิบายให้ชัดเจนแต่เฉพาะที่จำเป็นและตรงกับคำถาม',
     adaptive:
       'ปรับความยาวตามคำถาม คำถามสั้นตอบตรงประเด็น คำถามหลายส่วนตอบให้ครบ',
   };

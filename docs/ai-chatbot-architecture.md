@@ -197,6 +197,12 @@ status fields ของ conversation/delivery/claim เป็น string ไม�
 
 Billing: quote active pricing → reserve wallet+budget ใน READ COMMITTED transaction (increment ก่อนแล้วเช็กค่าที่ UPDATE คืนมาขณะถือ row lock; ตัวที่มาพร้อมกันรอคิวแทนการถูกตีกลับ) → provider นอก transaction → settle usage/debit/replay/result/release holds พร้อมกัน; result ที่ SETTLED replay ได้โดยไม่เรียก provider ซ้ำ Scope embedding QUERY/DOCUMENT แยกกันที่ EmbeddingService; ordinary LINE generation และ classifier ใช้ LINE_AI_REPLY และ fingerprint request แยก logical calls
 
+### Diagnostics
+
+| Table | Fields / purpose |
+|---|---|
+| decisionLogs | 1 แถวต่อ turn: route/intent, retrieval scores + top candidates, answerType/answerMode, fallbackReason, handoff, LLM calls/tokens, latency, ordered stage `trace`; unique(companyId, eventId) ไม่มี FK ไป conversation/member รายละเอียดใน [decision-log-current.md](decision-log-current.md) |
+
 Expired HELD ไม่ได้ auto-refund: unresolved-list path เปลี่ยนเป็น UNKNOWN เพื่อ review acceptance ก่อน release ไม่อ้างว่า expiry cleanup ทำงาน background อัตโนมัติ
 
 
