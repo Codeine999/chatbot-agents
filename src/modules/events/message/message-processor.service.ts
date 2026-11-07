@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ChatbotService } from '../../chatbot/chatbot.service';
 import { LoadContextService } from '../../chatbot/context/load-context.service';
 import type {
@@ -10,17 +10,17 @@ import type {
   ChatTurn,
   ConversationThread,
 } from './contracts/channel-adapter';
-import { DecisionTraceService } from '../../decision-log/decision-trace.service';
-import { DecisionLogService } from '../../decision-log/decision-log.service';
-import type { DecisionTraceMeta } from '../../decision-log/types/decision-log.types';
+import {
+  DecisionTurnRecorder,
+  type TurnOutcome,
+} from '../../decision-log/decision-turn.recorder';
 
 @Injectable()
 export class MessageProcessorService {
   constructor(
     private readonly chatbot: ChatbotService,
     private readonly context: LoadContextService,
-    @Optional() private readonly decisionTrace?: DecisionTraceService,
-    @Optional() private readonly decisionLogs?: DecisionLogService,
+    private readonly turns: DecisionTurnRecorder,
   ) {}
 
   async process<TEvent, TThread extends ConversationThread>(
@@ -45,45 +45,17 @@ export class MessageProcessorService {
     const turn = await adapter.toChatTurn(event, thread);
     if (!turn) return;
 
-    const trace = this.decisionTrace;
-    const meta = trace ? traceMeta(turn, thread) : undefined;
-    if (!trace || !meta) {
-      await this.answer(
+    await this.turns.record(turn, thread, (outcome) =>
+      this.answer(
         event,
         adapter,
         thread,
         turn,
         recentMessages,
-        {},
+        outcome,
         claimOwner,
-      );
-      return;
-    }
-    // One decision log row per turn, written even when delivery fails.
-    await trace.run(meta, async () => {
-      const outcome: { response?: ChatResponse } = {};
-      let failure: unknown;
-      try {
-        await this.answer(
-          event,
-          adapter,
-          thread,
-          turn,
-          recentMessages,
-          outcome,
-          claimOwner,
-        );
-      } catch (error) {
-        failure = error;
-        throw error;
-      } finally {
-        await this.decisionLogs?.save(trace.current(), {
-          response: outcome.response,
-          status: failure ? 'ERROR' : 'COMPLETED',
-          errorCode: failure instanceof Error ? failure.name : undefined,
-        });
-      }
-    });
+      ),
+    );
   }
 
   private async answer<TEvent, TThread extends ConversationThread>(
@@ -92,12 +64,11 @@ export class MessageProcessorService {
     thread: TThread,
     turn: ChatTurn,
     recentMessages: readonly ChatContextMessage[],
-    outcome: { response?: ChatResponse },
+    outcome: TurnOutcome,
     claimOwner?: string,
   ): Promise<void> {
     const response = await this.respond(turn, recentMessages);
-    this.decisionTrace?.replied();
-    outcome.response = response;
+    this.turns.replied(outcome, response);
     if (response.contextPolicy === 'CLEAR') {
       await this.context.clear(thread.conversationId);
     }
@@ -137,25 +108,4 @@ export class MessageProcessorService {
         return Promise.resolve(turn.response);
     }
   }
-}
-
-/** Only chatbot turns with a channel event id are logged; prebuilt replies decide nothing. */
-function traceMeta(
-  turn: ChatTurn,
-  thread: ConversationThread,
-): DecisionTraceMeta | undefined {
-  if (turn.kind === 'response') return undefined;
-  const { request } = turn;
-  if (!request.turnId) return undefined;
-  return {
-    channel:
-      'channel' in request && request.channel === 'APP'
-        ? 'APPLICATION'
-        : 'LINE',
-    eventId: request.turnId,
-    userId: request.userId,
-    conversationId: request.conversationId ?? thread.conversationId,
-    messageType: turn.kind,
-    input: turn.kind === 'image' ? undefined : turn.request.text,
-  };
 }

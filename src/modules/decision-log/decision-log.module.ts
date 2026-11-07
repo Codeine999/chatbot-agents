@@ -4,6 +4,7 @@ import { DecisionLogController } from './decision-log.controller';
 import { DecisionLogQueryService } from './decision-log-query.service';
 import { DecisionLogService } from './decision-log.service';
 import { DecisionTraceService } from './decision-trace.service';
+import { DecisionTurnRecorder } from './decision-turn.recorder';
 
 /**
  * Per-turn decision log. Global because tracing is cross-cutting: chatbot,
@@ -19,7 +20,8 @@ import { DecisionTraceService } from './decision-trace.service';
     DecisionTraceService,
     DecisionLogService,
     DecisionLogQueryService,
+    DecisionTurnRecorder,
   ],
-  exports: [DecisionTraceService, DecisionLogService],
+  exports: [DecisionTraceService, DecisionLogService, DecisionTurnRecorder],
 })
 export class DecisionLogModule {}

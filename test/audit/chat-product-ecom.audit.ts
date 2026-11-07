@@ -52,6 +52,7 @@ import { IntentRouterService } from '../../src/modules/chatbot/intent/intent-rou
 import { UserSessionService } from '../../src/modules/users/session/user-session.service';
 import { LoadContextService } from '../../src/modules/chatbot/context/load-context.service';
 import { ProductSearchService } from '../../src/modules/products/search/product-search.service';
+import { DecisionTurnRecorder } from '../../src/modules/decision-log/decision-turn.recorder';
 import { MessageProcessorService } from '../../src/modules/events/message/message-processor.service';
 import type {
   ChannelAdapter,
@@ -1877,6 +1878,7 @@ live(`live product e-commerce audit (${RUN})`, () => {
     processor = new MessageProcessorService(
       moduleRef.get(ChatbotService, { strict: false }),
       context,
+      new DecisionTurnRecorder(),
     );
 
     store = await seedFashionStore(moduleRef, MODEL, (line) => {
