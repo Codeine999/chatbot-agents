@@ -35,6 +35,7 @@ import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
 import { isUsableKnowledge } from './utils/knowledge-answer.policy';
 import { ProductRetrievalService } from './product/product-retrieval.service';
 import type { EmbeddingResult } from '../../../infra/embedding/embedding-adapter.interface';
+import { DecisionTraceService } from '../../decision-log/decision-trace.service';
 
 /** Enough rows to explain the winner without burying the flow. */
 const MAX_LOGGED_CANDIDATES = 5;
@@ -62,6 +63,7 @@ export class KnowledgeRetrievalService {
     private readonly micro: MicroKnowledgeService,
     config: ConfigService,
     @Optional() private readonly products?: ProductRetrievalService,
+    @Optional() private readonly decisionTrace?: DecisionTraceService,
   ) {
     this.scope = knowledgeScope(config);
     // Candidate/noise thresholds only. Never compare these against RRF scores.
@@ -97,6 +99,7 @@ export class KnowledgeRetrievalService {
     context: RetrievalContext = {},
   ): Promise<KnowledgeRetrievalResult> {
     // The product gate may need the legacy result first; compute (and bill) it once.
+    this.decisionTrace?.enter('retrieval');
     let legacy: Promise<KnowledgeRetrievalResult> | undefined;
     const runLegacy = () => (legacy ??= this.runRetrieval(message, context));
     const product = !context.disableProduct
@@ -117,6 +120,16 @@ export class KnowledgeRetrievalService {
       : undefined;
     const result = product ?? (await runLegacy());
     this.logRetrieval(message, result);
+    this.decisionTrace?.retrieval(result);
+    this.decisionTrace?.note('retrieval', {
+      route: result.route,
+      matchType: result.matchType,
+      fallbackReason: result.fallbackReason ?? null,
+      candidates: result.items.length,
+      selected: result.selectedItems.map((item) => this.key(item)),
+      plannerIntent: result.plannerIntent ?? null,
+      product: Boolean(result.product),
+    });
     return result;
   }
 
@@ -135,13 +148,19 @@ export class KnowledgeRetrievalService {
 
     const query = resolved.query;
 
-    if (query !== message.trim())
+    if (query !== message.trim()) {
+      // PII redaction alone also changes the text; only history rewrites count.
+      this.decisionTrace?.note('retrieval', {
+        query,
+        rewritten: query !== redactPii(message).trim(),
+      });
       this.logger.debug(
         logBlock('Retrieval', [
           'follow-up rewritten',
           `query=${JSON.stringify(logSafeText(query))}`,
         ]),
       );
+    }
 
     if (!normalizeText(query)) {
       return this.result([], [], 'LOW_CONFIDENCE', 'NO_SEARCH_RESULTS');

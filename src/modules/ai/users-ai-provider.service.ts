@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { AiProviderSettingsService } from './ai-provider-settings.service';
 import { AiProviderService } from './ai-provider.service';
 import {
@@ -11,6 +11,7 @@ import {
   AiProviderName,
 } from '../../ai-provider/types/ai-provider.types';
 import { AiBillingService } from '../usage/billing/ai-billing.service';
+import { DecisionTraceService } from '../decision-log/decision-trace.service';
 
 @Injectable()
 export class UsersAiProviderService {
@@ -18,6 +19,7 @@ export class UsersAiProviderService {
     private readonly settingsService: AiProviderSettingsService,
     private readonly aiProviderService: AiProviderService,
     private readonly billingService: AiBillingService,
+    @Optional() private readonly decisionTrace?: DecisionTraceService,
   ) {}
 
   async selection(): Promise<{ provider: AiProviderName; model: string }> {
@@ -37,8 +39,9 @@ export class UsersAiProviderService {
   ): Promise<AiGenerateResponse> {
     const { provider, model } =
       pinned ?? (await this.settingsService.get('USER'));
+    const started = Date.now();
 
-    return this.billingService.runBilled({
+    const response = this.billingService.runBilled({
       kind: 'LINE_AI_REPLY',
       scopeKey: LINE_AI_BUDGET_SCOPE_KEY,
       provider,
@@ -53,5 +56,26 @@ export class UsersAiProviderService {
         return this.aiProviderService.generateWith(provider, model, request);
       },
     });
+    if (!this.decisionTrace) return response;
+    try {
+      const result = await response;
+      this.decisionTrace.llmCall({
+        provider,
+        model,
+        latencyMs: Date.now() - started,
+        status: 'success',
+        ...result.usage,
+      });
+      return result;
+    } catch (error) {
+      this.decisionTrace.llmCall({
+        provider,
+        model,
+        latencyMs: Date.now() - started,
+        status: 'failed',
+        errorName: error instanceof Error ? error.name : 'unknown',
+      });
+      throw error;
+    }
   }
 }

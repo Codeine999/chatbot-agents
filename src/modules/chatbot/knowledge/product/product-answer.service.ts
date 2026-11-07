@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { z } from 'zod';
 import { CommerceTurnService } from '../../../commerce/commerce-turn.service';
 import type {
@@ -21,6 +21,7 @@ import {
   unmatchedProductAnswer,
 } from './product-answer.policy';
 import type { ProductWorkflow } from '../../../products/search/product-search.types';
+import { DecisionTraceService } from '../../../decision-log/decision-trace.service';
 
 // No policy evidence was found for the policy half of a product question.
 const POLICY_UNVERIFIED_NOTE =
@@ -28,7 +29,24 @@ const POLICY_UNVERIFIED_NOTE =
 
 @Injectable()
 export class ProductAnswerService {
-  constructor(private readonly turns: CommerceTurnService) {}
+  constructor(
+    private readonly turns: CommerceTurnService,
+    @Optional() private readonly decisionTrace?: DecisionTraceService,
+  ) {}
+
+  /** Reports how the product reply was produced; a fallback carries its reason. */
+  private report(
+    turnId: string,
+    answer: AiAnswerResult,
+    mode: string,
+    reason?: string,
+  ) {
+    this.decisionTrace?.answer({
+      mode: answer.isFallback ? 'FALLBACK' : mode,
+      ...(answer.isFallback ? { fallbackReason: reason ?? mode } : {}),
+      commerceTurnId: turnId,
+    });
+  }
 
   async answer(
     retrieval: KnowledgeRetrievalResult,
@@ -40,8 +58,16 @@ export class ProductAnswerService {
       workflow.scope,
       workflow.turnId,
       async (lease) => {
-        if (lease.turn.response)
-          return lease.turn.response as unknown as AiAnswerResult;
+        if (lease.turn.response) {
+          const replay = lease.turn.response as unknown as AiAnswerResult;
+          this.report(
+            workflow.turnId,
+            replay,
+            'PRODUCT_REPLAY',
+            'PRODUCT_REPLAY',
+          );
+          return replay;
+        }
         const saved =
           (lease.turn.retrieval as unknown as KnowledgeRetrievalResult) ??
           retrieval;
@@ -72,11 +98,16 @@ export class ProductAnswerService {
             (m) => m.role === 'assistant' && m.catalogRefs !== undefined,
           )?.catalogRefs;
         let answer: AiAnswerResult;
+        let mode = 'PRODUCT_SAFE_TEMPLATE';
+        let reason: string | undefined;
         if (
           product.failed ||
           (product.plan.mode === 'KNOWLEDGE' && !policies.length)
         ) {
           answer = { text: setting.fallbackMessage, isFallback: true };
+          reason = product.failed
+            ? 'PRODUCT_PLAN_FAILED'
+            : 'NO_POLICY_EVIDENCE';
         } else if (
           product.plan.mode !== 'GENERAL' &&
           product.plan.mode !== 'KNOWLEDGE' &&
@@ -88,6 +119,9 @@ export class ProductAnswerService {
               (policyMissing ? `\n${POLICY_UNVERIFIED_NOTE}` : ''),
             isFallback: product.result.status === 'UNAVAILABLE',
           };
+          // NO_MATCH / MISSING_INPUT / VARIANT_UNAVAILABLE...: the customer got no product answer.
+          mode = `PRODUCT_${product.result.status}`;
+          reason = `PRODUCT_${product.result.status}`;
         } else {
           const general = product.plan.mode === 'GENERAL';
           const rules = general
@@ -167,6 +201,18 @@ export class ProductAnswerService {
               presentedRaw = text ? repaired.text : undefined;
             }
           }
+          // An LLM template that passed the renderer, or the deterministic
+          // listing used when every template was rejected.
+          mode = general
+            ? 'GENERAL'
+            : presentedRaw
+              ? 'PRODUCT_LLM_TEMPLATE'
+              : 'PRODUCT_SAFE_TEMPLATE';
+          reason = general
+            ? 'EMPTY_GENERAL_ANSWER'
+            : response
+              ? 'PRODUCT_TEMPLATE_REJECTED'
+              : 'PRODUCT_LLM_UNAVAILABLE';
           if (rejected && !text) {
             // A named product the catalog cannot answer about goes to staff;
             // rejected search candidates are offered by name for the customer to pick.
@@ -181,6 +227,12 @@ export class ProductAnswerService {
                     isFallback: false,
                     catalogRefs: unmatched.catalogRefs,
                   };
+            this.report(
+              workflow.turnId,
+              answer,
+              'PRODUCT_UNMATCHED_SUGGESTIONS',
+              'PRODUCT_INSUFFICIENT_CONTEXT',
+            );
             await this.turns.save(lease, 'response', answer);
             return answer;
           }
@@ -224,6 +276,7 @@ export class ProductAnswerService {
           answer = { ...answer, catalogRefs: previousRefs };
         if (!answer.isFallback && product.plan.mode === 'GENERAL')
           answer = { ...answer, catalogRefs: [] };
+        this.report(workflow.turnId, answer, mode, reason);
         await this.turns.save(lease, 'response', answer);
         return answer;
       },

@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { z } from 'zod';
@@ -32,6 +33,7 @@ import { rethrowPendingAiUsage } from '../../../usage/billing/pending-ai-usage.e
 import { rethrowInsufficientCredit } from '../../../usage/credit-point/insufficient-credit.exception';
 import { Prisma, type CommerceTurn } from '../../../../generated/prisma/client';
 import type { CommerceScope } from '../../../commerce/types/commerce-scope';
+import { DecisionTraceService } from '../../../decision-log/decision-trace.service';
 
 type KnowledgeRead = (
   query: string,
@@ -73,6 +75,7 @@ export class ProductRetrievalService {
     private readonly turns: CommerceTurnService,
     private readonly products: ProductSearchService,
     private readonly embeddings: EmbeddingService,
+    @Optional() private readonly decisionTrace?: DecisionTraceService,
   ) {}
 
   /**
@@ -245,6 +248,7 @@ export class ProductRetrievalService {
               asks: ['POLICY'],
             });
           } else {
+            this.decisionTrace?.enter('product');
             const planning = await this.turns.call(
               lease,
               'PLAN',
@@ -407,6 +411,25 @@ export class ProductRetrievalService {
             result = { status: 'UNAVAILABLE', evidence: [], choices: [] };
         }
       }
+      this.decisionTrace?.note('product', {
+        commerceTurnId: turn.id,
+        mode: plan.mode,
+        operation: plan.operation,
+        asks: plan.asks,
+        options: plan.options.map((o) => `${o.key}=${o.value}`),
+        filters: plan.filters.map(
+          (f) => `${f.key} ${f.operator} ${String(f.value)}`,
+        ),
+        category: plan.category,
+        ambiguous: plan.ambiguous,
+        plannerFailed: failed,
+        semantic: Boolean(embedding),
+        status: result.status,
+        identified: result.identified ?? null,
+        evidence: result.evidence.length,
+        choices: result.choices.length,
+        total: result.total ?? null,
+      });
       if (!failed && plan.mode === 'KNOWLEDGE') {
         // A store-policy question is the legacy knowledge route's job: DIRECT
         // presets, CLARIFY and conflict handoff stay intact, and no product

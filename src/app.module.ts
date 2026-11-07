@@ -18,6 +18,7 @@ import { AuthModule } from './modules/admin/auth/auth.module';
 import { AiProviderModule } from './modules/ai/ai-provider.module';
 import { ProductsModule } from './modules/products/products.module';
 import { AppMessageModule } from './modules/app-message/app-message.module';
+import { DecisionLogModule } from './modules/decision-log/decision-log.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AppMessageModule } from './modules/app-message/app-message.module';
     AbuseModule,
     AuthModule,
     PrismaModule,
+    DecisionLogModule,
     AiProviderModule,
     ProductsModule,
 

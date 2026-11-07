@@ -1,0 +1,97 @@
+/// Where a customer message came from. Only LINE and APPLICATION have a channel
+/// adapter today; the others are reserved so adding one needs no enum migration.
+enum MessageChannel {
+  LINE
+  FACEBOOK
+  INSTAGRAM
+  APPLICATION
+  TIKTOK
+  SHOPEE
+  TELEGRAM
+  ANOTHER
+}
+
+model DecisionLog {
+  id        String  @id @default(uuid()) @db.Uuid
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id])
+  channel   MessageChannel
+
+  /// Channel event id: LINE webhookEventId or `app:<messageId>`.
+  eventId        String  @db.VarChar(255)
+  /// The channel's own user id, as the chatbot received it: the LINE userId, or
+  /// `app:<contactId>` for APPLICATION. It also keys session, mute and ban in Redis.
+  userId         String  @db.VarChar(100)
+  /// Conversation of the channel in `channel` (LINE and APPLICATION keep separate tables).
+  conversationId String? @db.Uuid
+  /// Product RAG turn holding the planner/answer LLM calls, when one ran.
+  commerceTurnId String? @db.Uuid
+  /// How the chatbot received the message: text | image | sticker. A rich menu
+  /// tap arrives as text.
+  messageType    String  @db.VarChar(20)
+
+  inputText      String? @db.Text
+  // The query retrieval actually searched (follow-ups are rewritten).
+  retrievalQuery String? @db.Text
+
+  action          String? @db.VarChar(40)
+  intent          String? @db.VarChar(40)
+  routeSource     String? @db.VarChar(20)
+  routeConfidence Float?
+  routeReason     String? @db.VarChar(500)
+
+  /// KNOWLEDGE | MICRO_KNOWLEDGE | MIXED_KNOWLEDGE | PRODUCT | GENERAL | IMAGE
+  /// | RULE | MENU | REGISTRATION | HANDOFF | SYSTEM
+  answerType String  @db.VarChar(30)
+  /// How the reply text was produced, e.g. DIRECT_PRESET, GROUNDED, FALLBACK.
+  answerMode String? @db.VarChar(40)
+
+  retrievalRoute          String? @db.VarChar(20)
+  matchType               String? @db.VarChar(20)
+  retrievalFallbackReason String? @db.VarChar(50)
+  /// Fused (RRF) score of rank 1: ordering only, never a confidence.
+  topScore                Float?
+  /// Best cosine similarity among candidates: the confidence gate input.
+  topVectorSimilarity     Float?
+  /// Best raw BM25 score among candidates.
+  topLexicalScore         Float?
+  scoreGap                Float?
+  candidateCount          Int     @default(0)
+  /// Top three ranked candidates plus any selected evidence beyond them.
+  candidates              Json?
+
+  isFallback       Boolean @default(false)
+  /// The final reason a fallback was sent, from whichever stage decided it.
+  fallbackReason   String? @db.VarChar(60)
+  handoffRequested Boolean @default(false)
+
+  responseSource String? @db.VarChar(20)
+  contextPolicy  String? @db.VarChar(10)
+  responseText   String? @db.Text
+
+  llmCallCount    Int @default(0)
+  /// Prompt tokens including cached reads and cache writes.
+  llmInputTokens  Int @default(0)
+  llmOutputTokens Int @default(0)
+
+  latencyMs Int?
+  /// COMPLETED | ERROR
+  status    String  @default("COMPLETED") @db.VarChar(20)
+  errorCode String? @db.VarChar(100)
+  /// Incremented when a retried event is processed again.
+  attempt   Int     @default(1)
+
+  /// Ordered stage notes: rule, retrieval, classifier, answer, llm.
+  trace Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, eventId])
+  @@index([companyId, createdAt])
+  @@index([conversationId, createdAt])
+  @@index([companyId, userId, createdAt])
+  @@index([companyId, answerType, createdAt])
+  @@index([companyId, isFallback, createdAt])
+  @@map("decisionLogs")
+}

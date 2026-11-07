@@ -460,6 +460,34 @@ export const CASES: EvalCase[] = [
     expect: ['GENERAL'],
   },
 
+  // about the assistant itself: answered from the persona, never a handoff
+  {
+    id: 'E8',
+    group: 'assistant',
+    turns: ['คุณคือใคร'],
+    expect: ['GENERAL', 'DIRECT'],
+    note: 'DIRECT when an identity AnswerPattern exists',
+  },
+  {
+    id: 'E9',
+    group: 'assistant',
+    turns: ['เป็นบอทหรือคนจริงคะ'],
+    expect: ['GENERAL', 'DIRECT'],
+  },
+  {
+    id: 'E10',
+    group: 'assistant',
+    turns: ['ช่วยอะไรได้บ้าง'],
+    expect: ['GENERAL', 'DIRECT'],
+  },
+  {
+    id: 'E11',
+    group: 'assistant',
+    turns: ['ขอคุยกับคนจริงได้ไหม'],
+    expect: ['ADMIN'],
+    note: 'a request for a human is BUSINESS, unlike asking whether it is a bot',
+  },
+
   // adversarial
   {
     id: 'F1',

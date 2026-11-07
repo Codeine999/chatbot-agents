@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UserSessionService } from '../users/session/user-session.service';
 import { ReplyTemplateService } from './answer/answer-template.service';
@@ -22,6 +22,7 @@ import { isRegistrationEnabled } from '../registration/registration-feature';
 import { CLARIFY_MESSAGE } from './shared/knowledge-routing.constants';
 import { InsufficientCreditException } from '../usage/credit-point/insufficient-credit.exception';
 import { isCancelKeyword } from './intent/utils/cancel-keyword';
+import { DecisionTraceService } from '../decision-log/decision-trace.service';
 
 @Injectable()
 export class ChatbotService {
@@ -37,6 +38,7 @@ export class ChatbotService {
     private readonly stickerIntentService: StickerIntentService,
     private readonly richMenuReplies: RichMenuReplyCacheService,
     private readonly configService: ConfigService,
+    @Optional() private readonly decisionTrace?: DecisionTraceService,
   ) {
     this.aiMaxMessageLength = Number(
       this.configService.get('AI_MAX_MESSAGE_LENGTH') ?? 1000,
@@ -68,6 +70,7 @@ export class ChatbotService {
     const usage = { userId, lineMemberId, conversationId, turnId };
 
     if (await this.userSessionService.isMuted(userId)) {
+      this.decisionTrace?.answer({ mode: 'ADMIN_MUTED' });
       return this.response('', 'SYSTEM', 'EXCLUDE');
     }
 
@@ -75,6 +78,7 @@ export class ChatbotService {
     this.logger.warn(`user session ${session}'`);
 
     if (!input) {
+      this.decisionTrace?.answer({ mode: 'EMPTY_INPUT' });
       return this.response(
         this.replyTemplateService.defaultMessage(this.richMenuReplies.labels()),
         'SYSTEM',
@@ -88,6 +92,7 @@ export class ChatbotService {
         ${input.length} > ${this.aiMaxMessageLength}`,
       );
 
+      this.decisionTrace?.answer({ mode: 'MESSAGE_TOO_LONG' });
       return this.response(
         this.replyTemplateService.messageTooLong(),
         'SYSTEM',
@@ -105,6 +110,13 @@ export class ChatbotService {
         `text=${JSON.stringify(logSafeText(input))}`,
       ]),
     );
+    this.decisionTrace?.note('inbound', {
+      length: input.length,
+      history: recentMessages.length,
+      sessionFlow: session?.flow ?? null,
+      sessionStep: session?.step ?? null,
+      menuTap: Boolean(postbackData),
+    });
 
     // Registration was switched off mid-flow: close the session on any input
     // except cancel, which the router answers. CONTINUE_REGISTER relies on it.
@@ -139,6 +151,16 @@ export class ChatbotService {
         `reason=${JSON.stringify(decision.reason ?? '')}`,
       ]),
     );
+    this.decisionTrace?.route(decision);
+    this.decisionTrace?.note('route', {
+      action: decision.action,
+      intent: decision.intent,
+      source: decision.source,
+      confidence: decision.confidence,
+      reason: decision.reason ?? null,
+      fallbackReason: decision.fallbackReason ?? null,
+    });
+    this.decisionTrace?.enter('answer');
 
     switch (decision.action) {
       case 'CANCEL_SESSION':
@@ -270,6 +292,7 @@ export class ChatbotService {
   //  Image Handle Message
   async handleImageMessage(request: ImageChatRequest): Promise<ChatResponse> {
     if (await this.userSessionService.isMuted(request.userId)) {
+      this.decisionTrace?.answer({ mode: 'ADMIN_MUTED' });
       return this.response('', 'SYSTEM', 'EXCLUDE');
     }
     try {
@@ -294,12 +317,14 @@ export class ChatbotService {
     request: StickerChatRequest,
   ): Promise<ChatResponse> {
     if (await this.userSessionService.isMuted(request.userId)) {
+      this.decisionTrace?.answer({ mode: 'ADMIN_MUTED' });
       return this.response('', 'SYSTEM', 'EXCLUDE');
     }
     const decision = this.stickerIntentService.resolve({
       text: request.text,
       keywords: request.keywords,
     });
+    this.decisionTrace?.note('rule', { sticker: decision.intent });
 
     switch (decision.intent) {
       case 'GREETING':
@@ -353,6 +378,7 @@ export class ChatbotService {
     request: Pick<ChatRequest, 'userId' | 'conversationId' | 'turnId'>,
   ): ChatResponse {
     if (!(error instanceof InsufficientCreditException)) throw error;
+    this.decisionTrace?.answer({ mode: 'NO_CREDIT' });
     this.logger.error(
       logBlock('AiCredit', [
         'no reply sent: AI credit is insufficient',
@@ -371,6 +397,13 @@ export class ChatbotService {
     userId: string,
   ): Promise<ChatResponse> {
     if (result.isFallback) {
+      // Every fallback branch should report why; a silent one still shows up.
+      if (this.decisionTrace?.current()?.answer?.mode !== 'FALLBACK')
+        this.decisionTrace?.answer({
+          mode: 'FALLBACK',
+          fallbackReason: 'UNREPORTED',
+        });
+      this.decisionTrace?.handoff('AI_FALLBACK');
       await this.userSessionService.requestAdmin(userId);
       return this.response(result.text, 'SYSTEM', 'CLEAR');
     }
@@ -384,9 +417,14 @@ export class ChatbotService {
     userId: string,
     businessFallback = false,
   ): Promise<ChatResponse> {
+    this.decisionTrace?.handoff(
+      businessFallback ? 'BUSINESS_FALLBACK' : 'CONTACT_ADMIN',
+    );
     await this.userSessionService.requestAdmin(userId);
 
     if (businessFallback) {
+      // The reason is the router's (conflict, retrieval error, BUSINESS without evidence).
+      this.decisionTrace?.answer({ mode: 'FALLBACK' });
       const fallback = await this.aiChatService.answerFallback();
       return this.response(fallback.text, 'SYSTEM', 'CLEAR');
     }

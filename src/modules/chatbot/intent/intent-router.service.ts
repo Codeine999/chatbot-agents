@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConversationSession } from '../../users/session/user-session.service';
 import { RuleIntentService } from './rule-intent.service';
 import { AiIntentClassifierService } from './ai-intent-classifier.service';
@@ -16,6 +16,7 @@ import { fromRule } from './utils/intent.utils';
 import { logBlock, logSafeText } from '../../../utils/text.utils';
 import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
 import { decideFromRetrieval, gateBeforeSearch } from './utils/route-stages';
+import { DecisionTraceService } from '../../decision-log/decision-trace.service';
 
 /** Enough of the ranking curve to see a tie; [Retrieval] holds the full list. */
 const MAX_LOGGED_SCORES = 5;
@@ -28,6 +29,7 @@ export class IntentRouterService {
     private readonly knowledgeRetrievalService: KnowledgeRetrievalService,
     private readonly aiIntentClassifierService: AiIntentClassifierService,
     private readonly richMenuReplies: RichMenuReplyCacheService,
+    @Optional() private readonly decisionTrace?: DecisionTraceService,
   ) {}
 
   async resolve(
@@ -60,7 +62,13 @@ export class IntentRouterService {
 
     // 1. Menu taps are tenant-configured and outrank text rules.
     const menuDecision = this.resolveRichMenu(postbackData, input);
-    if (menuDecision) return this.logDecision(input, menuDecision);
+    if (menuDecision) {
+      this.decisionTrace?.note('rule', {
+        menu: menuDecision.richMenuReply?.key ?? menuDecision.intent,
+        reason: menuDecision.reason ?? null,
+      });
+      return this.logDecision(input, menuDecision);
+    }
 
     // 2. Deterministic gates: decide now, or search (maybe with a rule label).
     const rule = this.ruleIntentService.detect(input);
@@ -76,6 +84,20 @@ export class IntentRouterService {
     const inRegister =
       session?.status === 'ACTIVE' && session.flow === 'REGISTER';
     const gate = gateBeforeSearch({ input, rule, inRegister });
+    
+    this.decisionTrace?.note('rule', {
+      intent: rule.intent,
+      confidence: rule.confidence,
+      reason: rule.reason ?? null,
+    });
+    this.decisionTrace?.note('gate', {
+      verdict: gate.kind,
+      inRegister,
+      ...(gate.kind === 'DECIDE'
+        ? { action: gate.decision.action }
+        : { label: gate.label?.intent ?? null }),
+    });
+
     if (gate.kind === 'DECIDE') return this.logDecision(input, gate.decision);
 
     // 3. Retrieval owns cache -> DB -> embedding.
@@ -123,6 +145,7 @@ export class IntentRouterService {
       conversationId,
       turnId,
     } = params;
+    this.decisionTrace?.enter('classifier');
     const analysis = await this.aiIntentClassifierService.classifyLowConfidence(
       input,
       {
@@ -133,6 +156,14 @@ export class IntentRouterService {
         recentMessages,
       },
     );
+    
+    this.decisionTrace?.note('classifier', {
+      classification: analysis.classification,
+      confidence: analysis.confidence,
+      reason: analysis.reason ?? null,
+      failed: analysis.failed ?? false,
+      selectedEvidence: retrieval?.selectedItems.length ?? 0,
+    });
 
     if (analysis.classification === 'GENERAL') {
       return this.logDecision(

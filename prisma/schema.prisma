@@ -148,6 +148,7 @@ model Company {
   products        Product[]
   catalogCommands ProductCatalogCommand[]
   commerceTurns CommerceTurn[]
+  decisionLogs  DecisionLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
