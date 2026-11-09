@@ -25,7 +25,7 @@ export class ReplyTemplateService {
 
   missingRegisterFields(fields: string[]): string {
     return [
-      `กรุณากรอก ${fields.join(', ')} ให้ครบครับ`,
+      `กรุณากรอก ${fields.join(', ')} ให้ครบค่ะ`,
       '',
       'สามารถส่งเฉพาะข้อมูลที่ขาดมาเพิ่มเติมได้เลย',
     ].join('\n');
@@ -39,7 +39,7 @@ export class ReplyTemplateService {
     bankAccount: string;
   }): string {
     return [
-      'ได้รับข้อมูลสมัครสมาชิกครบแล้วครับ',
+      'ได้รับข้อมูลสมัครสมาชิกครบแล้วค่ะ',
       '',
       `ชื่อ: ${data.firstName}`,
       `นามสกุล: ${data.lastName}`,
@@ -62,59 +62,59 @@ export class ReplyTemplateService {
   defaultMessage(menuLabels: readonly string[] = []): string {
     if (!menuLabels.length) {
       return [
-        'สวัสดีครับ',
-        'เลือกเมนูด้านล่าง หรือพิมพ์คำถามที่ต้องการสอบถามได้เลยครับ',
+        'สวัสดีค่ะ',
+        'เลือกเมนูด้านล่าง หรือพิมพ์คำถามที่ต้องการสอบถามได้เลยค่ะ',
       ].join('\n');
     }
 
     return [
-      'สวัสดีครับ',
+      'สวัสดีค่ะ',
       'กรุณาเลือกบริการที่ต้องการใช้งาน',
       '',
       ...menuLabels.map((label) => `• ${label}`),
       '',
-      'หรือพิมพ์คำถามที่ต้องการสอบถามได้เลยครับ',
+      'หรือพิมพ์คำถามที่ต้องการสอบถามได้เลยค่ะ',
     ].join('\n');
   }
 
   registerUnavailable(): string {
-    return 'ขออภัยครับ ขณะนี้ยังไม่มีระบบสมัครสมาชิก';
+    return 'ขออภัยค่ะ ขณะนี้ยังไม่มีระบบสมัครสมาชิก';
   }
 
   cancelled(): string {
-    return 'ยกเลิกรายการแล้วครับ';
+    return 'ยกเลิกรายการแล้วค่ะ';
   }
 
   askAiChatQuestion(): string {
-    return 'ได้เลยครับ ต้องการสอบถามเรื่องอะไรครับ';
+    return 'ได้เลยค่ะ ต้องการสอบถามเรื่องอะไรคะ';
   }
 
   contactAdmin(): string {
-    return 'รับทราบครับ เดี๋ยวแอดมินจะเข้ามาดูแลให้นะครับ';
+    return 'รับทราบค่ะ เดี๋ยวแอดมินจะเข้ามาดูแลให้นะคะ';
   }
 
   stickerGreeting(): string {
-    return 'สวัสดีครับ สอบถามเรื่องไหนครับ';
+    return 'สวัสดีค่ะ สอบถามเรื่องไหนคะ';
   }
 
   stickerThanks(): string {
-    return 'ด้วยความยินดีครับ';
+    return 'ด้วยความยินดีค่ะ';
   }
 
   stickerUnknown(): string {
-    return 'รับสติ๊กเกอร์แล้วครับ 😊 หากมีอะไรให้ช่วย พิมพ์ข้อความมาได้ตลอดนะครับ';
+    return 'รับสติ๊กเกอร์แล้วค่ะ 😊 หากมีอะไรให้ช่วย พิมพ์ข้อความมาได้ตลอดนะคะ';
   }
 
   messageTooLong(): string {
-    return 'ข้อความยาวเกินไปครับ กรุณาพิมพ์ให้สั้นลงแล้วส่งใหม่อีกครั้งนะครับ';
+    return 'ข้อความยาวเกินไปค่ะ กรุณาพิมพ์ให้สั้นลงแล้วส่งใหม่อีกครั้งนะคะ';
   }
 
   statusUnavailable(): string {
-    return 'ขออภัยครับ ตอนนี้ระบบยังไม่สามารถตรวจสอบสถานะอัตโนมัติได้ เดี๋ยวส่งต่อให้แอดมินช่วยตรวจสอบให้นะครับ';
+    return 'ขออภัยค่ะ ตอนนี้ระบบยังไม่สามารถตรวจสอบสถานะอัตโนมัติได้ เดี๋ยวส่งต่อให้แอดมินช่วยตรวจสอบให้นะคะ';
   }
 
   askFirstName(): string {
-    return 'เริ่มสมัครสมาชิกครับ กรุณาพิมพ์ชื่อจริงของคุณ';
+    return 'เริ่มสมัครสมาชิกค่ะ กรุณาพิมพ์ชื่อจริงของคุณ';
   }
 
   askLastName(): string {
@@ -168,7 +168,7 @@ export class ReplyTemplateService {
     urlWeb: string;
   }): string {
     return [
-      'สมัครสมาชิกสำเร็จครับ',
+      'สมัครสมาชิกสำเร็จค่ะ',
       '',
       `Username: ${data.username}`,
       `Password: ${data.password}`,
@@ -180,7 +180,7 @@ export class ReplyTemplateService {
 
   sendAuthToUser(data: { username: string; password: string }): string {
     return [
-      'สมัครสมาชิกสำเร็จครับ',
+      'สมัครสมาชิกสำเร็จค่ะ',
       '',
       `ชื่อผู้ใช้: ${data.username}`,
       `รหัสผ่าน: ${data.password}`,

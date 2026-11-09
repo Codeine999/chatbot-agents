@@ -10,7 +10,7 @@ export const DEFAULT_SYSTEM_PROMPT = `
 `.trim();
 
 export const DEFAULT_FALLBACK_MESSAGE =
-  'ขออภัยครับ ตอนนี้ยังไม่สามารถตอบคำถามนี้ได้ เดี๋ยวส่งต่อให้แอดมินช่วยตรวจสอบให้นะครับ';
+  'ขออภัยค่ะ ตอนนี้ยังไม่สามารถตอบคำถามนี้ได้ เดี๋ยวส่งต่อให้แอดมินช่วยตรวจสอบให้นะคะ';
 
 /** Grounded-answer rules — Gemini may only use the retrieved DB context. */
 export const KNOWLEDGE_RULES = `กฎเพิ่มเติม:

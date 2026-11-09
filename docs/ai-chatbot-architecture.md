@@ -225,7 +225,7 @@ Canonical document รวม title/description/category/intent/keywords/question
 load newest active AiSetting in scope → normalize optional/legacy JSON → bounded history → compose:
 `systemPrompt → ownerPrompt → tone → skill → responseStyle → promptVersion → modeRules → historyMessage → currentMessage → ragContext`
 
-ส่งผ่าน provider systemInstruction ที่ adapters map เป็น system/instructions ตาม provider; skill เป็น bullet strings, responseStyle เป็น named values, history/RAG เป็น JSON; escape &<> ป้องกัน structural tag breakout โดยข้อความ untrusted ยังเป็นเนื้อหาใน prompt
+ส่งผ่าน provider systemInstruction ที่ adapters map เป็น system/instructions ตาม provider; skill เป็น bullet strings, responseStyle เป็น named values และต่อท้ายด้วยกฎคงที่ให้ลงท้าย ค่ะ/คะ เสมอ (ห้าม ครับ) ให้ตรงกับ template ที่เป็นข้อความตายตัว, history/RAG เป็น JSON; escape &<> ป้องกัน structural tag breakout โดยข้อความ untrusted ยังเป็นเนื้อหาใน prompt
 
 Applied: RAG, GENERAL, image final answer. Not applied: deterministic rule/DIRECT/static fallback, embedding, retrieval, BUSINESS/GENERAL classifier. ไม่มี extra LLM call เพื่อ compose prompt
 
@@ -327,7 +327,7 @@ Action executor:
 - CANCEL_SESSION → clear workflow → cancelled template, CLEAR
 - START_AI_CHAT → askAiChatQuestion template, CLEAR
 - CONTINUE_AI_CHAT / GENERAL_QUESTION → answerGeneral → aiResponse
-- CLARIFY → “ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยครับ”, RULE/INCLUDE
+- CLARIFY → “ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยคะ”, RULE/INCLUDE
 - ANSWER_KNOWLEDGE → answerKnowledge → aiResponse; ทุก isFallback=true (รวม budget/error/invalid) ทำ requestAdmin และคืน SYSTEM/CLEAR; คำตอบสำเร็จ INCLUDE
 - CONTACT_ADMIN / FALLBACK → contactAdminResponse; SYSTEM/CLEAR สำหรับ business fallback
 - GENERAL/image ที่ isFallback=true ผ่าน aiResponse จะ requestAdmin เช่นกัน โดยไม่ตั้ง Redis mute และไม่ล้าง registration session
@@ -355,7 +355,7 @@ Source: [retrieval](../src/modules/chatbot/knowledge/knowledge-retrieval.service
 | AnswerPatternService.findMatches | query→DB active+scope สูงสุด500 priority/updatedAt desc → findMatchesFromPatterns |
 | findMatchesFromPatterns | query+rows/layer/source → scope filter → Thai word segmentation + field-weighted BM25 รวม answer → exact flag แยก → ambiguity guard → sort → top20 KnowledgeItem[] |
 | isExactMatch | normalized query + questionExamples → full equality และไม่ใช่ broad DIRECT word |
-| thaiTerms / bm25Scores | Intl.Segmenter('th') → weighted BM25 ต่อ corpus; ถ้าตรงกันเพียง function words/ตัวเลขให้คะแนน0; คำเชื่อม/ปฏิเสธ/คำถามยังอยู่ใน scoring เมื่อมี content term ตรงกัน |
+| thaiTerms / bm25Scores | Intl.Segmenter('th') → weighted BM25 ต่อ corpus; ถ้าตรงกันเพียง function words/ตัวเลขให้คะแนน0; คำเชื่อม/ปฏิเสธ/คำถามยังอยู่ใน scoring เมื่อมี content term ตรงกัน; รายการ function words ตัดคำด้วย thaiTerms เดียวกับ query (เท่าไหร่ → เท่า + ไหร่) จึงไม่มี entry ที่ segmenter ไม่เคยสร้าง |
 | toKnowledgeItem | source row/score/exact/layer → content/answer/renderMode + metadata(rawScore/safeDirect/scope) |
 | MicroKnowledgeService.findMatches | query → active+scope DB rowsสูงสุด500 → shared findMatchesFromPatterns source MICRO_KNOWLEDGE |
 | cache.onModuleInit / onModuleDestroy | load snapshot + timer240s / clear timer |

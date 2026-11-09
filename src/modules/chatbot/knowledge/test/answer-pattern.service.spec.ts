@@ -1,7 +1,7 @@
 import { AnswerPatternService } from '../answer-pattern.service';
 import type { PrismaService } from '../../../../prisma/prisma.service';
 import { configStub, makePattern } from './knowledge.fixtures';
-import { thaiTerms } from '../utils/thai-bm25';
+import { FUNCTION_WORDS, thaiTerms } from '../utils/thai-bm25';
 
 const setup = (
   rows: ReturnType<typeof makePattern>[] = [],
@@ -99,6 +99,56 @@ describe('Thai BM25 candidates', () => {
     expect(result[0].metadata?.rawScore).toBeGreaterThan(
       result[1].metadata?.rawScore as number,
     );
+  });
+
+  it('stores function words as the tokens the segmenter actually emits', () => {
+    // A multi-token entry (เท่าไหร่ → เท่า + ไหร่) would never match a query term.
+    for (const word of FUNCTION_WORDS) expect(thaiTerms(word)).toEqual([word]);
+  });
+
+  it.each(['เท่าไหร่', 'เท่าไหร่คะ', 'ได้เท่าไหร่ครับ'])(
+    'does not make every price FAQ a candidate for a bare %s',
+    (query) => {
+      expect(
+        service.findMatchesFromPatterns(query, [
+          makePattern({
+            id: 'shipping',
+            title: 'ค่าจัดส่ง',
+            keywords: ['ค่าส่ง'],
+            questionExamples: ['ค่าส่งเท่าไหร่'],
+            answer: 'ค่าจัดส่ง 50 บาท',
+          }),
+          makePattern({
+            id: 'room',
+            title: 'ราคาห้องพัก',
+            keywords: ['ห้องพัก'],
+            questionExamples: ['ห้องพักคืนละเท่าไหร่'],
+            answer: 'ห้องพักคืนละ 2,300 บาท',
+          }),
+        ]),
+      ).toEqual([]);
+    },
+  );
+
+  it('keeps a เท่าไหร่ question on its topic without pulling other price FAQs', () => {
+    const result = service.findMatchesFromPatterns('ค่าส่งเท่าไหร่คะ', [
+      makePattern({
+        id: 'shipping',
+        title: 'ค่าจัดส่ง',
+        keywords: ['ค่าส่ง'],
+        questionExamples: ['ค่าส่งเท่าไหร่'],
+        answer: 'ค่าจัดส่ง 50 บาท',
+      }),
+      makePattern({
+        id: 'room',
+        title: 'ราคาห้องพัก',
+        keywords: ['ห้องพัก'],
+        questionExamples: ['ห้องพักคืนละเท่าไหร่'],
+        answer: 'ห้องพักคืนละ 2,300 บาท',
+      }),
+    ]);
+    expect(result.map((item) => item.id)).toEqual(['shipping']);
+    expect(result[0].metadata?.exactMatch).toBe(false);
   });
 
   it('does not match หมอน inside หาหมอนะ', () => {

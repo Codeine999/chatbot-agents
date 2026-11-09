@@ -19,4 +19,4 @@ export const DEFAULT_RAG_MIN_VECTOR_SIMILARITY = 0.75;
 export const MAX_RAG_EVIDENCE_CHARACTERS = 12_000;
 
 export const INSUFFICIENT_CONTEXT = 'INSUFFICIENT_CONTEXT';
-export const CLARIFY_MESSAGE = 'ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยครับ';
+export const CLARIFY_MESSAGE = 'ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยคะ';

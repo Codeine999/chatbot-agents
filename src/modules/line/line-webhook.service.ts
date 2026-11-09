@@ -189,11 +189,13 @@ export class LineWebhookService {
     const keyset = messageKeyset(before, query.beforeId, after, query.afterId);
 
     if (after) {
-      return this.prisma.lineChatHistory.findMany({
+      const messages = await this.prisma.lineChatHistory.findMany({
         where: { conversationId, ...keyset },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         take: limit,
       });
+
+      return this.withAdminUsernames(messages);
     }
 
     const messages = await this.prisma.lineChatHistory.findMany({
@@ -202,7 +204,38 @@ export class LineWebhookService {
       take: limit,
     });
 
-    return messages.reverse();
+    return this.withAdminUsernames(messages.reverse());
+  }
+
+  /**
+   * Replaces `sentByAdminId` with the admin's username so the dashboard can
+   * show who replied. Null when no admin sent it (bot/customer) or the admin
+   * no longer exists; the dashboard treats null as an AI reply.
+   */
+  private async withAdminUsernames<T extends { sentByAdminId: string | null }>(
+    messages: T[],
+  ): Promise<T[]> {
+    const ids = [
+      ...new Set(
+        messages
+          .map((message) => message.sentByAdminId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    if (ids.length === 0) return messages;
+
+    const admins = await this.prisma.adminMember.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, username: true },
+    });
+    const usernames = new Map(admins.map((admin) => [admin.id, admin.username]));
+
+    return messages.map((message) => ({
+      ...message,
+      sentByAdminId: message.sentByAdminId
+        ? (usernames.get(message.sentByAdminId) ?? null)
+        : null,
+    }));
   }
 
   /**
@@ -242,7 +275,7 @@ export class LineWebhookService {
     if (delivery.text !== body.text) throw new BadRequestException('clientRequestId was already used for different text');
     await this.deliveryService.deliver(delivery.id);
     const message = await this.prisma.lineChatHistory.findUnique({ where: { deliveryId: delivery.id } });
-    if (message) return message;
+    if (message) return (await this.withAdminUsernames([message]))[0];
     const current = await this.prisma.lineDelivery.findUniqueOrThrow({ where: { id: delivery.id } });
     return { id: current.id, deliveryId: current.id, text: current.text, sentStatus: current.status.toLowerCase() };
   }
