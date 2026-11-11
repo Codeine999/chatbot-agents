@@ -214,7 +214,7 @@ erDiagram
 | `LineChatSender` | `USER`, `ADMIN`, `AI`, `SYSTEM` (db-mapped lowercase) | `LineChatHistory.sender` — auto-replies are written as `SYSTEM`; `AI` is never used |
 | `LineChatMessageType` | `TEXT`, `IMAGE`, `STICKER`, `POSTBACK` (db-mapped lowercase) | `LineChatHistory.messageType`, `LineConversation.lastMessageType` |
 | `AiProviderScope` | `USER`, `ADMIN` | `AiProviderSetting.scope` — TypeScript narrows this to `['USER']`, admins keep per-member settings instead |
-| `AiProviderName` | `GEMINI`, `OPENAI`, `ANTHROPIC` | `AiProviderSetting`, `AdminAiProviderSetting` (`provider` + `allowedProviders[]`) |
+| `AiProviderName` | `GEMINI`, `OPENAI`, `ANTHROPIC`, `OPENROUTER`, `LOCAL` | `AiProviderSetting`, `AdminAiProviderSetting` (`provider` + `allowedProviders[]`) |
 
 ## Relations Summary
 

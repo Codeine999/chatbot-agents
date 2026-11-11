@@ -15,6 +15,7 @@ import { UsersAiProviderService } from './users-ai-provider.service';
 import { GeminiAiProvider } from '../../ai-provider/providers/gemini-ai.provider';
 // import { OpenAiProvider } from '../../ai-provider/providers/openai-ai.provider';
 import { OpenRouterProvider } from '../../ai-provider/providers/openrouter-ai.provider';
+import { LocalLlmProvider } from '../../ai-provider/providers/local-llm-ai.provider';
 import { AI_PROVIDER_ADAPTERS } from '../../ai-provider/providers/ai-provider.registry';
 import type { AiProviderAdapter } from '../../ai-provider/providers/ai-provider.interface';
 import { AiBillingModule } from '../usage/billing/ai-billing.module';
@@ -32,6 +33,7 @@ const AI_PROVIDER_ADAPTER_CLASSES = [
   // OpenAiProvider,
   // AnthropicAiProvider,
   OpenRouterProvider,
+  LocalLlmProvider,
 ] as const;
 
 @Module({
