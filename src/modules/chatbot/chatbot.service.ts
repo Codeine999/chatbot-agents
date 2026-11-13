@@ -404,8 +404,7 @@ export class ChatbotService {
           fallbackReason: 'UNREPORTED',
         });
       this.decisionTrace?.handoff('AI_FALLBACK');
-      await this.userSessionService.requestAdmin(userId);
-      return this.response(result.text, 'SYSTEM', 'CLEAR');
+      return this.fallbackResponse(userId, result.text);
     }
     return {
       ...this.response(result.text, source, 'INCLUDE'),
@@ -420,20 +419,31 @@ export class ChatbotService {
     this.decisionTrace?.handoff(
       businessFallback ? 'BUSINESS_FALLBACK' : 'CONTACT_ADMIN',
     );
-    await this.userSessionService.requestAdmin(userId);
-
     if (businessFallback) {
       // The reason is the router's (conflict, retrieval error, BUSINESS without evidence).
       this.decisionTrace?.answer({ mode: 'FALLBACK' });
       const fallback = await this.aiChatService.answerFallback();
-      return this.response(fallback.text, 'SYSTEM', 'CLEAR');
+      return this.fallbackResponse(userId, fallback.text);
     }
 
+    await this.userSessionService.requestAdmin(userId);
     return this.response(
       this.replyTemplateService.contactAdmin(),
       'RULE',
       'CLEAR',
     );
+  }
+
+  private async fallbackResponse(
+    userId: string,
+    text: string,
+  ): Promise<ChatResponse> {
+    const request = await this.userSessionService.requestAdmin(userId);
+    if (request === 'ALREADY_WAITING') {
+      this.decisionTrace?.note('handoff', { fallbackNotice: 'SUPPRESSED' });
+      return this.response('', 'SYSTEM', 'CLEAR');
+    }
+    return this.response(text, 'SYSTEM', 'CLEAR');
   }
 
   private canRegister(

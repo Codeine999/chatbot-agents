@@ -55,7 +55,7 @@ Vector confidence gate (ตั้งแต่ 2026-10-02): RAG ข้าม clas
 | Retrieval | `KnowledgeRetrievalService.retrieve` | message + usage IDs/history → KnowledgeRetrievalResult; cache/DB exact, micro lexical, shared query vector, rank/select |
 | Generation | `AiChatService.answerKnowledge/answerGeneral/answerImage` | evidence/settings/history → AiAnswerResult; preserve PendingAiUsageError; ordinary generation error คืน fallback |
 | Provider | `UsersAiProviderService.generate` | AiGenerateRequest + thread IDs → settings scope USER → AiBillingService → shared provider adapter |
-| Handoff | `UserSessionService.requestAdmin` | userId → DB waiting_admin + best-effort notification เมื่อเปลี่ยนสถานะ; ไม่ตั้ง mute |
+| Handoff | `UserSessionService.requestAdmin` | userId → DB waiting_admin + best-effort notification เมื่อเปลี่ยนสถานะ; คืน `REQUESTED` / `ALREADY_WAITING` / `NO_ROOM`; ไม่ตั้ง mute |
 | Outbox | `LineWebhookService.processEvent` | ChatResponse → upsert LineDelivery.key=webhookEventId; CLEAR context ก่อน persistence; verify lease owner |
 | Delivery | `LineDeliveryService.deliver/finalize` | durable row → claim → check mute → REPLY/PUSH → ACCEPTED → unique deliveryId history + context append; repeat repair ไม่ส่งซ้ำ |
 | Admin PUSH | `sendAdminMessage` → delivery | key ใช้ admin/conversation/clientRequestId ถ้ามี; mute ทุก actual attempt; accepted admin PUSH เปิด waiting_admin เป็น open ใน transaction |
@@ -313,7 +313,8 @@ Source: [ChatbotService](../src/modules/chatbot/chatbot.service.ts), [IntentRout
 | handleStickerMessage | hints/text → StickerIntentService.resolve → greeting/thanks/unknown template หรือส่ง TEXT กลับเข้า handleTextMessage |
 | response | text/source/contextPolicy → ChatResponse ไม่มี I/O |
 | aiResponse | AiAnswerResult + source → ChatResponse; isFallback=true→EXCLUDE ไม่เช่นนั้น INCLUDE |
-| contactAdminResponse | userId+businessFallback → requestAdmin; true→answerFallback + SYSTEM/CLEAR; false→contactAdmin template + RULE/CLEAR |
+| contactAdminResponse | userId+businessFallback → requestAdmin; true→answerFallback ผ่าน fallbackResponse; false→contactAdmin template + RULE/CLEAR (ตอบทุกครั้ง) |
+| fallbackResponse | userId+text → requestAdmin; `ALREADY_WAITING`→ข้อความว่าง SYSTEM/CLEAR (ไม่ส่ง แต่ล้าง context เหมือน fallback ปกติ); อื่นๆ→text SYSTEM/CLEAR |
 | answerKnowledge | message/context.retrieval? → ใช้ retrieval เดิมหรือ retrieve; safe DIRECT ANSWER_PATTERN ที่ไม่ REWRITE และ answer ไม่ว่าง → stored text; selectedItems มี→generateFromKnowledge; ไม่พบ→configured fallback |
 | answerGeneral | message/context → getActiveAiSetting → toAiProviderMessages → composeAiAnswerPrompt(ragContext=[]) → generateText |
 | answerFallback | getActiveAiSetting → {text:fallbackMessage,isFallback:true}; ไม่เรียก provider |
@@ -329,6 +330,7 @@ Action executor:
 - CONTINUE_AI_CHAT / GENERAL_QUESTION → answerGeneral → aiResponse
 - CLARIFY → “ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยคะ”, RULE/INCLUDE
 - ANSWER_KNOWLEDGE → answerKnowledge → aiResponse; ทุก isFallback=true (รวม budget/error/invalid) ทำ requestAdmin และคืน SYSTEM/CLEAR; คำตอบสำเร็จ INCLUDE
+- ข้อความ fallback ("รอแอดมิน") ส่งครั้งเดียวต่อหนึ่ง request: ถ้าห้องเป็น waiting_admin อยู่แล้ว fallback รอบถัดไปไม่ส่งข้อความ (decision trace note `fallbackNotice: SUPPRESSED`) คำถามที่บอทตอบได้ยังตอบตามปกติ; เมื่อแอดมินตอบแล้วห้องกลับเป็น open fallback ครั้งถัดไปจะแจ้งอีกครั้ง; ไม่มีห้อง (เช่น preview) ส่งตามเดิม
 - CONTACT_ADMIN / FALLBACK → contactAdminResponse; SYSTEM/CLEAR สำหรับ business fallback
 - GENERAL/image ที่ isFallback=true ผ่าน aiResponse จะ requestAdmin เช่นกัน โดยไม่ตั้ง Redis mute และไม่ล้าง registration session
 - Default/empty → default menu, CLEAR

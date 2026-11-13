@@ -154,6 +154,7 @@ export function buildHarness(options: HarnessOptions = {}) {
     Promise.resolve(micro.slice(0, take ?? micro.length)),
   );
   const conversationUpdateMany = jest.fn(() => Promise.resolve({ count: 1 }));
+  const conversationCount = jest.fn(() => Promise.resolve(0));
 
   const prisma = {
     answerPattern: { findMany: answerPatternFindMany },
@@ -167,7 +168,10 @@ export function buildHarness(options: HarnessOptions = {}) {
         ),
       ),
     },
-    lineConversation: { updateMany: conversationUpdateMany },
+    lineConversation: {
+      updateMany: conversationUpdateMany,
+      count: conversationCount,
+    },
   } as unknown as PrismaService;
 
   // --- provider boundary ----------------------------------------------------
@@ -339,6 +343,7 @@ export function buildHarness(options: HarnessOptions = {}) {
       microFindMany,
       cacheGetAll,
       conversationUpdateMany,
+      conversationCount,
       notifyAdminRequired,
       registrationStart,
       registrationHandle,

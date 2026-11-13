@@ -2,7 +2,10 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationService } from '../admin/notification/notification.service';
 import { ChannelHandoffRegistry } from '../users/session/channel-handoff.registry';
-import type { ChannelHandoffHandler } from '../users/session/channel-handoff.registry';
+import type {
+  AdminRequestResult,
+  ChannelHandoffHandler,
+} from '../users/session/channel-handoff.registry';
 import { UserSessionService } from '../users/session/user-session.service';
 import { appUserId } from './app-session.service';
 
@@ -25,15 +28,20 @@ export class AppHandoffHandler implements ChannelHandoffHandler, OnModuleInit {
     this.registry.register(this);
   }
 
-  async requestAdmin(userId: string): Promise<void> {
+  async requestAdmin(userId: string): Promise<AdminRequestResult> {
     const contactId = userId.slice(USER_ID_PREFIX.length);
-    if (!UUID.test(contactId)) return;
+    if (!UUID.test(contactId)) return 'NO_ROOM';
 
     const changed = await this.prisma.channelConversation.updateMany({
       where: { contactId, status: { not: 'waiting_admin' } },
       data: { status: 'waiting_admin' },
     });
-    if (!changed.count) return;
+    if (!changed.count) {
+      const waiting = await this.prisma.channelConversation.count({
+        where: { contactId, status: 'waiting_admin' },
+      });
+      return waiting > 0 ? 'ALREADY_WAITING' : 'NO_ROOM';
+    }
 
     try {
       const [conversation, workflow] = await Promise.all([
@@ -47,7 +55,7 @@ export class AppHandoffHandler implements ChannelHandoffHandler, OnModuleInit {
         }),
         this.sessions.get(userId),
       ]);
-      if (!conversation) return;
+      if (!conversation) return 'REQUESTED';
       await this.notifications.notifyChannelAdminRequired({
         userId,
         channel: 'APP',
@@ -64,5 +72,6 @@ export class AppHandoffHandler implements ChannelHandoffHandler, OnModuleInit {
         `failed to notify admins for ${contactId}: ${error instanceof Error ? error.name : 'unknown'}`,
       );
     }
+    return 'REQUESTED';
   }
 }

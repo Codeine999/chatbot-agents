@@ -1,15 +1,10 @@
 import { Injectable } from '@nestjs/common';
 
-/**
- * Lets a channel other than LINE answer "the customer asked for an admin".
- * UserSessionService.requestAdmin looks the conversation up in LINE tables,
- * which would silently do nothing for another channel's users. Their ids carry
- * a channel prefix (`app:`), so the owning module registers a handler for it.
- */
+export type AdminRequestResult = 'REQUESTED' | 'ALREADY_WAITING' | 'NO_ROOM';
+
 export interface ChannelHandoffHandler {
-  /** Prefix of the userIds this handler owns, e.g. 'app:'. */
   readonly userIdPrefix: string;
-  requestAdmin(userId: string): Promise<void>;
+  requestAdmin(userId: string): Promise<AdminRequestResult>;
 }
 
 @Injectable()

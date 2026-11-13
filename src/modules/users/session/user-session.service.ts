@@ -10,6 +10,7 @@ import {
 import { NotificationService } from '../../admin/notification/notification.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ChannelHandoffRegistry } from './channel-handoff.registry';
+import type { AdminRequestResult } from './channel-handoff.registry';
 
 export type { ConversationSession } from './types/session.types';
 
@@ -124,7 +125,8 @@ export class UserSessionService {
     await this.redis.del(this.muteKey(userId));
   }
 
-  async requestAdmin(userId: string): Promise<void> {
+  /** Marks the room `waiting_admin`; admins are notified only on the transition. */
+  async requestAdmin(userId: string): Promise<AdminRequestResult> {
     const handler = this.handoffs.find(userId);
     if (handler) return handler.requestAdmin(userId);
 
@@ -135,21 +137,27 @@ export class UserSessionService {
       },
       data: { status: 'waiting_admin' },
     });
-    if (changed.count > 0) {
-      try {
-        const workflow = await this.get(userId);
-        await this.notificationService.notifyAdminRequired({
-          userId,
-          flow: workflow?.flow ?? 'CONTACT_ADMIN',
-          step: workflow?.step ?? 'WAITING_ADMIN',
-          status: workflow?.status ?? 'ACTIVE',
-        });
-      } catch (error) {
-        this.logger.warn(
-          `failed to notify admins for user=${userId}: ${String(error)}`,
-        );
-      }
+    if (changed.count === 0) {
+      const waiting = await this.prisma.lineConversation.count({
+        where: { lineMember: { lineUserId: userId }, status: 'waiting_admin' },
+      });
+      return waiting > 0 ? 'ALREADY_WAITING' : 'NO_ROOM';
     }
+
+    try {
+      const workflow = await this.get(userId);
+      await this.notificationService.notifyAdminRequired({
+        userId,
+        flow: workflow?.flow ?? 'CONTACT_ADMIN',
+        step: workflow?.step ?? 'WAITING_ADMIN',
+        status: workflow?.status ?? 'ACTIVE',
+      });
+    } catch (error) {
+      this.logger.warn(
+        `failed to notify admins for user=${userId}: ${String(error)}`,
+      );
+    }
+    return 'REQUESTED';
   }
 
   async clear(userId: string): Promise<void> {
