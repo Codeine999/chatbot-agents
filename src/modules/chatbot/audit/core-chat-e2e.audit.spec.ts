@@ -309,9 +309,7 @@ describe('Grounded answering', () => {
       ask('ค่าส่งเท่าไหร่'),
     );
 
-    expect(response.text).toBe(
-      'ขออภัยครับ ตอนนี้ยังไม่สามารถตอบคำถามนี้ได้ เดี๋ยวส่งต่อให้แอดมินช่วยตรวจสอบให้นะครับ',
-    );
+    expect(response.text).toBe('เรื่องนี้เดี๋ยวแอดมินจะเข้ามาดูแลให้นะคะ');
     expect(response.source).toBe('SYSTEM');
   });
 
