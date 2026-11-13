@@ -1,0 +1,64 @@
+// Line
+model LineChannel {
+  id        String  @id @default(uuid()) @db.Uuid
+  companyId String  @unique @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  /// Random and URL-safe. Not a secret, but unguessable: it selects the
+  /// channel in the webhook URL /api/line/webhooks/:channelKey.
+  channelKey String @unique @db.VarChar(32)
+
+  channelId   String? @db.VarChar(20)
+  /// The bot's userId from /v2/bot/info; LINE sends it as `destination`.
+  botUserId   String  @unique @db.VarChar(40)
+  basicId     String? @db.VarChar(40)
+  displayName String? @db.VarChar(255)
+
+  /// base64(iv | auth tag | ciphertext)
+  secretCiphertext      String
+  accessTokenCiphertext String
+  encKeyVersion         Int    @default(1)
+  secretLast4           String @db.VarChar(4)
+  accessTokenLast4      String @db.VarChar(4)
+
+  verifiedAt       DateTime?
+  webhookSetAt     DateTime?
+  updatedByAdminId String?   @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("lineChannels")
+}
+
+// Facebook Messenger
+model FacebookChannel {
+  id        String  @id @default(uuid()) @db.Uuid
+  companyId String  @unique @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  /// Random and URL-safe. Not a secret, but unguessable: it selects the
+  /// channel in the webhook URL /api/channels/facebook/webhooks/:channelKey.
+  channelKey String @unique @db.VarChar(32)
+
+  /// Facebook Page id from Graph `/me`; Messenger sends it as `entry.id`.
+  pageId   String  @unique @db.VarChar(32)
+  pageName String? @db.VarChar(255)
+
+  /// base64(iv | auth tag | ciphertext)
+  appSecretCiphertext       String
+  pageAccessTokenCiphertext String
+  verifyTokenCiphertext     String
+  encKeyVersion             Int    @default(1)
+  appSecretLast4            String @db.VarChar(4)
+  pageAccessTokenLast4      String @db.VarChar(4)
+
+  verifiedAt       DateTime?
+  webhookSetAt     DateTime?
+  updatedByAdminId String?   @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("facebookChannels")
+}

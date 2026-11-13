@@ -11,8 +11,8 @@
 ```mermaid
 flowchart TD
   A[LINE webhook] --> B[LineSignatureGuard + ingress limit]
-  B --> C[BullMQ line-events]
-  C --> D[LineEventsProcessor: abuse gates + event lease]
+  B --> C[BullMQ chat-events: คิวเดียวของทุกช่องทาง]
+  C --> D[ChatEventsProcessor แจกตามชื่อ job → LineEventsProcessor: abuse gates + event lease]
   D --> E[LineWebhookService: persist inbound once]
   E --> F[LoadContextService.load]
   F --> G[ChatbotService: mute + input gate + session]
@@ -43,12 +43,12 @@ Diagram greeting edge ไป GENERAL ใช้เฉพาะ greeting/acknowled
 
 ข้อความทั้งข้อความที่ขอถามแต่ยังไม่บอกเรื่อง (เช่น "สอบถาม", "ขอสอบถามหน่อยครับ", "สวัสดีค่ะ สอบถามหน่อยค่ะ") ตอบแบบเดียวกับ greeting: `CONTINUE_AI_CHAT` → `answerGeneral` (LLM แต่งประโยค) ไม่ค้นความรู้และไม่ requestAdmin; ถ้ามีหัวข้อต่อท้าย (เช่น "สอบถามห้องว่าง") ยังเข้า retrieval ตามปกติ คำกริยาขอ/ถาม (สอบถาม ถาม ขอ อยาก รบกวน) อยู่ใน BM25 function words จึงทำให้ FAQ เป็น candidate ด้วยตัวเองไม่ได้
 
-Vector confidence gate (ตั้งแต่ 2026-10-02): RAG ข้าม classifier ได้เฉพาะ exact question หรือ vector top ≥ `KNOWLEDGE_RAG_MIN_VECTOR_SIMILARITY` (default 0.75) ต่ำกว่านั้น retrieval คืน `LOW_CONFIDENCE`/`BELOW_MIN_VECTOR_SIMILARITY` โดยเก็บ candidate ไว้ classifier GENERAL → general chat, BUSINESS → grounded answer บน candidate เดิม BM25 ไม่ใช้ตัดสินความมั่นใจเพราะคำเดียวที่ซ้ำ FAQ ก็ได้คะแนนสูง ค่า 0.75 วัดบน gemini-embedding-2 (คุยเล่น 0.56–0.71, คำถาม KB median 0.80) ต้องวัดใหม่เมื่อเปลี่ยน embedding model; `MIN_CONTEXT_SCORE` 0.6 ของ admin embedding diagnostics ยังเป็นค่าเดิม
+Vector confidence gate (ตั้งแต่ 2026-10-02): RAG ข้าม classifier ได้เฉพาะ exact question หรือ vector top ≥ `KNOWLEDGE_RAG_MIN_VECTOR_SIMILARITY` (default 0.75) ต่ำกว่านั้น retrieval คืน `LOW_CONFIDENCE`/`BELOW_MIN_VECTOR_SIMILARITY` โดยเก็บ candidate ไว้ classifier GENERAL → general chat, BUSINESS → grounded answer บน candidate เดิม ความมั่นใจคิดจาก vector ของหลักฐานที่ถูกเลือกส่งให้โมเดลจริง (`selectedItems`) ไม่ใช่ candidate ใดก็ได้ (แก้ 8 พ.ย. 2026) BM25 ไม่ใช้ตัดสินความมั่นใจเพราะคำเดียวที่ซ้ำ FAQ ก็ได้คะแนนสูง ค่า 0.75 วัดบน gemini-embedding-2 (คุยเล่น 0.56–0.71, คำถาม KB median 0.80) ต้องวัดใหม่เมื่อเปลี่ยน embedding model; `MIN_CONTEXT_SCORE` 0.6 ของ admin embedding diagnostics ยังเป็นค่าเดิม
 
 | ขั้น | Service entry | Input → output / side effects |
 |---|---|---|
 | HTTP | `LineController.handleWebhook` | `{destination,events[]}` → `{ok:true}`; raw HMAC checked, ingress Redis limit, queue jobId=webhookEventId; body ปัจจุบันเป็น TS type ไม่ใช่ runtime Zod DTO |
-| Worker | `LineEventsProcessor.process/processRetry` | `Job<{event}>`; ban/burst/hourly/spam → DB claim; Promise tail แยก user ภายใน instance |
+| Worker | `ChatEventsProcessor` (worker เดียวของคิว `chat-events`) → `LineEventsProcessor.process/processRetry` | `Job<{event}>`; ban/burst/hourly/spam → DB claim; Promise tail แยก user ภายใน instance |
 | Claim/recovery | `LineWebhookService.claimWebhookEvent` | event → owner UUID/null; 120s lease, heartbeat 30s, max 5 claims; recovery ทุก 15s |
 | Inbound | `saveIncomingEvent` | event → `{conversationId,lineMemberId}`; unique lineMessageId กัน history/unread ซ้ำ; first contact เรียก profile API |
 | Core | `ChatbotService.handleTextMessage` | ChatRequest → ChatResponse; mute ให้ empty/EXCLUDE; input default max1000 characters; router เป็นผู้ตัดสิน action |
@@ -59,6 +59,8 @@ Vector confidence gate (ตั้งแต่ 2026-10-02): RAG ข้าม clas
 | Outbox | `LineWebhookService.processEvent` | ChatResponse → upsert LineDelivery.key=webhookEventId; CLEAR context ก่อน persistence; verify lease owner |
 | Delivery | `LineDeliveryService.deliver/finalize` | durable row → claim → check mute → REPLY/PUSH → ACCEPTED → unique deliveryId history + context append; repeat repair ไม่ส่งซ้ำ |
 | Admin PUSH | `sendAdminMessage` → delivery | key ใช้ admin/conversation/clientRequestId ถ้ามี; mute ทุก actual attempt; accepted admin PUSH เปิด waiting_admin เป็น open ใน transaction |
+
+ช่องอื่นนอกจาก LINE (App, Facebook Messenger) เข้า `MessageProcessorService` ตัวเดียวกันผ่าน channel gateway (`src/modules/channels/`, ตาราง `channel*`) ดู [channel-gateway-current.md](channel-gateway-current.md) ส่วน routing/RAG/answer/billing ด้านล่างใช้ร่วมกันทุกช่อง ต่างกันแค่ `ChatRequest.channel` ซึ่งกำหนดว่าสมัครสมาชิกได้ไหม (LINE เท่านั้น) และ Product RAG ทำงานเฉพาะเมื่อมี `lineMemberId` (LINE เท่านั้น)
 
 REPLY ใช้ token เมื่อ deadline timestamp+50s ยังไม่ผ่าน; invalid token แบบชัดเจนจึง fallback PUSH ได้ ambiguous REPLY acceptance เป็น UNKNOWN; PUSH ใช้ retryKey คงเดิม, retry สูงสุด 8 attempts และหยุดเมื่อ key อายุใกล้ 23h; delivery recovery ทุก 5s อ่านสูงสุด 20 rows ไม่อ้างว่า ledger success = LINE delivered เพราะเป็นคนละสถานะ
 
@@ -74,9 +76,12 @@ REPLY ใช้ token เมื่อ deadline timestamp+50s ยังไม่�
 | No evidence หรือ vector top < 0.75 → BUSINESS | 1 | 2: classifier แล้ว grounded answer (หรือ fallback ถ้าไม่มี candidate) |
 | No evidence หรือ vector top < 0.75 → GENERAL | 1 | 2: classifier แล้ว general answer |
 | LOW → BUSINESS | 1 ตามเส้นทางค้นปกติ | 1 classifier |
+| LOW → BUSINESS และ classifier ส่ง `standaloneQuery` ที่ต่างจากข้อความเดิม | +1 (ค้นซ้ำรอบเดียวผ่าน `retrieve`) | 2: classifier แล้ว grounded answer |
+| RAG → โมเดลตอบ `NOT_BUSINESS` → general | 1 หรือ 0 ตาม retrieval | 2: grounded แล้ว general (เฉพาะ route `RAG` ที่ source เป็น CACHE/DATABASE/EMBEDDING) |
 | LOW → GENERAL | 1 ตามเส้นทางค้นปกติ | 2: classifier แล้ว answer |
 | Missing reference | 0 | 0, CLARIFY |
-| RAG sentinel | 1 หรือ 0 ตาม retrieval | 1 แล้ว handoff, ไม่วน classifier |
+| RAG sentinel | 1 หรือ 0 ตาม retrieval | 1 แล้ว handoff (`SYSTEM/EXCLUDE`), ไม่วน classifier |
+| RAG ตอบบางคำถาม (`unanswered` ไม่ว่าง) | 1 หรือ 0 ตาม retrieval | 1: ตอบส่วนที่มีหลักฐาน + ข้อความคงที่ + `requestAdmin`, `INCLUDE` |
 | Image | 0 | 1 safety JSON + answer |
 | Menu/contact/cancel/sticker deterministic | 0 | 0 |
 
@@ -124,7 +129,10 @@ AiGenerateRequest = {
   messages: {role: 'user'|'assistant'; text: string; images?: unknown[]}[];
   temperature?: number; maxOutputTokens?: number;
 };
+AiGenerateResponse = { text; provider; model; usage; providerRequestId?; finishReason?: 'stop'|'length'|'other' };
 ```
+
+`finishReason` มาจาก OpenRouter `finish_reason` และ Gemini `candidates[0].finishReason` (`length` = output ถูกตัดที่ `maxOutputTokens`) ไม่มีค่า = ไม่รู้ ไม่ใช่ "ไม่ถูกตัด" และถูกเก็บในผลที่ billing replay ด้วย Admin chat ตั้ง `maxOutputTokens` 2000 เอง (ลูกค้าใช้ค่า default) และเตือนใน log เมื่อถูกตัด
 
 Shapes ด้านบนย่อเพื่ออ่าน flow; enum/optional fields ฉบับเต็มอยู่ [chat.types.ts](../src/modules/chatbot/types/chat.types.ts) และ [ai-provider.types.ts](../src/ai-provider/types/ai-provider.types.ts)
 
@@ -269,7 +277,7 @@ Source: [line.controller.ts](../src/modules/line/line.controller.ts), [processor
 | LineController.handleWebhook | body.events → ตัด event ไม่มี webhookEventId, consume ingress limit, queue.add แต่ละ event → {ok:true}; เกิน limit โยน503 |
 | LineEventsProcessor.onModuleInit / onModuleDestroy | ตั้ง/ยกเลิก recovery timer15s |
 | recover | ถ้าไม่กำลัง recovery → recoverableWebhookEvents → retryQueue.add ด้วย recovery jobId → void |
-| process | job → processQueuedJob(false); transient provider failure → enqueue retry queue → void |
+| process | job → processQueuedJob(false); transient provider failure → enqueue job `retry-line-event` ในคิวเดียวกัน (attempts 3, backoff 2s) → void |
 | processRetry | job → processQueuedJob(true); non-retryable error → UnrecoverableError |
 | processQueuedJob | job.source.userId → ต่อ Promise tail ใน Map ต่อ user → processInOrder; finally ล้าง tail ที่จบ |
 | processInOrder | passesAbuseChecks → claimWebhookEvent → ถ้า claim สำเร็จ ตั้ง heartbeat30s → processEvent → finishWebhookEvent; error finish ด้วย RETRY แล้ว rethrow |
@@ -305,23 +313,22 @@ Source: [ChatbotService](../src/modules/chatbot/chatbot.service.ts), [IntentRout
 | handleTextMessage | ChatRequest → isMuted, get session, trim/length gate → router.resolve → switch action → ChatResponse |
 | RuleIntentService.detect | text → deterministic menu/keyword rules → {intent,confidence,source:'RULE',reason}; ไม่เรียก DB/provider |
 | IntentRouterService.resolve | input/session/history/usage IDs → cancel → active workflow boundary → greeting/inquiry opener → high-confidence rule → retrieval; missing info→CLARIFY, conflict/error→CONTACT_ADMIN, DIRECT/RAG→ANSWER_KNOWLEDGE, LOW→resolveLowConfidence |
-| resolveLowConfidence | input/history/usage IDs → classifyLowConfidence → GENERAL_QUESTION; BUSINESS + low-confidence candidates → ANSWER_KNOWLEDGE; BUSINESS ไม่มีหลักฐานหรือ classifier failed → CONTACT_ADMIN |
+| resolveLowConfidence | input/history/usage IDs → classifyLowConfidence → GENERAL_QUESTION; BUSINESS + `standaloneQuery` ที่ต่างจากข้อความเดิม → `retrieve` อีกรอบ (`disableProduct`, `forceGrounded`, ไม่มี history) แล้วเลือกผลที่ `evidenceStrength` สูงกว่า (เท่ากัน = ใช้ผลรอบใหม่; รอบใหม่ไม่เจอ = ใช้รอบแรก); BUSINESS + มีหลักฐาน → ANSWER_KNOWLEDGE (`resolvedQuery` = query ที่ใช้ค้น, โมเดลตอบจากข้อความเดิมของลูกค้า); BUSINESS ไม่มีหลักฐานหรือ classifier failed → CONTACT_ADMIN |
 | retrievalSource | retrieval.matchType + selected metadata → EMBEDDING/DATABASE/CACHE source |
 | logDecision | decision/retrieval → diagnostic log แล้วคืน decision เดิม |
-| classifyLowConfidence | input/context → budget.tryConsume; provider.generate ด้วย classifier prompt → strip JSON fence + parse/validate BUSINESS/GENERAL/confidence/reason → analysis; error/budget→BUSINESS confidence0 + failed=true; PendingAiUsageError rethrow |
+| classifyLowConfidence | input/context → budget.tryConsume; provider.generate ด้วย classifier prompt → strip JSON fence + parse/validate BUSINESS/GENERAL/confidence/reason → analysis; `standaloneQuery` (≤300 ตัวอักษร) และ `questions[]` (≤3, บันทึกใน trace เท่านั้น ยังไม่ค้นทีละข้อ) เป็นตัวช่วยค้น ถ้ารูปผิดจะถูกทิ้งโดยไม่ทำให้การจำแนกล้ม; error/budget→BUSINESS confidence0 + failed=true; PendingAiUsageError rethrow |
 | handleImageMessage | ImageChatRequest → mute check → answerImage → aiResponse(source AI) |
 | handleStickerMessage | hints/text → StickerIntentService.resolve → greeting/thanks/unknown template หรือส่ง TEXT กลับเข้า handleTextMessage |
 | response | text/source/contextPolicy → ChatResponse ไม่มี I/O |
 | aiResponse | AiAnswerResult + source → ChatResponse; isFallback=true→EXCLUDE ไม่เช่นนั้น INCLUDE |
-| contactAdminResponse | userId+businessFallback → requestAdmin; true→answerFallback ผ่าน fallbackResponse; false→contactAdmin template + RULE/CLEAR (ตอบทุกครั้ง) |
-| fallbackResponse | userId+text → requestAdmin; `ALREADY_WAITING`→ข้อความว่าง SYSTEM/CLEAR (ไม่ส่ง แต่ล้าง context เหมือน fallback ปกติ); อื่นๆ→text SYSTEM/CLEAR |
+| contactAdminResponse | userId+businessFallback → requestAdmin; true→answerFallback + SYSTEM/EXCLUDE; false (ลูกค้าขอคุยแอดมินเอง)→contactAdmin template + RULE/CLEAR |
 | answerKnowledge | message/context.retrieval? → ใช้ retrieval เดิมหรือ retrieve; safe DIRECT ANSWER_PATTERN ที่ไม่ REWRITE และ answer ไม่ว่าง → stored text; selectedItems มี→generateFromKnowledge; ไม่พบ→configured fallback |
 | answerGeneral | message/context → getActiveAiSetting → toAiProviderMessages → composeAiAnswerPrompt(ragContext=[]) → generateText |
 | answerFallback | getActiveAiSetting → {text:fallbackMessage,isFallback:true}; ไม่เรียก provider |
 | answerImage | image/context → settings+budget → bounded history + image → compose image rules → provider.generate → parseImageAnalysisResponse + isSafeImageAnalysis → answer/fallback |
 | getActiveAiSetting | trusted tenant → Prisma findFirst(active, updatedAt desc) → trim strings, parse skills/style defaults → AiRuntimeSetting; DB error ใช้ code defaults |
 | generateText | messages/systemInstruction/fallback/context → budget gate → provider.generate → trimmed text; empty/error→fallback; PendingAiUsageError rethrow |
-| generateFromKnowledge | selected items/message/setting/history → buildKnowledgeSystemInstruction → budget → provider.generate temperature0 → parse JSON askedAbout/directlyAnswered/decision/answer/evidenceIds; ANSWER ต้องมี directlyAnswered=true และอ้าง ID ใน selectedItems เท่านั้น, output อื่น fallback + handoff |
+| generateFromKnowledge | selected items/message/setting/history → buildKnowledgeSystemInstruction → budget → provider.generate temperature0 → parse JSON askedAbout/directlyAnswered/decision/answer/evidenceIds/unanswered; ANSWER ต้องมี directlyAnswered=true และต้องเหลือ ID ที่อยู่ใน selectedItems อย่างน้อย 1 รายการ (ID ที่ไม่รู้จักถูกตัดทิ้ง นับใน trace `droppedEvidenceIds`); `unanswered` ไม่ว่าง → ต่อ `PARTIAL_ANSWER_NOTE` ท้ายคำตอบ (ไม่แสดงข้อความของโมเดล) และคืน `handoff`; `NOT_BUSINESS` ใช้ได้เมื่อ `allowGeneralExit` เท่านั้น → `answerGeneral` (+1 generation); output อื่น fallback + handoff โดย reason แยก `TRUNCATED_OUTPUT` (JSON เสียและ `finishReason=length`), `NOT_BUSINESS_ON_BUSINESS_ROUTE` |
 | buildKnowledgeSystemInstruction | items/message/settings/history → composeAiAnswerPrompt พร้อม KNOWLEDGE_RULES และกฎตรวจความเพียงพอของหลักฐาน → string |
 
 Action executor:
@@ -348,7 +355,7 @@ Source: [retrieval](../src/modules/chatbot/knowledge/knowledge-retrieval.service
 | eligible | KnowledgeItem → active/scope/language/answer/nonfinite score checks + reject SNAPSHOT/test content → boolean |
 | directResult | candidate[] → ตรวจความขัดแย้งเฉพาะ exact FAQ → เลือก safeDirect ANSWER_PATTERN ที่ไม่ใช่ REWRITE เป็น DIRECT; REWRITE/ไม่มี direct candidate → unified retrieval |
 | rank | แยก AP BM25 / Micro BM25 / vector เป็น 3 lists → dedupe source:id ต่อ list → sum 1/(60+rank) → sort RRF/priority/key; content ของ DB lexical ชนะ vector เมื่อ source/id เดียวกัน |
-| selectContexts | ให้ related facts ก่อน, dedupe คำตอบเทียบเท่าของเรื่องเดียวกัน, ไม่เติมช่องด้วย unrelated vector-only neighbours; เก็บ whole items ไม่เกิน3/12000 characters |
+| selectContexts | anchor = อันดับ 1 เว้นแต่เป็น keyword ล้วนที่ไม่มี vector หนุน ให้ใช้ vector hit ที่ ≥ `KNOWLEDGE_RAG_MIN_VECTOR_SIMILARITY` สูงสุดแทน, ให้ related facts ก่อน, vector ที่ ≥ gate เข้า context ได้แม้ไม่ related (คำถามหลายประเด็น), keyword ล้วนชิ้นที่ 2+ ต้องมี IDF-weighted coverage ≥ `KNOWLEDGE_LEXICAL_MIN_COVERAGE` (default 0.5, 0 = ปิด, ชิ้นแรกยกเว้น), dedupe คำตอบเทียบเท่าของเรื่องเดียวกัน, ไม่เติมช่องด้วย unrelated vector-only neighbours ที่ต่ำกว่า gate; เก็บ whole items ไม่เกิน3/12000 characters |
 | related / conflicts | เทียบ entityKey/topicKey ก่อน แล้วใช้ shared question/title เมื่อ key ไม่ครบ; ตรวจ explicit conflicting flag และ polarity/numeric template เฉพาะ selected กับ related candidates; conditional assertions ข้าม → boolean |
 | assertion / sharedQuestion | answer→normalized polarity; questionExamples สอง items→normalized intersection → comparison helpers |
 | key / raw / tieBreak | item→source:id; metadata field→finite number/default0; priority/key→sort order |
@@ -359,17 +366,20 @@ Source: [retrieval](../src/modules/chatbot/knowledge/knowledge-retrieval.service
 | isExactMatch | normalized query + questionExamples → full equality และไม่ใช่ broad DIRECT word |
 | thaiTerms / bm25Scores | Intl.Segmenter('th') → weighted BM25 ต่อ corpus; ถ้าตรงกันเพียง function words/ตัวเลขให้คะแนน0; คำเชื่อม/ปฏิเสธ/คำถามยังอยู่ใน scoring เมื่อมี content term ตรงกัน; รายการ function words ตัดคำด้วย thaiTerms เดียวกับ query (เท่าไหร่ → เท่า + ไหร่) จึงไม่มี entry ที่ segmenter ไม่เคยสร้าง |
 | toKnowledgeItem | source row/score/exact/layer → content/answer/renderMode + metadata(rawScore/safeDirect/scope) |
-| MicroKnowledgeService.findMatches | query → active+scope DB rowsสูงสุด500 → shared findMatchesFromPatterns source MICRO_KNOWLEDGE |
-| cache.onModuleInit / onModuleDestroy | load snapshot + timer240s / clear timer |
+| MicroKnowledgeService.findMatches | query (+ snapshot rows ถ้ามี) → ไม่มี snapshot: active+scope DB rowsสูงสุด500 (layer DATABASE) / มี: ใช้แถวใน memory (layer CACHE) → shared findMatchesFromPatterns source MICRO_KNOWLEDGE |
+| cache.onModuleInit / onModuleDestroy | load snapshot + timer240s + subscribe ช่อง Redis `knowledge:changed` (ไม่ await, ล้มก็ใช้ TTL) / clear timer + ปิด subscriber |
 | cache.getAll | snapshot age≤TTL→entries; expired→start refresh แล้วคืน[] |
-| cache.refresh / doRefresh | share in-flight promise → read scoped active500 rows → replace entries+loadedAt; DB failureเก็บ snapshot/timeเดิม |
+| cache.snapshot | age≤TTL→{patterns, micro} ชุดเดียวกัน; expired/ยังไม่โหลด→null (ผู้เรียกอ่าน DB) และ `runRetrieval` ใช้ชุดนี้แทนการอ่าน answerPattern + microKnowledge จาก DB ทุกข้อความ (`routeSource` ของ lexical จึงเป็น CACHE) |
+| cache.refresh / doRefresh | share in-flight promise → read scoped active 500 แถวของ answerPattern **และ** microKnowledge พร้อมกัน → replace ทั้งคู่+loadedAt; ตารางใดล้มเก็บ snapshot/timeเดิมทั้งชุด; ถึง 500 แถวเตือน (log warn ครั้งเดียว) |
+| cache.changed | เรียกหลัง admin เขียน knowledge: รอ refresh ที่ค้างอยู่จบแล้วอ่านใหม่ (กัน snapshot ก่อนเขียน) → publish `knowledge:changed` ให้ instance อื่น reload; ไม่โยน error. Pub/sub ส่งครั้งเดียว ถ้าพลาด instance อื่นเห็นภายใน TTL 240s |
+| thaiTerms memo | `frequencies` ใน `thai-bm25.ts` จำผลตัดคำต่อแถวด้วย WeakMap (แถวใน snapshot คงตัวจนกว่าจะ refresh) |
 | SemanticSearchService.search | query/context → embedQuery หนึ่งครั้ง → parallel pattern/micro vector.search → map rows→KnowledgeItem[] with cosine metadata |
 | vector.search | values/model/limit/scope → parameterized pgvector cosine SQL + active/model/scope filters → typed row[] |
 | vector.upsert | db/tx+sourceId+values/model/active → INSERT ON CONFLICT sourceId UPDATE vector/model/active/updatedAt → void |
 | toVectorLiteral | number[] → PostgreSQL vector literal string |
 | AnswerPatternVectorRepository.coverage | LEFT JOIN pattern/vector → per-row active/model/updatedAt coverage rows |
 
-Matcher ส่งรายการที่ BM25>0 หรือ exact; hybrid layer ใช้ BM25≥0.1 และ cosine≥0.6 เป็น **candidate noise floors เท่านั้น** (exact REWRITE ผ่าน lexical floor) ไม่ได้ยืนยันว่ามีข้อมูลพอตอบ. RAG generation ต้องคืน JSON decision=ANSWER พร้อม evidenceIds ที่อยู่ใน selectedItems และคำตอบไม่ว่าง มิฉะนั้น fallback/handoff. การอ้าง ID ถูกต้องยังไม่พิสูจน์เชิงตรรกะว่าคำตอบรองรับครบ ต้องวัดกับชุดคำถามจริง. ค่า `KNOWLEDGE_LEXICAL_CANDIDATE_MIN_SCORE` เดิมที่ตั้งตามสเกล heuristic ต้องปรับเป็นสเกล BM25 ก่อน deploy. RRF top1 หนึ่ง list=1/61, top1สอง lists=2/61; score เป็นอันดับ ไม่ใช่ probability.
+Matcher ส่งรายการที่ BM25>0 หรือ exact; hybrid layer ใช้ BM25≥0.1 และ cosine≥0.6 เป็น **candidate noise floors เท่านั้น** (exact REWRITE ผ่าน lexical floor) ไม่ได้ยืนยันว่ามีข้อมูลพอตอบ. RAG generation ต้องคืน JSON decision=ANSWER พร้อม evidenceIds ที่เหลืออย่างน้อยหนึ่งรายการใน selectedItems (ID ที่ไม่รู้จักถูกตัดทิ้ง) และคำตอบไม่ว่าง มิฉะนั้น fallback/handoff. การอ้าง ID ถูกต้องยังไม่พิสูจน์เชิงตรรกะว่าคำตอบรองรับครบ ต้องวัดกับชุดคำถามจริง. BM25 relevance gate ไม่นับคำที่ ICU ตัดเป็นเศษหรือคำเติม (เช่น `ไหร่` จาก `เท่าไหร่`, `เมื่อ`, `มาก`, `เลย`, `จัง`) เป็นตัวสร้างความเกี่ยวข้อง (`FUNCTION_WORDS` ใน `thai-bm25.ts`; ใช้ร่วมกับ product search). ค่า `KNOWLEDGE_LEXICAL_CANDIDATE_MIN_SCORE` เดิมที่ตั้งตามสเกล heuristic ต้องปรับเป็นสเกล BM25 ก่อน deploy. RRF top1 หนึ่ง list=1/61, top1สอง lists=2/61; score เป็นอันดับ ไม่ใช่ probability.
 
 ## 8. Function flow: context, settings และ indexing
 
@@ -410,7 +420,7 @@ Knowledge admin controllers delegate list/count/create/update/remove/reindex; mu
 - patchKeywords → normalize remove/add, dedupe, max100; conflict input ถูก validate โดย DTO
 - remove → deleteMany source; vector ถูก cascade → {deleted:true}
 - reindex → read scope rows → embed/upsert ทีละ row → {indexed,failed:[{id,reason}]}
-- AnswerPattern create/update/remove รอ cache.refresh ก่อนคืนผล; MicroKnowledge ไม่มี in-memory snapshot
+- AnswerPattern และ MicroKnowledge create/update/remove (createMany ครั้งเดียวต่อชุด) รอ cache.changed ก่อนคืนผล; MicroKnowledge อยู่ใน snapshot ใน memory ชุดเดียวกับ AnswerPattern (reindex ไม่เรียก changed เพราะไม่เปลี่ยนแถว)
 - buildAnswerPatternDocument/buildMicroKnowledgeDocument รวมข้อความตาม field order คงที่ก่อน embedding; micro เพิ่ม entityKey/topicKey
 
 ## 9. Function flow: provider, embedding และ accounting
@@ -467,7 +477,7 @@ Provider acceptance, billing settlement และ LINE delivery acceptance เ�
 6. processEvent สร้าง LineDelivery.context={conversationId,eventId,userText,response,createdAt}; deliver ส่ง text
 7. accept/finalize เก็บ SYSTEM history แล้ว appendTurn ใส่ context สำหรับคำถามต่อไป
 
-ถ้า retrieval เป็น LOW: classifier คืน {classification:'GENERAL',confidence,...} → router GENERAL_QUESTION → answerGeneral เรียกอีกหนึ่ง generation; BUSINESS→requestAdmin+fallback, CLEAR. ถ้า RAG ส่ง INSUFFICIENT_CONTEXT หรือ fallback อื่น → aiResponse ทำ requestAdmin + SYSTEM/CLEAR โดยไม่กลับเข้า classifier
+ถ้า retrieval เป็น LOW: classifier คืน {classification:'GENERAL',confidence,...} → router GENERAL_QUESTION → answerGeneral เรียกอีกหนึ่ง generation; BUSINESS→requestAdmin+fallback, EXCLUDE. ถ้า RAG ส่ง INSUFFICIENT_CONTEXT หรือ fallback อื่น → aiResponse ทำ requestAdmin + SYSTEM/EXCLUDE โดยไม่กลับเข้า classifier (ยกเว้น `NOT_BUSINESS` บน route `RAG` ที่ไม่ผ่าน classifier ซึ่งไป answerGeneral)
 
 ### Core behavior (อัปเดต 2026-09-30)
 

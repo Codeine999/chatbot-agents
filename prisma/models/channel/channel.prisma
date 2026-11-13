@@ -1,8 +1,10 @@
 /// Non-LINE chat channels. LINE keeps its own tables (lineMember, lineConversation, ...).
 /// Add a value here (ALTER TYPE ... ADD VALUE) when a new channel such as
-/// Facebook or Shopee is wired in.
+/// TikTok or Shopee is wired in; keep it equal to the `channel` rows of
+/// src/shared/channel/channel-kinds.ts.
 enum ChatChannel {
   APP
+  FACEBOOK
 }
 
 enum ChannelMessageSender {
@@ -18,6 +20,8 @@ model ChannelContact {
   companyId   String      @db.Uuid
   company     Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
   channel     ChatChannel
+  /// The platform's own id for this person (Facebook PSID). Null for APP guests.
+  externalUserId String?  @db.VarChar(255)
   displayName String?     @db.VarChar(100)
   /// Client-supplied extras. Untrusted: never put it into a prompt.
   metadata    Json?
@@ -32,6 +36,7 @@ model ChannelContact {
   conversation ChannelConversation?
   messages     ChannelMessage[]
 
+  @@unique([companyId, channel, externalUserId])
   @@index([customerId])
   @@index([createdAt])
   @@map("channelContacts")
@@ -101,8 +106,17 @@ model ChannelMessage {
   clientMessageId String?             @db.VarChar(64)
   /// A bot reply points back at its inbound message 1:1 (no FK on purpose; the unique index prevents duplicates).
   replyToId      String?              @unique @db.Uuid
-  /// Inbound: PROCESSING | ANSWERED | NO_REPLY. Outbound: SENT.
+  /// Inbound: PROCESSING | ANSWERED | NO_REPLY.
+  /// Outbound: SENT, or on a push channel PENDING → SENDING → SENT | FAILED.
   status         String               @db.VarChar(20)
+  /// Platform message id: inbound = webhook dedup key, outbound = id the
+  /// platform returned on acceptance. Null on APP.
+  externalMessageId String?           @db.VarChar(255)
+  /// Push channels only: send attempts, lease of the current attempt (a
+  /// crashed SENDING can be claimed again after it), last error code.
+  deliveryAttempts   Int              @default(0)
+  deliveryLeaseUntil DateTime?
+  lastError          String?          @db.VarChar(200)
   /// AI | KNOWLEDGE | RULE | SYSTEM | REGISTRATION (ChatResponse.source)
   source         String?              @db.VarChar(20)
   sentByAdminId  String?              @db.Uuid
@@ -115,6 +129,7 @@ model ChannelMessage {
   createdAt      DateTime             @default(now())
 
   @@unique([conversationId, clientMessageId])
+  @@unique([conversationId, externalMessageId])
   @@index([conversationId, createdAt, id])
   /// Used by the retention purge.
   @@index([createdAt])

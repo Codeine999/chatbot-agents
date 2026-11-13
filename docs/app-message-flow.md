@@ -24,6 +24,11 @@
 
 error ของ guest: `{ code, message, retryAfterSec? }` + `Retry-After` · ยกเว้น JSON เสียและ body เกิน 16KB ที่ Fastify ตัดก่อนถึง controller (`{ statusCode, message }`, ไม่มีรายละเอียดภายใน)
 
+> ตั้งแต่ 9 พ.ย. 2026 ส่วนที่ใช้ร่วมกับช่องอื่นย้ายไป `src/modules/channels/` (ดู [channel-gateway-current.md](channel-gateway-current.md)):
+> `ChannelStoreAdapter` (แทน `AppChannelAdapter`), `ChannelStoreHandoff` (แทน `AppHandoffHandler`), inbox แอดมิน `ChannelInboxService/Controller`
+> (route เดิม `/api/admin/app-conversations` ยังใช้ได้ = `/api/admin/channels/app/conversations`), `channel-text.ts`, `channel-message.metadata.ts`
+> พฤติกรรมของ App ไม่เปลี่ยน: `userId`/`turnId` เดิม (`app:`), ตอบใน HTTP response, ไม่มี push
+
 ## 2. เส้นทางของข้อความ
 
 ```
@@ -35,7 +40,7 @@ POST /messages
       → สร้างห้องถ้ายังไม่มี → clientMessageId เคยตอบแล้ว? คืนผลเดิม
       → lock ห้อง (activeTurnId = id ของข้อความ, หมดอายุ 120 วิ) ไม่ได้ = 409 BUSY
       → transaction: ข้อความขาเข้า + unread+1 (ครั้งเดียวต่อ clientMessageId)
- → MessageProcessorService.process(event, AppChannelAdapter, claim = id ของข้อความ)   ← ตัวเดียวกับ LINE
+ → MessageProcessorService.process(event{channel:'APP'}, ChannelStoreAdapter, claim = id ของข้อความ)   ← ตัวเดียวกับ LINE/Facebook
       ChatbotService.handleTextMessage(channel:'APP') → saveReply (transaction: ยัง lock อยู่ไหม + mute → คำตอบ + ปิดขาเข้า)
       → deliver = append context
  → ปลด lock → response จาก DB
@@ -56,7 +61,7 @@ POST /messages
 | Redis ล่ม | ผ่าน (fail open) | 503 (fail closed) |
 | สมัครสมาชิก | ได้ | ปิด (`registerUnavailable`) |
 | Product RAG | ใช้เมื่อมี `lineMemberId` | ข้าม |
-| ขอคุยแอดมิน | `requestAdmin` หา `lineConversation` | `ChannelHandoffRegistry` → `AppHandoffHandler` (prefix `app:`) |
+| ขอคุยแอดมิน | `requestAdmin` หา `lineConversation` | `ChannelHandoffRegistry` → `ChannelStoreHandoff` (prefix `app:`) |
 | ประวัติ | `line*` | `channel*` · **ลบหลัง `APP_HISTORY_RETENTION_DAYS` (7)** |
 
 ## 4. ข้อมูลและ retention
@@ -86,7 +91,7 @@ POST /messages
 
 ## 6. จุดที่แก้ core (ค่าเริ่มต้น = พฤติกรรมเดิม)
 
-- `ChatRequest.channel?: 'LINE'|'APP'` → `ChatbotService.canRegister(preview, channel)`
+- `ChatRequest.channel?: ChatChannelKind` (ไม่ใส่ = LINE) → `ChatbotService.canRegister` อ่าน `CHANNEL_KINDS[channel].registration` (`src/shared/channel/channel-kinds.ts`)
 - `ChannelHandoffRegistry` + `UserSessionService.requestAdmin` ส่งต่อ userId ที่มี prefix ของช่องอื่น
 - `UserSessionService.mute(userId, mode, ttlSec?)` รับ TTL แบบ optional (ค่าเริ่มต้นเดิม) ให้ pause อยู่ได้นาน
 - `NotificationService.notifyChannelAdminRequired` (ใหม่) + `channel` ใน metadata ของ notification

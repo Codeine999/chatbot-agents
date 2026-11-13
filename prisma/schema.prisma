@@ -138,6 +138,7 @@ model Company {
   richMenuTemplates RichMenuTemplate[]
   richMenuReplies   RichMenuReply[]
   lineChannel       LineChannel?
+  facebookChannel   FacebookChannel?
 
   channelContacts      ChannelContact[]
   appGuestSessions     AppGuestSession[]
