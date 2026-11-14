@@ -6,11 +6,11 @@ import {
 } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { RichMenuReplyCacheService } from '../../chatbot/menu/rich-menu-reply-cache.service';
-import type { ChatResponse } from '../../chatbot/shared/types/chat.types';
+import type { ChatResponse } from '../../../shared/contracts/chat.types';
 import type {
   ChannelAdapter,
   ChatTurn,
-} from '../../conversation/message/contracts/channel-adapter';
+} from '../../../shared/contracts/channel-adapter';
 import type {
   LineMessageEvent,
   LinePostbackEvent,

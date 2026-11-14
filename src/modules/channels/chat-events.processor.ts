@@ -2,23 +2,23 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job, UnrecoverableError } from 'bullmq';
-import { ChannelEventsProcessor } from '../../channels/core/channel-events.processor';
+import { ChannelEventsProcessor } from './core/channel-events.processor';
 import {
   CHANNEL_EVENT_JOB,
   type ChannelEventJobData,
-} from '../../channels/core/channel-events.queue';
-import { LineEventsProcessor } from '../../channels/line/worker/line-events.processor';
+} from './core/channel-events.queue';
+import { LineEventsProcessor } from './line/worker/line-events.processor';
 import {
   LINE_EVENT_JOB,
   LINE_EVENT_RETRY_JOB,
   type LineEventJobData,
-} from '../../channels/line/worker/line-events.queue';
+} from './line/worker/line-events.queue';
 import {
   CHAT_EVENTS_CONCURRENCY,
   CHAT_EVENTS_QUEUE,
   CHAT_EVENTS_RATE_LIMIT,
   chatEventsWorkerSettings,
-} from './chat-events.queue';
+} from '../conversation/queue/chat-events.queue';
 
 /**
  * The only worker of the shared queue. It owns concurrency and the rate

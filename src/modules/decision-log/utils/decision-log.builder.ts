@@ -3,7 +3,7 @@ import type {
   ChatResponse,
   KnowledgeItem,
   KnowledgeRetrievalResult,
-} from '../../chatbot/shared/types/chat.types';
+} from '../../../shared/contracts/chat.types';
 import type {
   DecisionAnswerType,
   DecisionCandidate,

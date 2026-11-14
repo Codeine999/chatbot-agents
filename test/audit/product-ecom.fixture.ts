@@ -21,9 +21,9 @@ import type { FileStorageService } from '../../src/infra/storage/file-storage.se
 import { AiPricingCatalogService } from '../../src/modules/admin/pricing/ai-pricing-catalog.service';
 import { AiProviderSettingsService } from '../../src/modules/ai/ai-provider-settings.service';
 import type { AiProviderName } from '../../src/ai-provider/types/ai-provider.types';
-import { EmbeddingService } from '../../src/modules/ai/embeding/embedding.service';
-import { AnswerPatternVectorRepository } from '../../src/modules/ai/embeding/answer-pattern-vector.repository';
-import { MicroKnowledgeVectorRepository } from '../../src/modules/ai/embeding/micro-knowledge-vector.repository';
+import { EmbeddingService } from '../../src/modules/ai/embedding/embedding.service';
+import { AnswerPatternVectorRepository } from '../../src/modules/ai/embedding/answer-pattern-vector.repository';
+import { MicroKnowledgeVectorRepository } from '../../src/modules/ai/embedding/micro-knowledge-vector.repository';
 import { AnswerPatternCacheService } from '../../src/modules/knowledge/answer-pattern-cache.service';
 import { AdminKnowledgePatternService } from '../../src/modules/admin/knowledge/admin-knowledge-pattern.service';
 import { AdminKnowledgeMicroService } from '../../src/modules/admin/knowledge/admin-knowledge-micro.service';
@@ -35,7 +35,7 @@ import { InventoryService } from '../../src/modules/products/inventory.service';
 import { ProductIndexService } from '../../src/modules/products/search/product-index.service';
 import type { CreateProductDto } from '../../src/modules/products/dto/product.dto';
 import { ConfigService } from '@nestjs/config';
-import { DEFAULT_SYSTEM_PROMPT } from '../../src/modules/chatbot/shared/prompt/ai-chat.constants';
+import { DEFAULT_SYSTEM_PROMPT } from '../../src/modules/ai/prompt/ai-chat.constants';
 
 export const STORE_NAME = 'Mira Closet';
 export const FALLBACK_MESSAGE =

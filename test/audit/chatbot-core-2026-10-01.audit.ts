@@ -22,14 +22,14 @@ import type {
   ChatContextMessage,
   KnowledgeRetrievalResult,
   RouteDecision,
-} from '../../src/modules/chatbot/shared/types/chat.types';
+} from '../../src/shared/contracts/chat.types';
 import { resolveRetrievalQuery } from '../../src/modules/knowledge/retrieval-query-planner.service';
-import { CLARIFY_MESSAGE } from '../../src/modules/knowledge/knowledge-routing.constants';
+import { CLARIFY_MESSAGE } from '../../src/shared/knowledge/knowledge-routing.constants';
 import { thaiTerms } from '../../src/shared/text/thai-bm25';
 import { redactPii } from '../../src/utils/text.utils';
 import { AnswerPatternCacheService } from '../../src/modules/knowledge/answer-pattern-cache.service';
 import { LoadContextService } from '../../src/modules/chatbot/context/load-context.service';
-import { toAiProviderMessages } from '../../src/modules/chatbot/context/ai-provider-context';
+import { toAiProviderMessages } from '../../src/modules/ai/prompt/ai-provider-context';
 
 const outputDir = resolve(
   __dirname,

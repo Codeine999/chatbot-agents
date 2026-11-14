@@ -1,12 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AnswerPatternVectorRepository } from '../ai/embeding/answer-pattern-vector.repository';
-import { EmbeddingService } from '../ai/embeding/embedding.service';
-import type { EmbeddingUsageContext } from '../ai/embeding/embedding.service';
-import { MAX_RETRIEVAL_CANDIDATES } from './knowledge-routing.constants';
-import { KnowledgeItem } from '../chatbot/shared/types/chat.types';
-import { MicroKnowledgeVectorRepository } from '../ai/embeding/micro-knowledge-vector.repository';
-import { knowledgeScope, KnowledgeScope } from './utils/knowledge-scope';
+import { AnswerPatternVectorRepository } from '../ai/embedding/answer-pattern-vector.repository';
+import { EmbeddingService } from '../ai/embedding/embedding.service';
+import type { EmbeddingUsageContext } from '../ai/embedding/embedding.service';
+import { MAX_RETRIEVAL_CANDIDATES } from '../../shared/knowledge/knowledge-routing.constants';
+import { KnowledgeItem } from '../../shared/contracts/chat.types';
+import { MicroKnowledgeVectorRepository } from '../ai/embedding/micro-knowledge-vector.repository';
+import {
+  knowledgeScope,
+  KnowledgeScope,
+} from '../../shared/knowledge/knowledge-scope';
 import { logBlock, logSafeText, redactPii } from '../../utils/text.utils';
 import type { EmbeddingResult } from '../../infra/embedding/embedding-adapter.interface';
 

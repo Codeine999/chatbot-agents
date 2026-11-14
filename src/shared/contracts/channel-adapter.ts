@@ -3,7 +3,7 @@ import type {
   ChatResponse,
   ImageChatRequest,
   StickerChatRequest,
-} from '../../../chatbot/shared/types/chat.types';
+} from './chat.types';
 
 /** Worker-local input, after channel authentication and inbound persistence.
  * Never accept this contract directly from an HTTP request. Identity and

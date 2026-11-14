@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type { StoredChannelKind } from '../../../shared/channel/channel-kinds';
-import type { ChatResponse } from '../../chatbot/shared/types/chat.types';
+import type { ChatResponse } from '../../../shared/contracts/chat.types';
 import { MessageProcessorService } from '../../conversation/message/message-processor.service';
 import type { InboundMessage } from './channel-connector';
 import {

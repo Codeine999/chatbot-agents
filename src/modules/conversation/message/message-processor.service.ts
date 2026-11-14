@@ -4,12 +4,12 @@ import { LoadContextService } from '../../chatbot/context/load-context.service';
 import type {
   ChatContextMessage,
   ChatResponse,
-} from '../../chatbot/shared/types/chat.types';
+} from '../../../shared/contracts/chat.types';
 import type {
   ChannelAdapter,
   ChatTurn,
   ConversationThread,
-} from './contracts/channel-adapter';
+} from '../../../shared/contracts/channel-adapter';
 import {
   DecisionTurnRecorder,
   type TurnOutcome,

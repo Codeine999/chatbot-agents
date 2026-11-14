@@ -14,9 +14,9 @@ import { AiProviderSettingsService } from '../../src/modules/ai/ai-provider-sett
 import { GeminiAiProvider } from '../../src/ai-provider/providers/gemini-ai.provider';
 import { OpenRouterProvider } from '../../src/ai-provider/providers/openrouter-ai.provider';
 import { GeminiEmbeddingAdapter } from '../../src/infra/embedding/gemini-embedding.adapter';
-import { AnswerPatternVectorRepository } from '../../src/modules/ai/embeding/answer-pattern-vector.repository';
-import { MicroKnowledgeVectorRepository } from '../../src/modules/ai/embeding/micro-knowledge-vector.repository';
-import { knowledgeScope } from '../../src/modules/knowledge/utils/knowledge-scope';
+import { AnswerPatternVectorRepository } from '../../src/modules/ai/embedding/answer-pattern-vector.repository';
+import { MicroKnowledgeVectorRepository } from '../../src/modules/ai/embedding/micro-knowledge-vector.repository';
+import { knowledgeScope } from '../../src/shared/knowledge/knowledge-scope';
 import { aiSettingTenantId } from '../../src/modules/ai/ai-setting/ai-setting-config';
 import { buildHarness } from '../../src/modules/chatbot/audit/core-chat.harness';
 import { isAiProviderName } from '../../src/ai-provider/types/ai-provider.types';
@@ -27,8 +27,8 @@ import type {
 import type {
   ChatContextMessage,
   KnowledgeRetrievalResult,
-} from '../../src/modules/chatbot/shared/types/chat.types';
-import { CLARIFY_MESSAGE } from '../../src/modules/knowledge/knowledge-routing.constants';
+} from '../../src/shared/contracts/chat.types';
+import { CLARIFY_MESSAGE } from '../../src/shared/knowledge/knowledge-routing.constants';
 import { redactPii } from '../../src/utils/text.utils';
 import { CASES, PII_PROBES, type Outcome } from './chatbot-answer.cases';
 

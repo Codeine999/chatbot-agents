@@ -11,7 +11,7 @@ import { aiSettingTenantId } from '../../ai/ai-setting/ai-setting-config';
 import {
   DEFAULT_FALLBACK_MESSAGE,
   DEFAULT_SYSTEM_PROMPT,
-} from '../../chatbot/shared/prompt/ai-chat.constants';
+} from '../../ai/prompt/ai-chat.constants';
 import {
   CreateAdminAiSettingDto,
   UpdateAdminAiSettingDto,

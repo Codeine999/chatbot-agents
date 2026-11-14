@@ -3,7 +3,7 @@ import type {
   IntentSource,
   KnowledgeRetrievalResult,
   RouteDecision,
-} from '../../shared/types/chat.types';
+} from '../../../../shared/contracts/chat.types';
 import { fromRule } from './intent.utils';
 
 /** A keyword rule at or above this confidence routes without AI. */

@@ -20,7 +20,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { AppMessageModule } from './modules/channels/app/app-message.module';
 import { DecisionLogModule } from './modules/decision-log/decision-log.module';
 import { ChannelGatewayModule } from './modules/channels/core/channel-gateway.module';
-import { ChatEventsWorkerModule } from './modules/conversation/queue/chat-events-worker.module';
+import { ChatEventsWorkerModule } from './modules/channels/chat-events-worker.module';
 import { FacebookModule } from './modules/channels/facebook/facebook.module';
 
 @Module({

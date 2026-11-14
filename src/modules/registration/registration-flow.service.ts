@@ -8,7 +8,7 @@ import {
   ConversationSession,
   UserSessionService,
 } from '../session/user-session.service';
-import { ReplyTemplateService } from '../chatbot/answer/answer-template.service';
+import { ReplyTemplateService } from '../../shared/templates/answer-template.service';
 import { RegistrationService } from './registration.service';
 import { RegisterParser } from './utils/register.parser';
 import { RegisterValidator } from './utils/register.validator';

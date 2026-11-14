@@ -2,14 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AnswerPattern } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { KnowledgeItem } from '../chatbot/shared/types/chat.types';
+import { KnowledgeItem } from '../../shared/contracts/chat.types';
 import { logBlock, logSafeText, normalizeText } from '../../utils/text.utils';
-import { MAX_RETRIEVAL_CANDIDATES } from './knowledge-routing.constants';
+import { MAX_RETRIEVAL_CANDIDATES } from '../../shared/knowledge/knowledge-routing.constants';
 import {
   inKnowledgeScope,
   knowledgeScope,
   KnowledgeScope,
-} from './utils/knowledge-scope';
+} from '../../shared/knowledge/knowledge-scope';
 import { bm25Match } from '../../shared/text/thai-bm25';
 import { isUsableKnowledge } from './utils/knowledge-answer.policy';
 

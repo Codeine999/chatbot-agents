@@ -8,7 +8,7 @@ import { AnswerPatternCacheService } from '../knowledge/answer-pattern-cache.ser
 import { SemanticSearchService } from '../knowledge/semantic-search.service';
 import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
 import { MicroKnowledgeService } from '../knowledge/micro-knowledge.service';
-import { MicroKnowledgeVectorRepository } from '../ai/embeding/micro-knowledge-vector.repository';
+import { MicroKnowledgeVectorRepository } from '../ai/embedding/micro-knowledge-vector.repository';
 import { ProductSearchModule } from '../products/search/product-search.module';
 import { CommerceAccessModule } from '../commerce/commerce-access.module';
 import { CommerceTurnService } from '../products/rag/commerce-turn.service';

@@ -5,7 +5,7 @@ import type { MicroKnowledgeService } from '../micro-knowledge.service';
 import type { SemanticSearchService } from '../semantic-search.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import { PendingAiUsageError } from '../../usage/billing/pending-ai-usage.error';
-import type { KnowledgeItem } from '../../chatbot/shared/types/chat.types';
+import type { KnowledgeItem } from '../../../shared/contracts/chat.types';
 import {
   configStub,
   makeItem,

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { IntentResult } from '../shared/types/chat.types';
+import { IntentResult } from '../../../shared/contracts/chat.types';
 import { DETECT_GREET } from './utils/detect-greet';
 import { isCancelKeyword } from './utils/cancel-keyword';
 

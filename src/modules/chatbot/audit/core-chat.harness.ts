@@ -13,9 +13,9 @@ import type { NotificationService } from '../../admin/notification/notification.
 import type { RegistrationFlowService } from '../../registration/registration-flow.service';
 import type { AiBudgetService } from '../../usage/rate-limit/ai-budget.service';
 import type { UsersAiProviderService } from '../../ai/users-ai-provider.service';
-import type { EmbeddingService } from '../../ai/embeding/embedding.service';
-import type { AnswerPatternVectorRepository } from '../../ai/embeding/answer-pattern-vector.repository';
-import type { MicroKnowledgeVectorRepository } from '../../ai/embeding/micro-knowledge-vector.repository';
+import type { EmbeddingService } from '../../ai/embedding/embedding.service';
+import type { AnswerPatternVectorRepository } from '../../ai/embedding/answer-pattern-vector.repository';
+import type { MicroKnowledgeVectorRepository } from '../../ai/embedding/micro-knowledge-vector.repository';
 import type { AnswerPatternCacheService } from '../../knowledge/answer-pattern-cache.service';
 import type { RichMenuReplyCacheService } from '../menu/rich-menu-reply-cache.service';
 import type { KnowledgeRecord } from '../../knowledge/answer-pattern.service';
@@ -31,7 +31,7 @@ import { AiChatService } from '../answer/answer.service';
 import { ChatbotService } from '../chatbot.service';
 import { UserSessionService } from '../../session/user-session.service';
 import { ChannelHandoffRegistry } from '../../session/channel-handoff.registry';
-import { ReplyTemplateService } from '../answer/answer-template.service';
+import { ReplyTemplateService } from '../../../shared/templates/answer-template.service';
 import { StickerIntentService } from '../intent/sticker-intent.service';
 
 export type VectorRow = {

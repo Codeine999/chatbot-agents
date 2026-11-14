@@ -1,4 +1,4 @@
-import type { ChatChannelKind } from '../../../../shared/channel/channel-kinds';
+import type { ChatChannelKind } from '../channel/channel-kinds';
 
 /** Runtime list so a rich menu button can be validated against it. */
 export const CHAT_INTENTS = [
@@ -218,9 +218,9 @@ export type KnowledgeItem = {
   metadata?: Record<string, unknown>;
 };
 
-import type { AiProviderImage } from '../../../../ai-provider/types/ai-provider.types';
-import type { LineAiUsageContext } from '../../../usage/billing/ai-usage.types';
+import type { AiProviderImage } from '../../ai-provider/types/ai-provider.types';
+import type { LineAiUsageContext } from '../../modules/usage/billing/ai-usage.types';
 import type {
   CatalogRef,
   ProductWorkflow,
-} from '../../../products/search/product-search.types';
+} from '../../modules/products/search/product-search.types';

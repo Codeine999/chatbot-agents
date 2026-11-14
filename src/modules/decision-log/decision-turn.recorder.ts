@@ -1,10 +1,10 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { CHANNEL_KINDS } from '../../shared/channel/channel-kinds';
-import type { ChatResponse } from '../chatbot/shared/types/chat.types';
+import type { ChatResponse } from '../../shared/contracts/chat.types';
 import type {
   ChatTurn,
   ConversationThread,
-} from '../conversation/message/contracts/channel-adapter';
+} from '../../shared/contracts/channel-adapter';
 import { DecisionLogService } from './decision-log.service';
 import { DecisionTraceService } from './decision-trace.service';
 import type { DecisionTraceMeta } from './types/decision-log.types';

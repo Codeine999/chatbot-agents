@@ -7,9 +7,9 @@ import {
 } from '@nestjs/common';
 import { AnswerPattern } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { EmbeddingService } from '../../ai/embeding/embedding.service';
-import { AnswerPatternVectorRepository } from '../../ai/embeding/answer-pattern-vector.repository';
-import { buildAnswerPatternDocument } from '../../ai/embeding/answer-pattern-document';
+import { EmbeddingService } from '../../ai/embedding/embedding.service';
+import { AnswerPatternVectorRepository } from '../../ai/embedding/answer-pattern-vector.repository';
+import { buildAnswerPatternDocument } from '../../ai/embedding/answer-pattern-document';
 import { AnswerPatternCacheService } from '../../knowledge/answer-pattern-cache.service';
 import {
   CreateAdminAnswerPatternDto,

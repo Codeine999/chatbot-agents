@@ -5,8 +5,11 @@ import {
   AnswerPatternService,
   type KnowledgeRecord,
 } from './answer-pattern.service';
-import { knowledgeScope, KnowledgeScope } from './utils/knowledge-scope';
-import { KnowledgeItem } from '../chatbot/shared/types/chat.types';
+import {
+  knowledgeScope,
+  KnowledgeScope,
+} from '../../shared/knowledge/knowledge-scope';
+import { KnowledgeItem } from '../../shared/contracts/chat.types';
 
 @Injectable()
 export class MicroKnowledgeService {

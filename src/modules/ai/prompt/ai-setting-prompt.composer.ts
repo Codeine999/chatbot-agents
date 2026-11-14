@@ -1,5 +1,5 @@
-import type { KnowledgeItem } from '../types/chat.types';
-import type { AiRuntimeSetting } from '../types/ai-runtime.types';
+import type { KnowledgeItem } from '../../../shared/contracts/chat.types';
+import type { AiRuntimeSetting } from './ai-runtime.types';
 
 export type AiAnswerPromptInput = Readonly<{
   setting: AiRuntimeSetting;

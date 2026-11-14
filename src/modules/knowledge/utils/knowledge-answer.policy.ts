@@ -1,4 +1,4 @@
-import type { KnowledgeItem } from '../../chatbot/shared/types/chat.types';
+import type { KnowledgeItem } from '../../../shared/contracts/chat.types';
 
 /** Archived/test snapshots cannot establish a current business fact. */
 export function isUsableKnowledge(

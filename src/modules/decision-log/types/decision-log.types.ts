@@ -1,7 +1,7 @@
 import type {
   KnowledgeRetrievalResult,
   RouteDecision,
-} from '../../chatbot/shared/types/chat.types';
+} from '../../../shared/contracts/chat.types';
 
 /** What kind of answer the turn produced, for grouping in analysis. */
 export const DECISION_ANSWER_TYPES = [

@@ -5,11 +5,11 @@ import type {
   AiRequestContext,
   AiAnswerResult,
   KnowledgeRetrievalResult,
-} from '../../chatbot/shared/types/chat.types';
-import type { AiRuntimeSetting } from '../../chatbot/shared/types/ai-runtime.types';
-import { composeAiAnswerPrompt } from '../../chatbot/shared/prompt/ai-setting-prompt.composer';
-import { toAiProviderMessages } from '../../chatbot/context/ai-provider-context';
-import { GENERAL_RULES } from '../../chatbot/shared/prompt/ai-chat.constants';
+} from '../../../shared/contracts/chat.types';
+import type { AiRuntimeSetting } from '../../ai/prompt/ai-runtime.types';
+import { composeAiAnswerPrompt } from '../../ai/prompt/ai-setting-prompt.composer';
+import { toAiProviderMessages } from '../../ai/prompt/ai-provider-context';
+import { GENERAL_RULES } from '../../ai/prompt/ai-chat.constants';
 import { buildProductAnswerPrompt } from './utils/prompt/product-answer-prompt';
 import {
   productAnswerSchema,

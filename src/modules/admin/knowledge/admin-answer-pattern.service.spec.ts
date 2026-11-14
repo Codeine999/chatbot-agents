@@ -1,8 +1,8 @@
 import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { EmbeddingService } from '../../ai/embeding/embedding.service';
+import { EmbeddingService } from '../../ai/embedding/embedding.service';
 import { AnswerPatternCacheService } from '../../knowledge/answer-pattern-cache.service';
-import { AnswerPatternVectorRepository } from '../../ai/embeding/answer-pattern-vector.repository';
+import { AnswerPatternVectorRepository } from '../../ai/embedding/answer-pattern-vector.repository';
 import { AdminAnswerPatternService } from './admin-knowledge-pattern.service';
 import { CreateAdminAnswerPatternDto } from './dto/admin-answer-pattern.dto';
 

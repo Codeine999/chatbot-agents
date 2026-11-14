@@ -6,13 +6,13 @@ import {
   type StoredChannelKind,
 } from '../../../shared/channel/channel-kinds';
 import { LoadContextService } from '../../chatbot/context/load-context.service';
-import type { ChatResponse } from '../../chatbot/shared/types/chat.types';
+import type { ChatResponse } from '../../../shared/contracts/chat.types';
 import type {
   ChannelAdapter,
   ChatTurn,
   ConversationThread,
   DeliveryReference,
-} from '../../conversation/message/contracts/channel-adapter';
+} from '../../../shared/contracts/channel-adapter';
 import { UserSessionService } from '../../session/user-session.service';
 import { ChannelConnectorRegistry } from './channel-connector.registry';
 import { buildReplyMetadata } from './channel-message.metadata';

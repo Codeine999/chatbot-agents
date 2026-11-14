@@ -6,7 +6,7 @@ import { RegisterValidator } from '../registration/utils/register.validator';
 import { ChatbotService } from './chatbot.service';
 import { RuleIntentService } from './intent/rule-intent.service';
 import { IntentRouterService } from './intent/intent-router.service';
-import { ReplyTemplateService } from './answer/answer-template.service';
+import { ReplyTemplateService } from '../../shared/templates/answer-template.service';
 import { ChannelHandoffRegistry } from '../session/channel-handoff.registry';
 import { UserSessionService } from '../session/user-session.service';
 import { AiModule } from './ai.module';

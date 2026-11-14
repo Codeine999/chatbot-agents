@@ -1,4 +1,7 @@
-import { ChatAction, ChatIntent } from '../../shared/types/chat.types';
+import {
+  ChatAction,
+  ChatIntent,
+} from '../../../../shared/contracts/chat.types';
 
 export type IntentRouteMapping = {
   action: ChatAction;

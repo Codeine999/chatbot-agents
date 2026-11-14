@@ -11,22 +11,22 @@ import type {
 import { AiBudgetService } from '../../usage/rate-limit/ai-budget.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { KnowledgeRetrievalService } from '../../knowledge/knowledge-retrieval.service';
-import { toAiProviderMessages } from '../context/ai-provider-context';
+import { toAiProviderMessages } from '../../ai/prompt/ai-provider-context';
 import {
   DEFAULT_FALLBACK_MESSAGE,
   DEFAULT_SYSTEM_PROMPT,
   GENERAL_RULES,
   KNOWLEDGE_RULES,
   PARTIAL_ANSWER_NOTE,
-} from '../shared/prompt/ai-chat.constants';
-import { INSUFFICIENT_CONTEXT } from '../../knowledge/knowledge-routing.constants';
+} from '../../ai/prompt/ai-chat.constants';
+import { INSUFFICIENT_CONTEXT } from '../../../shared/knowledge/knowledge-routing.constants';
 import {
   AiAnswerResult,
   AiRequestContext,
   KnowledgeAnswerContext,
   KnowledgeItem,
-} from '../shared/types/chat.types';
-import { AiRuntimeSetting } from '../shared/types/ai-runtime.types';
+} from '../../../shared/contracts/chat.types';
+import { AiRuntimeSetting } from '../../ai/prompt/ai-runtime.types';
 import { logBlock, logSafeText } from '../../../utils/text.utils';
 import {
   isSafeImageAnalysis,
@@ -38,7 +38,7 @@ import {
   aiResponseStyleSchema,
   parseAiSkills,
 } from '../../ai/ai-setting/ai-setting-config';
-import { composeAiAnswerPrompt } from '../shared/prompt/ai-setting-prompt.composer';
+import { composeAiAnswerPrompt } from '../../ai/prompt/ai-setting-prompt.composer';
 import { isUsableKnowledge } from '../../knowledge/utils/knowledge-answer.policy';
 import { ProductAnswerService } from '../../products/rag/product-answer.service';
 import { IMAGE_ANSWER_RULES } from './image/image-answer.rules';

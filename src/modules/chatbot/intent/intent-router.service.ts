@@ -11,7 +11,7 @@ import {
   KnowledgeRetrievalResult,
   RetrievalFallbackReason,
   RouteDecision,
-} from '../shared/types/chat.types';
+} from '../../../shared/contracts/chat.types';
 import { fromRule } from './utils/intent.utils';
 import {
   logBlock,

@@ -18,15 +18,15 @@ import {
   type ProductPlan,
   type ProductSearchResult,
 } from '../search/product-search.types';
-import { EmbeddingService } from '../../ai/embeding/embedding.service';
+import { EmbeddingService } from '../../ai/embedding/embedding.service';
 import type { EmbeddingResult } from '../../../infra/embedding/embedding-adapter.interface';
 import type {
   AiRequestContext,
   KnowledgeRetrievalResult,
   ChatContextMessage,
   RetrievalFallbackReason,
-} from '../../chatbot/shared/types/chat.types';
-import { toAiProviderMessages } from '../../chatbot/context/ai-provider-context';
+} from '../../../shared/contracts/chat.types';
+import { toAiProviderMessages } from '../../ai/prompt/ai-provider-context';
 import { redactPii } from '../../../utils/text.utils';
 import { stripJsonCodeFence } from '../../../utils/json.utils';
 import { rethrowPendingAiUsage } from '../../usage/billing/pending-ai-usage.error';

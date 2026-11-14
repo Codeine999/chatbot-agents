@@ -3,7 +3,7 @@ import type { KnowledgeRecord } from '../answer-pattern.service';
 import type {
   ChatContextMessage,
   KnowledgeItem,
-} from '../../chatbot/shared/types/chat.types';
+} from '../../../shared/contracts/chat.types';
 
 /** ConfigService ปลอม อ่านค่าจาก map ที่ส่งเข้ามา คีย์ที่ไม่ได้ตั้ง = undefined */
 export const configStub = (

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
-import type { KnowledgeScope } from '../../knowledge/utils/knowledge-scope';
+import type { KnowledgeScope } from '../../../shared/knowledge/knowledge-scope';
 import {
   AnswerPatternVectorRepository,
   SemanticSearchRow,

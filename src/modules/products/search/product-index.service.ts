@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { EmbeddingService } from '../../ai/embeding/embedding.service';
+import { EmbeddingService } from '../../ai/embedding/embedding.service';
 import { CommerceFeatureService } from '../../commerce/commerce-feature.service';
 import { ProductVectorRepository } from './product-vector.repository';
 import { buildProductDocument, productDocumentHash } from './product-document';

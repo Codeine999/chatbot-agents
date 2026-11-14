@@ -18,20 +18,23 @@ import {
   DEFAULT_LEXICAL_MIN_COVERAGE,
   DEFAULT_RAG_MIN_VECTOR_SIMILARITY,
   MAX_RAG_EVIDENCE_CHARACTERS,
-} from './knowledge-routing.constants';
+} from '../../shared/knowledge/knowledge-routing.constants';
 import {
   ChatContextMessage,
   KnowledgeItem,
   KnowledgeMatchType,
   KnowledgeRetrievalResult,
   RetrievalFallbackReason,
-} from '../chatbot/shared/types/chat.types';
+} from '../../shared/contracts/chat.types';
 import { AnswerPatternCacheService } from './answer-pattern-cache.service';
 import { AnswerPatternService } from './answer-pattern.service';
 import { MicroKnowledgeService } from './micro-knowledge.service';
 import { SemanticSearchService } from './semantic-search.service';
 import { resolveRetrievalQuery } from './retrieval-query-planner.service';
-import { knowledgeScope, KnowledgeScope } from './utils/knowledge-scope';
+import {
+  knowledgeScope,
+  KnowledgeScope,
+} from '../../shared/knowledge/knowledge-scope';
 import type { LineAiUsageContext } from '../usage/billing/ai-usage.types';
 import { isUsableKnowledge } from './utils/knowledge-answer.policy';
 import { ProductRetrievalService } from '../products/rag/product-retrieval.service';

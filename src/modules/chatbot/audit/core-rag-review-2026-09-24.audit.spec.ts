@@ -9,7 +9,7 @@ import { Logger } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { AnswerPattern } from '../../../generated/prisma/client';
-import { EmbeddingService } from '../../ai/embeding/embedding.service';
+import { EmbeddingService } from '../../ai/embedding/embedding.service';
 import { PendingAiUsageError } from '../../usage/billing/pending-ai-usage.error';
 import { CreateAdminAnswerPatternDto } from '../../admin/knowledge/dto/admin-answer-pattern.dto';
 import { AnswerPatternCacheService } from '../../knowledge/answer-pattern-cache.service';

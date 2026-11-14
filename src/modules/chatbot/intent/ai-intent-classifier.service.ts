@@ -7,16 +7,16 @@ import { AiBudgetService } from '../../usage/rate-limit/ai-budget.service';
 import {
   AiRequestContext,
   LowConfidenceAnalysis,
-} from '../shared/types/chat.types';
+} from '../../../shared/contracts/chat.types';
 import { z } from 'zod';
-import { toAiProviderMessages } from '../context/ai-provider-context';
+import { toAiProviderMessages } from '../../ai/prompt/ai-provider-context';
 import { stripJsonCodeFence } from '../../../utils/json.utils';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { aiSettingTenantId } from '../../ai/ai-setting/ai-setting-config';
 import {
   LOW_CONFIDENCE_CLASSIFIER_SYSTEM_INSTRUCTION,
   lowConfidenceClassifierPrompt,
-} from '../shared/prompt/low-confidence-classifier.prompt';
+} from './low-confidence-classifier.prompt';
 
 const LOW_CONFIDENCE_FALLBACK: LowConfidenceAnalysis = {
   classification: 'BUSINESS',

@@ -1,7 +1,7 @@
 import { SemanticSearchService } from '../semantic-search.service';
-import type { AnswerPatternVectorRepository } from '../../ai/embeding/answer-pattern-vector.repository';
-import type { MicroKnowledgeVectorRepository } from '../../ai/embeding/micro-knowledge-vector.repository';
-import type { EmbeddingService } from '../../ai/embeding/embedding.service';
+import type { AnswerPatternVectorRepository } from '../../ai/embedding/answer-pattern-vector.repository';
+import type { MicroKnowledgeVectorRepository } from '../../ai/embedding/micro-knowledge-vector.repository';
+import type { EmbeddingService } from '../../ai/embedding/embedding.service';
 import { configStub } from './knowledge.fixtures';
 
 const embedding = { values: [0.1, 0.2], model: 'text-embedding-004' };

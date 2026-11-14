@@ -1,8 +1,8 @@
 import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { EmbeddingService } from '../../ai/embeding/embedding.service';
-import { MicroKnowledgeVectorRepository } from '../../ai/embeding/micro-knowledge-vector.repository';
+import { EmbeddingService } from '../../ai/embedding/embedding.service';
+import { MicroKnowledgeVectorRepository } from '../../ai/embedding/micro-knowledge-vector.repository';
 import { AdminKnowledgeMicroService } from './admin-knowledge-micro.service';
 import { CreateAdminMicroKnowledgeDto } from './dto/admin-micro-knowledge.dto';
 

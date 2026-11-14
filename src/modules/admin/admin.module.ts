@@ -20,7 +20,7 @@ import { AdminSysCategoryController } from './knowledge/admin-sys-category.contr
 import { AdminSysCategoryService } from './knowledge/admin-sys-category.service';
 import { AdminKnowledgeMicroController } from './knowledge/admin-knowledge-micro.controller';
 import { AdminKnowledgeMicroService } from './knowledge/admin-knowledge-micro.service';
-import { MicroKnowledgeVectorRepository } from '../ai/embeding/micro-knowledge-vector.repository';
+import { MicroKnowledgeVectorRepository } from '../ai/embedding/micro-knowledge-vector.repository';
 import { AdminAiSettingController } from './ai-setting/admin-ai-setting.controller';
 import { AdminAiSettingService } from './ai-setting/admin-ai-setting.service';
 import { StorageModule } from '../../infra/storage/storage.module';

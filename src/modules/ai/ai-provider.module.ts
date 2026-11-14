@@ -19,12 +19,12 @@ import { AI_PROVIDER_ADAPTERS } from '../../ai-provider/providers/ai-provider.re
 import type { AiProviderAdapter } from '../../ai-provider/providers/ai-provider.interface';
 import { AiBillingModule } from '../usage/billing/ai-billing.module';
 import { EmbeddingModule } from '../../infra/embedding/embedding.module';
-import { EmbeddingService } from './embeding/embedding.service';
-import { EmbeddingAdminService } from './embeding/embedding-admin.service';
-import { EmbeddingHealthService } from './embeding/embedding-health.service';
-import { AnswerPatternVectorRepository } from './embeding/answer-pattern-vector.repository';
-import { EmbeddingController } from './embeding/embedding.controller';
-import { EmbeddingHealthController } from './embeding/embedding-health.controller';
+import { EmbeddingService } from './embedding/embedding.service';
+import { EmbeddingAdminService } from './embedding/embedding-admin.service';
+import { EmbeddingHealthService } from './embedding/embedding-health.service';
+import { AnswerPatternVectorRepository } from './embedding/answer-pattern-vector.repository';
+import { EmbeddingController } from './embedding/embedding.controller';
+import { EmbeddingHealthController } from './embedding/embedding-health.controller';
 import { CompanyModule } from '../admin/company/company.module';
 
 const AI_PROVIDER_ADAPTER_CLASSES = [

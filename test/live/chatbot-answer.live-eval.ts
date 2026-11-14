@@ -26,13 +26,13 @@ import { AiChatService } from '../../src/modules/chatbot/answer/answer.service';
 import { IntentRouterService } from '../../src/modules/chatbot/intent/intent-router.service';
 import { UserSessionService } from '../../src/modules/session/user-session.service';
 import { UsersAiProviderService } from '../../src/modules/ai/users-ai-provider.service';
-import { EmbeddingService } from '../../src/modules/ai/embeding/embedding.service';
-import { CLARIFY_MESSAGE } from '../../src/modules/knowledge/knowledge-routing.constants';
+import { EmbeddingService } from '../../src/modules/ai/embedding/embedding.service';
+import { CLARIFY_MESSAGE } from '../../src/shared/knowledge/knowledge-routing.constants';
 import type {
   ChatContextMessage,
   ChatResponse,
   RouteDecision,
-} from '../../src/modules/chatbot/shared/types/chat.types';
+} from '../../src/shared/contracts/chat.types';
 import {
   CASES,
   PII_PROBES,

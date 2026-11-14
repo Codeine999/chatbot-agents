@@ -15,7 +15,10 @@ import type {
 } from '../../generated/prisma/client';
 import { REDIS_CLIENT } from '../../infra/redis/redis.module';
 import { PrismaService } from '../../prisma/prisma.service';
-import { knowledgeScope, KnowledgeScope } from './utils/knowledge-scope';
+import {
+  knowledgeScope,
+  KnowledgeScope,
+} from '../../shared/knowledge/knowledge-scope';
 
 /** Full records let a cache hit continue without another answer lookup. */
 export type AnswerPatternCacheEntry = AnswerPattern;

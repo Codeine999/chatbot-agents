@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import type {
   KnowledgeRetrievalResult,
   RouteDecision,
-} from '../chatbot/shared/types/chat.types';
+} from '../../shared/contracts/chat.types';
 import type {
   DecisionAnswerOutcome,
   DecisionStage,

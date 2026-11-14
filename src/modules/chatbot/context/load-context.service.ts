@@ -5,7 +5,7 @@ import {
   ChatContextMessage,
   ChatResponse,
   ChatResponseSource,
-} from '../shared/types/chat.types';
+} from '../../../shared/contracts/chat.types';
 import { redactPii } from '../../../utils/text.utils';
 import type { CatalogRef } from '../../products/search/product-search.types';
 import { z } from 'zod';

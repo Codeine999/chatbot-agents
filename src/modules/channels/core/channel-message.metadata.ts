@@ -1,4 +1,4 @@
-import type { ChatResponse } from '../../chatbot/shared/types/chat.types';
+import type { ChatResponse } from '../../../shared/contracts/chat.types';
 
 /** What clients and admins are told about a reply's origin. */
 export type PublicReplySource = 'AI' | 'KNOWLEDGE' | 'RULE' | 'SYSTEM';

@@ -1,7 +1,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UserSessionService } from '../session/user-session.service';
-import { ReplyTemplateService } from './answer/answer-template.service';
+import { ReplyTemplateService } from '../../shared/templates/answer-template.service';
 import { RegistrationFlowService } from '../registration/registration-flow.service';
 import { AiChatService } from './answer/answer.service';
 import { IntentRouterService } from './intent/intent-router.service';
@@ -14,12 +14,12 @@ import {
   ImageChatRequest,
   StickerChatRequest,
   AiAnswerResult,
-} from './shared/types/chat.types';
+} from '../../shared/contracts/chat.types';
 import { StickerIntentService } from './intent/sticker-intent.service';
 import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
 import { logBlock, logSafeText } from '../../utils/text.utils';
 import { isRegistrationEnabled } from '../registration/registration-feature';
-import { CLARIFY_MESSAGE } from '../knowledge/knowledge-routing.constants';
+import { CLARIFY_MESSAGE } from '../../shared/knowledge/knowledge-routing.constants';
 import { InsufficientCreditException } from '../usage/credit-point/insufficient-credit.exception';
 import { isCancelKeyword } from './intent/utils/cancel-keyword';
 import { DecisionTraceService } from '../decision-log/decision-trace.service';

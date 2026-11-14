@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { KnowledgeItem } from '../../chatbot/shared/types/chat.types';
+import type { KnowledgeItem } from '../../../shared/contracts/chat.types';
 import type {
   AttributeFact,
   CatalogRef,
