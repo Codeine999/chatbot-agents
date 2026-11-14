@@ -9,9 +9,10 @@ import { Queue } from 'bullmq';
 import { z } from 'zod';
 import { RateLimitService } from '../usage/rate-limit/rate-limit.service';
 import type { LineWebhookEvent } from './dto/line';
+import { CHAT_EVENTS_QUEUE } from '../events/queue/chat-events.queue';
 import {
   LINE_EVENT_JOB,
-  LINE_EVENTS_QUEUE,
+  LINE_EVENT_JOB_OPTIONS,
   type LineEventJobData,
 } from './line-events.queue';
 
@@ -113,7 +114,7 @@ export class LineWebhookAdapter {
 
   constructor(
     private readonly rateLimitService: RateLimitService,
-    @InjectQueue(LINE_EVENTS_QUEUE)
+    @InjectQueue(CHAT_EVENTS_QUEUE)
     private readonly queue: Queue<LineEventJobData>,
     config: ConfigService,
   ) {
@@ -144,7 +145,7 @@ export class LineWebhookAdapter {
         this.queue.add(
           LINE_EVENT_JOB,
           { event },
-          { jobId: event.webhookEventId },
+          { ...LINE_EVENT_JOB_OPTIONS, jobId: event.webhookEventId },
         ),
       ),
     );

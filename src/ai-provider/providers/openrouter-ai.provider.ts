@@ -17,6 +17,7 @@ import {
 } from '../utils/ai-provider.constants';
 import {
   AI_REASONING_EFFORTS,
+  type AiFinishReason,
   type AiGenerateResponse,
   type AiProviderGenerateRequest,
   type AiReasoningEffort,
@@ -36,6 +37,7 @@ type OpenRouterResponsePayload = {
     message?: {
       content?: string | Array<{ type?: string; text?: string }> | null;
     };
+    finish_reason?: string | null;
   }>;
   usage?: {
     prompt_tokens?: number;
@@ -139,8 +141,8 @@ export class OpenRouterProvider implements AiProviderAdapter {
         model: payload.model ?? request.model,
         usage: this.toUsage(payload),
         providerRequestId: payload.id,
+        finishReason: this.toFinishReason(payload.choices?.[0]?.finish_reason),
       };
-
     } catch (error) {
       if (error instanceof BadGatewayException) throw error;
       const apiError = error instanceof OpenAI.APIError ? error : undefined;
@@ -203,6 +205,15 @@ export class OpenRouterProvider implements AiProviderAdapter {
     // 404 NO_MATCHING_ENDPOINTS (GPT-6 and Claude 5.x do not accept it).
     if (!/^(?:google\/gemini|qwen\/)/i.test(model)) return {};
     return { temperature };
+  }
+
+  /** OpenRouter normalizes to stop | length | tool_calls | content_filter | error. */
+  private toFinishReason(
+    reason: string | null | undefined,
+  ): AiFinishReason | undefined {
+    if (reason === 'stop') return 'stop';
+    if (reason === 'length') return 'length';
+    return reason ? 'other' : undefined;
   }
 
   private reasoningParam(effort: AiReasoningEffort | undefined): {

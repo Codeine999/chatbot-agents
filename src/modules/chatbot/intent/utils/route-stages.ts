@@ -192,6 +192,27 @@ export function decideFromRetrieval(
   return null;
 }
 
+/**
+ * Ranks two retrieval results for the same turn: an exact question beats any
+ * vector hit, and no selected evidence loses to any evidence.
+ */
+export function evidenceStrength(
+  retrieval: KnowledgeRetrievalResult | undefined,
+): number {
+  const selected = retrieval?.selectedItems ?? [];
+  if (!selected.length) return -1;
+  if (selected.some((item) => item.metadata?.exactMatch === true)) return 2;
+  return Math.max(
+    0,
+    ...selected.map((item) => {
+      const similarity = item.metadata?.vectorSimilarity;
+      return typeof similarity === 'number' && Number.isFinite(similarity)
+        ? similarity
+        : 0;
+    }),
+  );
+}
+
 function retrievalSource(retrieval: KnowledgeRetrievalResult): IntentSource {
   if (retrieval.matchType === 'EMBEDDING' || retrieval.matchType === 'HYBRID') {
     return 'EMBEDDING';

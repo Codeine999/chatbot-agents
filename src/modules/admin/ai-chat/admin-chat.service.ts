@@ -21,6 +21,9 @@ const CONTEXT_MESSAGE_LIMIT = 20;
 const ROOM_TITLE_MAX_LENGTH = 60;
 const DEFAULT_ROOM_TITLE = 'New chat';
 
+/** Staff answers run longer than customer replies, which use the default cap. */
+const ADMIN_CHAT_MAX_OUTPUT_TOKENS = 2000;
+
 const ADMIN_CHAT_SYSTEM_INSTRUCTION =
   'You are an internal assistant for back-office admin staff. ' +
   'Answer clearly and concisely. You are talking to staff, not customers, ' +
@@ -198,6 +201,7 @@ export class AdminChatService {
         {
           systemInstruction: ADMIN_CHAT_SYSTEM_INSTRUCTION,
           messages: history,
+          maxOutputTokens: ADMIN_CHAT_MAX_OUTPUT_TOKENS,
         },
         { idempotencyKey: `admin-chat:${request.id}` },
       );
@@ -207,6 +211,11 @@ export class AdminChatService {
       );
       throw error;
     }
+
+    if (reply.finishReason === 'length')
+      this.logger.warn(
+        `Admin AI reply hit the ${ADMIN_CHAT_MAX_OUTPUT_TOKENS}-token cap room=${room.id}`,
+      );
 
     const generatedAt = new Date();
     const assistantCreatedAt =

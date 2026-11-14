@@ -15,6 +15,7 @@ import {
   RRF_RANK_CONSTANT,
   DEFAULT_VECTOR_CANDIDATE_MIN_SIMILARITY,
   DEFAULT_LEXICAL_CANDIDATE_MIN_SCORE,
+  DEFAULT_LEXICAL_MIN_COVERAGE,
   DEFAULT_RAG_MIN_VECTOR_SIMILARITY,
   MAX_RAG_EVIDENCE_CHARACTERS,
 } from '../shared/knowledge-routing.constants';
@@ -54,6 +55,7 @@ export class KnowledgeRetrievalService {
   private readonly scope: KnowledgeScope;
   private readonly vectorNoiseFloor: number;
   private readonly lexicalNoiseFloor: number;
+  private readonly lexicalMinCoverage: number;
   private readonly ragMinVectorSimilarity: number;
 
   constructor(
@@ -81,6 +83,14 @@ export class KnowledgeRetrievalService {
       .parse(
         config.get('KNOWLEDGE_LEXICAL_CANDIDATE_MIN_SCORE') ??
           DEFAULT_LEXICAL_CANDIDATE_MIN_SCORE,
+      );
+    this.lexicalMinCoverage = z.coerce
+      .number()
+      .min(0)
+      .max(1)
+      .parse(
+        config.get('KNOWLEDGE_LEXICAL_MIN_COVERAGE') ??
+          DEFAULT_LEXICAL_MIN_COVERAGE,
       );
     // Confidence gate on cosine similarity, also never compared with RRF.
     this.ragMinVectorSimilarity = z.coerce
@@ -185,10 +195,14 @@ export class KnowledgeRetrievalService {
       }
     };
 
+    // One in-memory snapshot serves both lexical sources. Without a fresh one
+    // (expired, or never loaded) the database is read as before.
+    const snapshot = this.cache.snapshot();
+
     const cached = await read('cache', () =>
       this.patterns.findMatchesFromPatterns(
         query,
-        this.cache.getAll(),
+        snapshot?.patterns ?? this.cache.getAll(),
         'CACHE',
       ),
     );
@@ -198,18 +212,20 @@ export class KnowledgeRetrievalService {
     const fastCached = directAllowed ? this.directResult(cached) : undefined;
     if (fastCached) return fastCached;
 
+    // The snapshot holds the rows the database query would return, so a
+    // successful snapshot read replaces it; a failed one falls back to the DB.
+    const fresh = snapshot && !failed ? snapshot : null;
     failed = false; // A successful DB fallback recovers a cache read failure.
-    const database = await read('database', () =>
-      this.patterns.findMatches(query),
-    );
+    const database = fresh
+      ? cached
+      : await read('database', () => this.patterns.findMatches(query));
     // DB is authoritative; never resurrect a stale cache candidate after a miss.
-    const fastDatabase = directAllowed
-      ? this.directResult(database)
-      : undefined;
+    const fastDatabase =
+      directAllowed && !fresh ? this.directResult(database) : undefined;
     if (fastDatabase) return fastDatabase;
 
     const [micro, semantic] = await Promise.all([
-      read('micro lexical', () => this.micro.findMatches(query)),
+      read('micro lexical', () => this.micro.findMatches(query, fresh?.micro)),
       read('semantic', () =>
         this.semantic.search(
           query,
@@ -258,9 +274,11 @@ export class KnowledgeRetrievalService {
     // exact question or a close vector hit is confident enough to skip the
     // BUSINESS/GENERAL classifier. Below it the candidates stay selected so a
     // BUSINESS classification can still ground its answer on them.
+    // Judged on the selected evidence, not on any candidate: a strong hit that
+    // is not sent to the model must not vouch for the one that is.
     const topVector = Math.max(
       0,
-      ...vectors.map((item) => this.raw(item, 'vectorSimilarity')),
+      ...selected.map((item) => this.raw(item, 'vectorSimilarity')),
     );
     const confident =
       selected.some((item) => item.metadata?.exactMatch === true) ||
@@ -370,19 +388,46 @@ export class KnowledgeRetrievalService {
   private selectContexts(items: KnowledgeItem[]): KnowledgeItem[] {
     const selected: KnowledgeItem[] = [];
     let characters = 0;
-    const first = items[0];
+    const strongVector = (item: KnowledgeItem) =>
+      this.raw(item, 'vectorSimilarity') >= this.ragMinVectorSimilarity;
+    // RRF ranks a keyword-only hit level with a semantic hit. When the top item
+    // has no semantic support, anchor on the best confident vector hit instead.
+    let first = items[0];
+    if (first && first.metadata?.exactMatch !== true && !strongVector(first)) {
+      const semantic = items
+        .filter(strongVector)
+        .sort(
+          (a, b) =>
+            this.raw(b, 'vectorSimilarity') - this.raw(a, 'vectorSimilarity'),
+        )[0];
+      if (semantic) first = semantic;
+    }
+    const rest = items.filter((item) => item !== first);
     const ordered = first
       ? [
           first,
-          ...items.slice(1).filter((item) => this.related(first, item)),
-          ...items.slice(1).filter((item) => !this.related(first, item)),
+          ...rest.filter((item) => this.related(first, item)),
+          ...rest.filter((item) => !this.related(first, item)),
         ]
       : items;
     for (const item of ordered) {
-      // Do not fill the remaining slots with unrelated vector neighbours.
+      // Do not fill the remaining slots with unrelated vector neighbours. A
+      // confident vector hit is not a neighbour: a second topic in the same
+      // message (shipping time and packing) arrives only this way.
+      // The first item is never dropped here: a keyword-only extra must cover
+      // enough of the question to be worth a slot, otherwise a shared everyday
+      // word fills the model's context with unrelated FAQs.
       if (
         selected.length > 0 &&
         item.metadata?.exactMatch !== true &&
+        this.raw(item, 'vectorSimilarity') === 0 &&
+        this.coverage(item) < this.lexicalMinCoverage
+      )
+        continue;
+      if (
+        selected.length > 0 &&
+        item.metadata?.exactMatch !== true &&
+        !strongVector(item) &&
         !((item.metadata?.matchTypes as string[] | undefined) ?? []).includes(
           'KEYWORD',
         ) &&
@@ -498,6 +543,11 @@ export class KnowledgeRetrievalService {
 
   private key(item: KnowledgeItem): string {
     return `${item.source}:${item.id}`;
+  }
+  /** Candidates built without coverage (older callers) are not filtered. */
+  private coverage(item: KnowledgeItem): number {
+    const value = item.metadata?.lexicalCoverage;
+    return typeof value === 'number' && Number.isFinite(value) ? value : 1;
   }
   private raw(item: KnowledgeItem, key: string): number {
     const value = item.metadata?.[key];

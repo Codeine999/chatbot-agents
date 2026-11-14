@@ -4,7 +4,7 @@ import { z } from 'zod';
 const iso = z.string().max(40).optional();
 
 /** Same shape as the LINE history query so the dashboard can share its code. */
-export const listAppMessagesQuerySchema = z
+export const listChannelMessagesQuerySchema = z
   .object({
     before: iso,
     after: iso,
@@ -15,16 +15,16 @@ export const listAppMessagesQuerySchema = z
   })
   .strict();
 
-export const sendAppAdminMessageSchema = z
+export const sendChannelAdminMessageSchema = z
   .object({
     text: z.string().max(5000),
     clientRequestId: z.string().uuid().optional(),
   })
   .strict();
 
-export class ListAppMessagesQueryDto extends createZodDto(
-  listAppMessagesQuerySchema,
+export class ListChannelMessagesQueryDto extends createZodDto(
+  listChannelMessagesQuerySchema,
 ) {}
-export class SendAppAdminMessageDto extends createZodDto(
-  sendAppAdminMessageSchema,
+export class SendChannelAdminMessageDto extends createZodDto(
+  sendChannelAdminMessageSchema,
 ) {}

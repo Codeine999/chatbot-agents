@@ -132,6 +132,8 @@ export function answerType(
       const mode = retrieval?.product?.plan.mode;
       if (mode === 'GENERAL') return 'GENERAL';
       if (mode === 'PRODUCT' || mode === 'BOTH') return 'PRODUCT';
+      // Grounding handed a non-business message to general chat.
+      if (answer?.mode === 'GENERAL') return 'GENERAL';
       return knowledgeType(
         answer?.evidenceIds ??
           (retrieval?.selectedItems ?? []).map((item) => ref(item)),

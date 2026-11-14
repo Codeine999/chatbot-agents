@@ -48,7 +48,7 @@ export class AdminKnowledgePatternService {
   ): Promise<AnswerPattern> {
     const pattern = await this.createIndexed(input, adminMemberId);
 
-    await this.answerPatternCache.refresh();
+    await this.answerPatternCache.changed();
     return pattern;
   }
 
@@ -85,7 +85,7 @@ export class AdminKnowledgePatternService {
       }
     }
 
-    if (created.length) await this.answerPatternCache.refresh();
+    if (created.length) await this.answerPatternCache.changed();
     return { created, failed };
   }
 
@@ -132,7 +132,7 @@ export class AdminKnowledgePatternService {
       return pattern;
     });
 
-    await this.answerPatternCache.refresh();
+    await this.answerPatternCache.changed();
     return pattern;
   }
 
@@ -145,7 +145,7 @@ export class AdminKnowledgePatternService {
       throw new NotFoundException('Answer pattern not found');
     }
 
-    await this.answerPatternCache.refresh();
+    await this.answerPatternCache.changed();
     return { deleted: true };
   }
 

@@ -11,6 +11,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { buildMicroKnowledgeDocument } from '../../ai/embeding/micro-knowledge-document';
 import { EmbeddingService } from '../../ai/embeding/embedding.service';
 import { MicroKnowledgeVectorRepository } from '../../ai/embeding/micro-knowledge-vector.repository';
+import { AnswerPatternCacheService } from '../../chatbot/knowledge/answer-pattern-cache.service';
 import {
   knowledgeScope,
   KnowledgeScope,
@@ -30,6 +31,7 @@ export class AdminKnowledgeMicroService {
     private readonly embeddingService: EmbeddingService,
     private readonly vectors: MicroKnowledgeVectorRepository,
     config: ConfigService,
+    private readonly knowledgeCache: AnswerPatternCacheService,
   ) {
     this.scope = knowledgeScope(config);
   }
@@ -55,6 +57,16 @@ export class AdminKnowledgeMicroService {
   }
 
   async create(
+    input: CreateAdminMicroKnowledgeDto,
+    adminMemberId?: string,
+  ): Promise<MicroKnowledge> {
+    const knowledge = await this.createIndexed(input, adminMemberId);
+    await this.knowledgeCache.changed();
+    return knowledge;
+  }
+
+  /** Writes the row and its vector; the caller refreshes the cache once. */
+  private async createIndexed(
     input: CreateAdminMicroKnowledgeDto,
     adminMemberId?: string,
   ): Promise<MicroKnowledge> {
@@ -95,7 +107,7 @@ export class AdminKnowledgeMicroService {
     // Sequential on purpose: each item is a billed provider call.
     for (const [index, input] of inputs.entries()) {
       try {
-        created.push(await this.create(input, adminMemberId));
+        created.push(await this.createIndexed(input, adminMemberId));
       } catch (error) {
         this.logger.warn(
           `bulk micro knowledge ${index} failed: ${error instanceof Error ? error.name : 'unknown error'}`,
@@ -111,6 +123,7 @@ export class AdminKnowledgeMicroService {
       }
     }
 
+    if (created.length) await this.knowledgeCache.changed();
     return { created, failed };
   }
 
@@ -142,7 +155,7 @@ export class AdminKnowledgeMicroService {
       { adminMemberId },
     );
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const knowledge = await tx.microKnowledge.update({
         where: { id },
         data,
@@ -156,6 +169,8 @@ export class AdminKnowledgeMicroService {
       );
       return knowledge;
     });
+    await this.knowledgeCache.changed();
+    return updated;
   }
 
   async remove(id: string): Promise<{ deleted: true }> {
@@ -167,6 +182,7 @@ export class AdminKnowledgeMicroService {
       throw new NotFoundException('Micro knowledge not found');
     }
 
+    await this.knowledgeCache.changed();
     return { deleted: true };
   }
 

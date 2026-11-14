@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { channelUserId } from '../../shared/channel/channel-kinds';
 import { CompanyService } from '../admin/company/company.service';
 import { UserSessionService } from '../users/session/user-session.service';
 import { AppAbuseService } from './app-abuse.service';
@@ -24,7 +25,7 @@ export const hashSessionToken = (token: string): string =>
   createHash('sha256').update(token).digest('hex');
 
 /** The guest's Redis identity: session, mute, ban and spam keys. */
-export const appUserId = (contactId: string) => `app:${contactId}`;
+export const appUserId = (contactId: string) => channelUserId('APP', contactId);
 
 @Injectable()
 export class AppSessionService {

@@ -24,6 +24,7 @@ export type DecisionLlmCall = Readonly<{
   cachedInputTokens?: number;
   cacheWriteTokens?: number;
   outputTokens?: number;
+  finishReason?: string;
   errorName?: string;
 }>;
 

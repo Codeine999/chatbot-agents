@@ -13,9 +13,17 @@ import {
   RouteDecision,
 } from '../shared/types/chat.types';
 import { fromRule } from './utils/intent.utils';
-import { logBlock, logSafeText } from '../../../utils/text.utils';
+import {
+  logBlock,
+  logSafeText,
+  normalizeText,
+} from '../../../utils/text.utils';
 import type { LineAiUsageContext } from '../../usage/billing/ai-usage.types';
-import { decideFromRetrieval, gateBeforeSearch } from './utils/route-stages';
+import {
+  decideFromRetrieval,
+  evidenceStrength,
+  gateBeforeSearch,
+} from './utils/route-stages';
 import { DecisionTraceService } from '../../decision-log/decision-trace.service';
 
 /** Enough of the ranking curve to see a tie; [Retrieval] holds the full list. */
@@ -163,6 +171,8 @@ export class IntentRouterService {
       reason: analysis.reason ?? null,
       failed: analysis.failed ?? false,
       selectedEvidence: retrieval?.selectedItems.length ?? 0,
+      standaloneQuery: analysis.standaloneQuery ?? null,
+      questions: analysis.questions ?? [],
     });
 
     if (analysis.classification === 'GENERAL') {
@@ -180,10 +190,47 @@ export class IntentRouterService {
       );
     }
 
+    // The classifier also rewrote a follow-up ("แล้วราคาล่ะ") into a question
+    // that can be searched alone. Search once more with it and ground the
+    // answer on whichever result has the stronger evidence.
+    let evidence = retrieval;
+    let resolvedQuery = input;
+    const rewritten = analysis.failed ? undefined : analysis.standaloneQuery;
+    if (rewritten && normalizeText(rewritten) !== normalizeText(input)) {
+      const second = await this.knowledgeRetrievalService.retrieve(rewritten, {
+        userId,
+        lineMemberId,
+        conversationId,
+        turnId,
+        // Already standalone: no second history rewrite, no product planner,
+        // and never a DIRECT preset for words the customer did not type.
+        recentMessages: [],
+        disableProduct: true,
+        forceGrounded: true,
+      });
+      const useRewrite =
+        second.selectedItems.length > 0 &&
+        evidenceStrength(second) >= evidenceStrength(retrieval);
+      if (useRewrite) {
+        evidence = second;
+        resolvedQuery = rewritten;
+        // The decision log reads the last retrieval note that carries a query.
+        this.decisionTrace?.note('retrieval', {
+          query: rewritten,
+          rewritten: true,
+          by: 'classifier',
+        });
+      }
+      this.decisionTrace?.note('classifier', {
+        reRetrieved: true,
+        usedRewrite: useRewrite,
+      });
+    }
+
     // Low-confidence candidates do not prove a business question, but once the
     // classifier says BUSINESS they still ground the answer (paraphrases whose
     // vocabulary differs from the stored knowledge).
-    if (retrieval?.selectedItems.length && !analysis.failed) {
+    if (evidence?.selectedItems.length && !analysis.failed) {
       return this.logDecision(
         input,
         {
@@ -192,10 +239,10 @@ export class IntentRouterService {
           confidence: analysis.confidence,
           source: 'AI',
           reason: 'low-confidence candidates classified as BUSINESS',
-          resolvedQuery: input,
-          retrieval,
+          resolvedQuery,
+          retrieval: evidence,
         },
-        retrieval,
+        evidence,
       );
     }
 

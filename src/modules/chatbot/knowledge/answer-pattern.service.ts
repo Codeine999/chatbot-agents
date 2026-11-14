@@ -14,7 +14,7 @@ import {
   knowledgeScope,
   KnowledgeScope,
 } from './utils/knowledge-scope';
-import { bm25Scores } from './utils/thai-bm25';
+import { bm25Match } from './utils/thai-bm25';
 import { isUsableKnowledge } from './utils/knowledge-answer.policy';
 
 const MAX_PATTERNS_SCANNED = 500;
@@ -80,11 +80,12 @@ export class AnswerPatternService {
           answer: pattern.answer,
         }),
     );
-    const scores = bm25Scores(normalized, eligible);
+    const { scores, coverages } = bm25Match(normalized, eligible);
     const scored = eligible
       .map((pattern, index) => ({
         pattern,
         score: scores[index],
+        coverage: coverages[index],
         exact: this.isExactMatch(pattern, normalized),
       }))
       .filter(({ score, exact }) => exact || score > 0)
@@ -121,7 +122,7 @@ export class AnswerPatternService {
 
     return scored
       .slice(0, MAX_RETRIEVAL_CANDIDATES)
-      .map(({ pattern, score, exact }) => {
+      .map(({ pattern, score, coverage, exact }) => {
         const item = this.toKnowledgeItem(
           pattern,
           score,
@@ -133,6 +134,7 @@ export class AnswerPatternService {
           ...item,
           metadata: {
             ...item.metadata,
+            lexicalCoverage: coverage,
             safeDirect:
               item.metadata?.safeDirect === true &&
               patterns.length < MAX_PATTERNS_SCANNED &&

@@ -23,6 +23,7 @@ import { CLARIFY_MESSAGE } from './shared/knowledge-routing.constants';
 import { InsufficientCreditException } from '../usage/credit-point/insufficient-credit.exception';
 import { isCancelKeyword } from './intent/utils/cancel-keyword';
 import { DecisionTraceService } from '../decision-log/decision-trace.service';
+import { CHANNEL_KINDS } from '../../shared/channel/channel-kinds';
 
 @Injectable()
 export class ChatbotService {
@@ -241,11 +242,18 @@ export class ChatbotService {
           recentMessages,
           retrievalQuery: decision.resolvedQuery,
           retrieval: decision.retrieval,
+          // Only a route that skipped both the classifier and a trusted rule
+          // may leave grounding for general chat.
+          allowGeneralExit:
+            decision.retrieval?.route === 'RAG' &&
+            (decision.source === 'CACHE' ||
+              decision.source === 'DATABASE' ||
+              decision.source === 'EMBEDDING'),
         });
 
         return this.aiResponse(
           result,
-          decision.retrieval?.product?.plan.mode === 'GENERAL'
+          decision.retrieval?.product?.plan.mode === 'GENERAL' || result.general
             ? 'AI'
             : 'KNOWLEDGE',
           userId,
@@ -452,7 +460,7 @@ export class ChatbotService {
   ): boolean {
     return (
       !preview &&
-      channel === 'LINE' &&
+      CHANNEL_KINDS[channel].registration &&
       isRegistrationEnabled(this.configService)
     );
   }

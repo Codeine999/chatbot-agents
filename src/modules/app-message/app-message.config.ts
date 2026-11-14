@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
+import { CHANNEL_TURN_LOCK_SEC } from '../channels/channel-store.adapter';
 
 /** Fixed limits. Only values worth tuning per deployment are environment variables. */
 export const APP_LIMITS = {
@@ -13,10 +14,8 @@ export const APP_LIMITS = {
   readsPerIpPerMin: 120,
   authFailuresPerIpPerMin: 30,
   textMaxChars: 2000,
-  /** An admin pause lasts until resume, at most as long as the history is kept. */
-  pauseBotSec: 7 * 86_400,
   /** How long one turn may hold its room before another request can take over. */
-  turnLockSec: 120,
+  turnLockSec: CHANNEL_TURN_LOCK_SEC,
 } as const;
 
 /** Body limit for every /api/app/* route (main.ts reads it before Nest starts). */

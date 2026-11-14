@@ -28,7 +28,6 @@ export class MessageProcessorService {
     adapter: ChannelAdapter<TEvent, TThread>,
     claimOwner?: string,
   ): Promise<void> {
-    // A retry after response persistence must not call/bill the model again.
     const existing = await adapter.findDelivery(event);
     if (existing) {
       await adapter.deliver(existing.id);

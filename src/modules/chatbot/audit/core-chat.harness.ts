@@ -231,8 +231,10 @@ export function buildHarness(options: HarnessOptions = {}) {
   // --- real services --------------------------------------------------------
   const answerPatterns = new AnswerPatternService(prisma, config);
   const cacheGetAll = jest.fn(() => cached ?? []);
+  // null = no fresh snapshot, so lexical search reads the (mocked) database.
   const patternCache = {
     getAll: cacheGetAll,
+    snapshot: () => null,
   } as unknown as AnswerPatternCacheService;
   const microKnowledge = new MicroKnowledgeService(
     prisma,

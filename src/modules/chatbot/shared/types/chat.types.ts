@@ -1,3 +1,5 @@
+import type { ChatChannelKind } from '../../../../shared/channel/channel-kinds';
+
 /** Runtime list so a rich menu button can be validated against it. */
 export const CHAT_INTENTS = [
   'GREET',
@@ -48,6 +50,10 @@ export type LowConfidenceAnalysis = Readonly<{
   classification: LowConfidenceClassification;
   confidence: number;
   reason?: string;
+  /** The latest message with its subject filled in from history; a search aid only. */
+  standaloneQuery?: string;
+  /** Separate questions found in one message (max 3); recorded, not yet searched one by one. */
+  questions?: readonly string[];
   /** Budget, provider or validation failure; must never authorize generation. */
   failed?: boolean;
 }>;
@@ -121,7 +127,7 @@ export type ChatContextMessage = Readonly<{
 }>;
 
 /** Where a turn came from. Absent means LINE, so existing callers are unchanged. */
-export type ChatChannelKind = 'LINE' | 'APP';
+export type { ChatChannelKind };
 
 export type ChatContextPolicy = 'INCLUDE' | 'EXCLUDE' | 'CLEAR';
 
@@ -182,12 +188,21 @@ export type KnowledgeAnswerContext = AiRequestContext &
   Readonly<{
     retrievalQuery?: string;
     retrieval?: KnowledgeRetrievalResult;
+    /**
+     * The route skipped the BUSINESS/GENERAL classifier, so the grounded model
+     * may hand a non-business message to general chat instead of staff.
+     */
+    allowGeneralExit?: boolean;
   }>;
 
 export type AiAnswerResult = Readonly<{
   text: string;
   isFallback: boolean;
   catalogRefs?: readonly CatalogRef[];
+  /** Part of the message was answered from evidence; staff must follow up on the rest. */
+  handoff?: boolean;
+  /** The grounded model judged the message non-business and general chat answered. */
+  general?: boolean;
 }>;
 
 export type KnowledgeItem = {

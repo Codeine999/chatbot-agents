@@ -66,6 +66,9 @@ export const EMPTY_AI_TOKEN_USAGE: AiTokenUsage = {
   outputTokens: 0,
 };
 
+/** Why the model stopped. `length`: the output hit maxOutputTokens and is cut off. */
+export type AiFinishReason = 'stop' | 'length' | 'other';
+
 export type AiGenerateResponse = Readonly<{
   text: string;
   provider: AiProviderName;
@@ -73,6 +76,11 @@ export type AiGenerateResponse = Readonly<{
   /** Actual usage reported by the provider — the source of truth for billing. */
   usage: AiTokenUsage;
   providerRequestId?: string;
+  /**
+   * Absent when the adapter cannot tell, and on results replayed from before
+   * this field existed: treat absent as "not known to be truncated".
+   */
+  finishReason?: AiFinishReason;
 }>;
 
 export type AiProviderRuntimeSetting = Readonly<{

@@ -17,6 +17,7 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   GENERAL_RULES,
   KNOWLEDGE_RULES,
+  PARTIAL_ANSWER_NOTE,
 } from '../shared/prompt/ai-chat.constants';
 import { INSUFFICIENT_CONTEXT } from '../shared/knowledge-routing.constants';
 import {
@@ -310,6 +311,10 @@ export class AiChatService {
         context,
       );
       const text = response.text.trim();
+      if (response.finishReason === 'length')
+        this.logger.warn(
+          '[Answer] general answer hit the output token cap; the reply may be cut off',
+        );
       if (!text) this.fallback('EMPTY_GENERAL_ANSWER');
       else this.decisionTrace?.answer({ mode: 'GENERAL' });
       return text
@@ -329,8 +334,9 @@ export class AiChatService {
     items: KnowledgeItem[],
     message: string,
     setting: AiRuntimeSetting,
-    context: AiRequestContext,
+    context: KnowledgeAnswerContext,
   ): Promise<AiAnswerResult> {
+    const allowGeneralExit = context.allowGeneralExit === true;
     const messages = toAiProviderMessages(
       context.recentMessages ?? [],
       message,
@@ -338,6 +344,7 @@ export class AiChatService {
     const systemInstruction = this.buildKnowledgeSystemInstruction({
       setting,
       items,
+      allowGeneralExit,
     });
 
     this.logger.debug(
@@ -383,8 +390,28 @@ export class AiChatService {
       } catch {
         // Malformed output is not evidence of answerability.
       }
-      const selectedIds = new Set(
-        items.map((item) => `${item.source}:${item.id}`),
+      // A chance vector hit can route small talk here without the classifier.
+      // Only then may the model send it to general chat instead of staff.
+      if (parsed?.decision === 'NOT_BUSINESS' && allowGeneralExit) {
+        this.logger.debug(
+          logBlock('Answer', [
+            'mode=GROUNDED -> GENERAL (not a business question)',
+          ]),
+        );
+        this.decisionTrace?.note('answer', {
+          generalExit: true,
+          askedAbout: parsed.askedAbout ?? null,
+        });
+        const general = await this.answerGeneral(message, context);
+        return { ...general, general: true };
+      }
+
+      // Canonical `SOURCE:ID` for every reference the model may cite.
+      const refs = new Map<string, string>(
+        items.map((item) => [
+          `${item.source}:${item.id}`,
+          `${item.source}:${item.id}`,
+        ]),
       );
       // Some providers copy the bare `id` instead of `ref`. Accept it only
       // when it identifies exactly one selected item; never search the KB or
@@ -393,23 +420,34 @@ export class AiChatService {
         if (
           items.filter((candidate) => candidate.id === item.id).length === 1
         ) {
-          selectedIds.add(item.id);
+          refs.set(item.id, `${item.source}:${item.id}`);
         }
       }
+      // One mistyped citation must not discard an answer the rest supports:
+      // unknown IDs are dropped, and at least one known ID must remain.
+      const citedIds =
+        parsed?.decision === 'ANSWER'
+          ? [...new Set(parsed.evidenceIds.flatMap((id) => refs.get(id) ?? []))]
+          : [];
+
       if (
         parsed?.decision !== 'ANSWER' ||
         parsed.directlyAnswered !== true ||
-        !parsed.evidenceIds.every((id) => selectedIds.has(id)) ||
+        citedIds.length === 0 ||
         parsed.answer === INSUFFICIENT_CONTEXT
       ) {
         const reason = !parsed
-          ? 'INVALID_GROUNDED_OUTPUT'
-          : parsed.decision !== 'ANSWER' ||
-              parsed.answer === INSUFFICIENT_CONTEXT
-            ? INSUFFICIENT_CONTEXT
-            : parsed.directlyAnswered !== true
-              ? 'NOT_DIRECTLY_ANSWERED'
-              : 'INVALID_EVIDENCE_REFERENCE';
+          ? response.finishReason === 'length'
+            ? 'TRUNCATED_OUTPUT'
+            : 'INVALID_GROUNDED_OUTPUT'
+          : parsed.decision === 'NOT_BUSINESS'
+            ? 'NOT_BUSINESS_ON_BUSINESS_ROUTE'
+            : parsed.decision !== 'ANSWER' ||
+                parsed.answer === INSUFFICIENT_CONTEXT
+              ? INSUFFICIENT_CONTEXT
+              : parsed.directlyAnswered !== true
+                ? 'NOT_DIRECTLY_ANSWERED'
+                : 'INVALID_EVIDENCE_REFERENCE';
         this.decisionTrace?.answer({
           mode: 'FALLBACK',
           fallbackReason: reason,
@@ -431,16 +469,33 @@ export class AiChatService {
         };
       }
 
-      const text = parsed.answer.trim();
+      const unanswered = (parsed.unanswered ?? [])
+        .map((question) => question.trim())
+        .filter(Boolean)
+        .slice(0, 3);
+      const dropped = parsed.evidenceIds.length - citedIds.length;
+      const partial = unanswered.length > 0;
+      const text = partial
+        ? `${parsed.answer.trim()}\n\n${PARTIAL_ANSWER_NOTE}`
+        : parsed.answer.trim();
       this.logger.debug(
-        logBlock('Answer', ['mode=GROUNDED reply', `length=${text.length}`]),
+        logBlock('Answer', [
+          `mode=${partial ? 'GROUNDED_PARTIAL' : 'GROUNDED'} reply`,
+          `length=${text.length}`,
+          dropped ? `droppedEvidenceIds=${dropped}` : null,
+        ]),
       );
       this.decisionTrace?.answer({
-        mode: 'GROUNDED',
-        evidenceIds: parsed.evidenceIds,
+        mode: partial ? 'GROUNDED_PARTIAL' : 'GROUNDED',
+        evidenceIds: citedIds,
         ...(parsed.askedAbout ? { askedAbout: parsed.askedAbout } : {}),
       });
-      return { text, isFallback: false };
+      if (dropped || partial)
+        this.decisionTrace?.note('answer', {
+          droppedEvidenceIds: dropped,
+          unanswered,
+        });
+      return { text, isFallback: false, ...(partial ? { handoff: true } : {}) };
     } catch (error) {
       rethrowPendingAiUsage(error);
       rethrowInsufficientCredit(error);
@@ -454,6 +509,7 @@ export class AiChatService {
   private buildKnowledgeSystemInstruction(params: {
     setting: AiRuntimeSetting;
     items: KnowledgeItem[];
+    allowGeneralExit: boolean;
   }): string {
     return composeAiAnswerPrompt({
       setting: params.setting,
@@ -468,28 +524,35 @@ export class AiChatService {
           ถ้าหลักฐานกล่าวถึงเพียงสิ่งอื่นที่ใกล้เคียงหรือใช้แทนกันได้ ให้ใช้ INSUFFICIENT_CONTEXT 
           ห้ามตอบด้วยสิ่งทดแทน เช่น ถามว่าในห้องมีเครื่องชงกาแฟไหม แต่หลักฐานมีแค่กาต้มน้ำ`,
 
-        `คืน JSON เท่านั้น: 
-          {
-            "askedAbout": "สิ่งที่ลูกค้าถาม",
-            "directlyAnswered":true,
-            "decision":"ANSWER",
-            "answer":"คำตอบภาษาไทย",
-            "evidenceIds":["SOURCE:ID"]
-          } 
-            หรือ 
-          {
-            "askedAbout":"สิ่งที่ลูกค้าถาม",
-            "directlyAnswered":false,
-            "decision":"${INSUFFICIENT_CONTEXT}",
-            "answer":"",
-            "evidenceIds":[]
+        `คืน JSON เท่านั้น ตามรูปแบบใดรูปแบบหนึ่ง:
+          ตอบได้: {"askedAbout":"สิ่งที่ลูกค้าถาม","directlyAnswered":true,"decision":"ANSWER","answer":"คำตอบภาษาไทย","evidenceIds":["SOURCE:ID"],"unanswered":[]}
+          หลักฐานไม่พอ: {"askedAbout":"สิ่งที่ลูกค้าถาม","directlyAnswered":false,"decision":"${INSUFFICIENT_CONTEXT}","answer":"","evidenceIds":[],"unanswered":[]}${
+            params.allowGeneralExit
+              ? `
+          ไม่ใช่เรื่องของร้าน: {"askedAbout":"สิ่งที่ลูกค้าถาม","directlyAnswered":false,"decision":"NOT_BUSINESS","answer":"","evidenceIds":[],"unanswered":[]}`
+              : ''
           }`,
-        `askedAbout คือสิ่งที่ลูกค้าถามถึงจริง ๆ สั้น ๆ; directlyAnswered เป็น true 
-          เฉพาะเมื่อหลักฐานระบุ askedAbout เองโดยตรง ไม่ใช่สิ่งทดแทนหรือบริการอื่นที่ใกล้เคียง`,
+
+        `askedAbout คือสิ่งที่ลูกค้าถามถึงจริง ๆ สั้น ๆ; directlyAnswered เป็น true
+          เฉพาะเมื่อหลักฐานระบุ askedAbout เองโดยตรง ไม่ใช่สิ่งทดแทนหรือบริการอื่นที่ใกล้เคียง
+          ถ้าข้อความมีหลายคำถาม directlyAnswered เป็น true เมื่อหลักฐานตอบได้โดยตรงอย่างน้อยหนึ่งคำถาม`,
 
         `ใช้ ANSWER เฉพาะเมื่อ directlyAnswered เป็น true และข้อมูลที่อ้างใน evidenceIds รองรับคำตอบทุกข้อ
-         ให้คัดลอกค่า ref จากรายการใน ragContext ลง evidenceIds ตรงตัว (รวม source และเครื่องหมาย :) 
+         ให้คัดลอกค่า ref จากรายการใน ragContext ลง evidenceIds ตรงตัว (รวม source และเครื่องหมาย :)
          ห้ามสร้าง ID เอง หากข้อมูลขาดหรือขัดแย้งให้ใช้ INSUFFICIENT_CONTEXT`,
+
+        `ถ้าข้อความมีหลายคำถามและหลักฐานตอบได้เพียงบางคำถาม ให้ใช้ ANSWER ตอบเฉพาะคำถามที่หลักฐานระบุโดยตรง
+         แล้วใส่คำถามที่ตอบไม่ได้ลงใน unanswered (ข้อความสั้น ๆ คำถามละหนึ่งรายการ ไม่เกิน 3 รายการ)
+         ห้ามเดา ห้ามตอบแทนด้วยสิ่งใกล้เคียง และไม่ต้องเขียนใน answer ว่าส่วนนั้นไม่มีข้อมูล
+         ระบบจะแจ้งลูกค้าเองว่าเจ้าหน้าที่จะตรวจสอบส่วนที่เหลือ ถ้าตอบได้ครบทุกคำถามให้ unanswered เป็น []`,
+
+        ...(params.allowGeneralExit
+          ? [
+              `ใช้ NOT_BUSINESS เฉพาะเมื่อข้อความล่าสุดของลูกค้าเป็นการทักทาย ขอบคุณ คุยเล่น ถามเกี่ยวกับตัวผู้ช่วยเอง
+         หรือความรู้ทั่วไปที่ไม่ต้องใช้ข้อมูลของร้านเลย ถ้าเกี่ยวกับสินค้า บริการ ราคา การสั่งซื้อ การชำระเงิน การจัดส่ง
+         นโยบาย หรือข้อมูลของร้านแม้เพียงบางส่วน หรือไม่แน่ใจ ให้ใช้ INSUFFICIENT_CONTEXT ห้ามใช้ NOT_BUSINESS`,
+            ]
+          : []),
       ].join('\n\n'),
     });
   }

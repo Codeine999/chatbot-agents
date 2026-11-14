@@ -593,6 +593,7 @@ export async function seedFashionStore(
     embedding,
     get(moduleRef, MicroKnowledgeVectorRepository),
     config,
+    get(moduleRef, AnswerPatternCacheService),
   );
   for (const item of MICRO_KNOWLEDGE)
     await micro.create(

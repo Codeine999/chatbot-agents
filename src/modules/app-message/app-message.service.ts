@@ -5,13 +5,13 @@ import type { ChannelMessage } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MessageProcessorService } from '../events/message/message-processor.service';
 import { AppAbuseService } from './app-abuse.service';
-import { AppChannelAdapter } from './app-channel.adapter';
+import { ChannelStoreAdapter } from '../channels/channel-store.adapter';
 import { AppApiException, appUnavailable } from './app-errors';
 import { APP_LIMITS } from './app-message.config';
-import { publicSource } from './app-message.metadata';
+import { publicSource } from '../channels/channel-message.metadata';
 import type { AppGuestContext } from './app-request';
 import { AppSessionService } from './app-session.service';
-import { sanitizeText } from './app-text';
+import { sanitizeText } from '../channels/channel-text';
 import type {
   ListMessagesQueryDto,
   SendMessageDto,
@@ -37,7 +37,7 @@ export class AppMessageService {
     private readonly prisma: PrismaService,
     private readonly abuse: AppAbuseService,
     private readonly processor: MessageProcessorService,
-    private readonly adapter: AppChannelAdapter,
+    private readonly adapter: ChannelStoreAdapter,
     private readonly sessions: AppSessionService,
   ) {}
 
@@ -135,6 +135,7 @@ export class AppMessageService {
       try {
         await this.processor.process(
           {
+            channel: 'APP',
             messageId,
             conversationId,
             contactId: guest.contactId,

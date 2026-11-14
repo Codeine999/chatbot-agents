@@ -1,4 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common';
+import { CHANNEL_KINDS } from '../../shared/channel/channel-kinds';
 import type { ChatResponse } from '../chatbot/shared/types/chat.types';
 import type {
   ChatTurn,
@@ -71,9 +72,8 @@ function turnMeta(
   if (!request.turnId) return undefined;
   return {
     channel:
-      'channel' in request && request.channel === 'APP'
-        ? 'APPLICATION'
-        : 'LINE',
+      CHANNEL_KINDS[('channel' in request && request.channel) || 'LINE']
+        .logChannel,
     eventId: request.turnId,
     userId: request.userId,
     conversationId: request.conversationId ?? thread.conversationId,

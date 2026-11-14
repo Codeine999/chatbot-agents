@@ -1,7 +1,7 @@
-import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { InjectQueue } from '@nestjs/bullmq';
 import {
+  Injectable,
   Logger,
-  OnApplicationBootstrap,
   OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common';
@@ -11,27 +11,20 @@ import { isRetryableAiProviderError } from '../../ai-provider/errors/ai-provider
 import { BanService } from '../abuse/ban.service';
 import { SpamDetectorService } from '../abuse/spam-detector.service';
 import { RateLimitService } from '../usage/rate-limit/rate-limit.service';
+import { CHAT_EVENTS_QUEUE } from '../events/queue/chat-events.queue';
 import {
-  LINE_EVENT_MAX_AGE_MS,
-  LINE_EVENT_JOB,
-  LINE_EVENTS_CONCURRENCY,
-  LINE_EVENTS_QUEUE,
-  LINE_EVENTS_RATE_LIMIT,
-  LINE_EVENTS_RETRY_CONCURRENCY,
-  LINE_EVENTS_RETRY_QUEUE,
-  lineEventsWorkerSettings,
+  LINE_EVENT_RETRY_JOB,
+  LINE_EVENT_RETRY_JOB_OPTIONS,
   type LineEventJobData,
 } from './line-events.queue';
 import { LineWebhookService } from './line-webhook.service';
 
-@Processor(LINE_EVENTS_QUEUE, {
-  concurrency: LINE_EVENTS_CONCURRENCY,
-  limiter: { ...LINE_EVENTS_RATE_LIMIT },
-})
-export class LineEventsProcessor
-  extends WorkerHost
-  implements OnModuleInit, OnApplicationBootstrap, OnModuleDestroy
-{
+/**
+ * Handles the LINE jobs of the shared chat-events queue. The worker itself
+ * (concurrency, rate limit) is ChatEventsProcessor.
+ */
+@Injectable()
+export class LineEventsProcessor implements OnModuleInit, OnModuleDestroy {
   private recoveryTimer?: ReturnType<typeof setInterval>;
   private recovering = false;
 
@@ -39,18 +32,28 @@ export class LineEventsProcessor
     this.recoveryTimer = setInterval(() => void this.recover(), 15_000);
     this.recoveryTimer.unref();
   }
-  onModuleDestroy() { if (this.recoveryTimer) clearInterval(this.recoveryTimer); }
+  onModuleDestroy() {
+    if (this.recoveryTimer) clearInterval(this.recoveryTimer);
+  }
   private async recover() {
     if (this.recovering) return;
     this.recovering = true;
     try {
       for (const event of await this.lineWebhookService.recoverableWebhookEvents()) {
-        await this.retryQueue.add(LINE_EVENT_JOB, { event }, {
-          jobId: `recover-${event.webhookEventId}-${Math.floor(Date.now() / 15000)}`,
-        });
+        await this.queue.add(
+          LINE_EVENT_RETRY_JOB,
+          { event },
+          {
+            ...LINE_EVENT_RETRY_JOB_OPTIONS,
+            jobId: `recover-${event.webhookEventId}-${Math.floor(Date.now() / 15000)}`,
+          },
+        );
       }
-    } catch (error) { this.logger.error(`Webhook recovery: ${String(error)}`); }
-    finally { this.recovering = false; }
+    } catch (error) {
+      this.logger.error(`Webhook recovery: ${String(error)}`);
+    } finally {
+      this.recovering = false;
+    }
   }
   private readonly logger = new Logger(LineEventsProcessor.name);
   private readonly userProcessingTails = new Map<string, Promise<void>>();
@@ -58,18 +61,16 @@ export class LineEventsProcessor
   private readonly userBurstLimit: number;
   private readonly userBurstWindowSec: number;
   private readonly userHourlyLimit: number;
-  private readonly workerSettings: ReturnType<typeof lineEventsWorkerSettings>;
 
   constructor(
     private readonly lineWebhookService: LineWebhookService,
     private readonly rateLimitService: RateLimitService,
     private readonly banService: BanService,
     private readonly spamDetectorService: SpamDetectorService,
-    @InjectQueue(LINE_EVENTS_RETRY_QUEUE)
-    private readonly retryQueue: Queue<LineEventJobData>,
+    @InjectQueue(CHAT_EVENTS_QUEUE)
+    private readonly queue: Queue<LineEventJobData>,
     configService: ConfigService,
   ) {
-    super();
     this.userBurstLimit = Number(
       configService.get('LINE_USER_BURST_LIMIT') ?? 10,
     );
@@ -79,24 +80,6 @@ export class LineEventsProcessor
     this.userHourlyLimit = Number(
       configService.get('LINE_USER_HOURLY_LIMIT') ?? 60,
     );
-    this.workerSettings = lineEventsWorkerSettings(configService);
-  }
-
-  // The worker exists once every module has initialised. BullMQ reads
-  // `concurrency` and `opts.limiter` on each fetch, so this takes effect
-  // from the next job on.
-  onApplicationBootstrap() {
-    const { concurrency, rateLimit } = this.workerSettings;
-    this.worker.concurrency = concurrency;
-    this.worker.opts.limiter = { ...rateLimit };
-    this.logger.log(
-      `LINE worker concurrency=${concurrency}, limiter=${rateLimit.max}/${rateLimit.duration}ms`,
-    );
-  }
-
-  /** Read by the retry worker so both use the same configuration. */
-  get retryConcurrency() {
-    return this.workerSettings.retryConcurrency;
   }
 
   async process(job: Job<LineEventJobData>): Promise<void> {
@@ -105,11 +88,12 @@ export class LineEventsProcessor
     } catch (error) {
       if (!isRetryableAiProviderError(error)) throw error;
 
-      await this.retryQueue.add(LINE_EVENT_JOB, job.data, {
+      await this.queue.add(LINE_EVENT_RETRY_JOB, job.data, {
+        ...LINE_EVENT_RETRY_JOB_OPTIONS,
         jobId: `retry-${job.data.event.webhookEventId}`,
       });
       this.logger.warn(
-        `Moved transient AI failure for ${job.data.event.webhookEventId} to retry queue`,
+        `Re-queued transient AI failure for ${job.data.event.webhookEventId} as a retry job`,
       );
     }
   }
@@ -165,8 +149,7 @@ export class LineEventsProcessor
 
     if (!allowed) return;
 
-    const claimed =
-      await this.lineWebhookService.claimWebhookEvent(event);
+    const claimed = await this.lineWebhookService.claimWebhookEvent(event);
 
     if (!claimed) {
       this.logger.log(
@@ -176,15 +159,22 @@ export class LineEventsProcessor
     }
 
     const heartbeat = setInterval(() => {
-      void this.lineWebhookService.renewWebhookLease(webhookEventId, claimed)
-        .catch((error: unknown) => this.logger.error(`Webhook lease: ${String(error)}`));
+      void this.lineWebhookService
+        .renewWebhookLease(webhookEventId, claimed)
+        .catch((error: unknown) =>
+          this.logger.error(`Webhook lease: ${String(error)}`),
+        );
     }, 30_000);
     heartbeat.unref();
     try {
       await this.lineWebhookService.processEvent(event, claimed);
       await this.lineWebhookService.finishWebhookEvent(webhookEventId, claimed);
     } catch (error) {
-      await this.lineWebhookService.finishWebhookEvent(webhookEventId, claimed, error);
+      await this.lineWebhookService.finishWebhookEvent(
+        webhookEventId,
+        claimed,
+        error,
+      );
       throw error;
     } finally {
       clearInterval(heartbeat);
@@ -251,25 +241,5 @@ export class LineEventsProcessor
     }
 
     return true;
-  }
-}
-
-@Processor(LINE_EVENTS_RETRY_QUEUE, {
-  concurrency: LINE_EVENTS_RETRY_CONCURRENCY,
-})
-export class LineEventsRetryProcessor
-  extends WorkerHost
-  implements OnApplicationBootstrap
-{
-  constructor(private readonly eventsProcessor: LineEventsProcessor) {
-    super();
-  }
-
-  onApplicationBootstrap() {
-    this.worker.concurrency = this.eventsProcessor.retryConcurrency;
-  }
-
-  process(job: Job<LineEventJobData>): Promise<void> {
-    return this.eventsProcessor.processRetry(job);
   }
 }

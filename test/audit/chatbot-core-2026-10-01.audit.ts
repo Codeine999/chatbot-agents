@@ -1207,7 +1207,10 @@ audit(
       )
       .mockResolvedValue([pattern({ ...returns, answer: 'คืนได้ 3 วัน' })]);
     const service = new AnswerPatternCacheService(
-      { answerPattern: { findMany } } as never,
+      {
+        answerPattern: { findMany },
+        microKnowledge: { findMany: jest.fn().mockResolvedValue([]) },
+      } as never,
       { get: () => undefined } as never,
     );
     const before = service.refresh();

@@ -1,6 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
-import { sanitizeLine } from '../app-text';
+import { sanitizeLine } from '../../channels/channel-text';
 import { appMetadataSchema } from './app-metadata';
 
 export const createSessionSchema = z

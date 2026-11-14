@@ -16,6 +16,7 @@ import {
   DEFAULT_AI_REQUEST_TIMEOUT_MS,
 } from '../utils/ai-provider.constants';
 import {
+  AiFinishReason,
   AiGenerateResponse,
   AiProviderGenerateRequest,
   AiReasoningEffort,
@@ -101,6 +102,9 @@ export class GeminiAiProvider implements AiProviderAdapter {
         model: request.model,
         usage: this.toUsage(response.usageMetadata),
         providerRequestId: response.responseId,
+        finishReason: this.toFinishReason(
+          response.candidates?.[0]?.finishReason,
+        ),
       };
     } catch (error) {
       this.logger.error(`Gemini generation failed: ${String(error)}`);
@@ -111,6 +115,12 @@ export class GeminiAiProvider implements AiProviderAdapter {
       }
       throw new BadGatewayException('Gemini generation failed');
     }
+  }
+
+  private toFinishReason(reason: unknown): AiFinishReason | undefined {
+    if (reason === 'STOP') return 'stop';
+    if (reason === 'MAX_TOKENS') return 'length';
+    return typeof reason === 'string' && reason ? 'other' : undefined;
   }
 
   /**

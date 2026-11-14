@@ -65,6 +65,7 @@ export class UsersAiProviderService {
         latencyMs: Date.now() - started,
         status: 'success',
         ...result.usage,
+        finishReason: result.finishReason,
       });
       return result;
     } catch (error) {

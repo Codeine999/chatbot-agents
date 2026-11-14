@@ -19,6 +19,9 @@ import { AiProviderModule } from './modules/ai/ai-provider.module';
 import { ProductsModule } from './modules/products/products.module';
 import { AppMessageModule } from './modules/app-message/app-message.module';
 import { DecisionLogModule } from './modules/decision-log/decision-log.module';
+import { ChannelGatewayModule } from './modules/channels/channel-gateway.module';
+import { ChatEventsWorkerModule } from './modules/events/queue/chat-events-worker.module';
+import { FacebookModule } from './modules/channels/facebook/facebook.module';
 
 @Module({
   imports: [
@@ -61,6 +64,11 @@ import { DecisionLogModule } from './modules/decision-log/decision-log.module';
     AdminModule,
 
     AppMessageModule,
+
+    // Channel gateway + connectors (each connector is one module import).
+    ChannelGatewayModule,
+    ChatEventsWorkerModule,
+    FacebookModule,
   ],
   controllers: [AppController],
   providers: [AppService],

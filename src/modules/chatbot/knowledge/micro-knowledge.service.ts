@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { AnswerPatternService } from './answer-pattern.service';
+import {
+  AnswerPatternService,
+  type KnowledgeRecord,
+} from './answer-pattern.service';
 import { knowledgeScope, KnowledgeScope } from './utils/knowledge-scope';
 import { KnowledgeItem } from '../shared/types/chat.types';
 
@@ -17,16 +20,22 @@ export class MicroKnowledgeService {
     this.scope = knowledgeScope(config);
   }
 
-  async findMatches(query: string): Promise<KnowledgeItem[]> {
-    const rows = await this.prisma.microKnowledge.findMany({
-      where: { active: true, ...this.scope },
-      take: 500,
-      orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
-    });
+  /** `snapshot` (the in-memory rows) skips the database read. */
+  async findMatches(
+    query: string,
+    snapshot?: readonly KnowledgeRecord[],
+  ): Promise<KnowledgeItem[]> {
+    const rows =
+      snapshot ??
+      (await this.prisma.microKnowledge.findMany({
+        where: { active: true, ...this.scope },
+        take: 500,
+        orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
+      }));
     return this.matcher.findMatchesFromPatterns(
       query,
       rows,
-      'DATABASE',
+      snapshot ? 'CACHE' : 'DATABASE',
       'MICRO_KNOWLEDGE',
     );
   }

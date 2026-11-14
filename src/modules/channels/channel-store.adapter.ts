@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  CHANNEL_KINDS,
+  channelUserId,
+  type StoredChannelKind,
+} from '../../shared/channel/channel-kinds';
 import { LoadContextService } from '../chatbot/context/load-context.service';
 import type { ChatResponse } from '../chatbot/shared/types/chat.types';
 import type {
@@ -9,73 +14,76 @@ import type {
   DeliveryReference,
 } from '../events/message/contracts/channel-adapter';
 import { UserSessionService } from '../users/session/user-session.service';
-import { APP_LIMITS } from './app-message.config';
-import { buildReplyMetadata } from './app-message.metadata';
-import { appUserId } from './app-session.service';
+import { ChannelConnectorRegistry } from './channel-connector.registry';
+import { buildReplyMetadata } from './channel-message.metadata';
+import { ChannelOutboundService } from './channel-outbound.service';
 
-/** Built by AppMessageService after the inbound row is stored; never from a request body. */
-export type AppInboundEvent = Readonly<{
+/** How long one turn may hold its room before another worker/request can take over. */
+export const CHANNEL_TURN_LOCK_SEC = 120;
+
+export type ChannelInboundEvent = Readonly<{
+  channel: StoredChannelKind;
   messageId: string;
   conversationId: string;
   contactId: string;
   companyId: string;
   text: string;
+  response?: ChatResponse;
 }>;
 
 type StoredTurnContext = { userText: string; response: ChatResponse };
 
-/**
- * App Message persistence boundary for MessageProcessorService.
- *
- * The inbound row and its unread increment are written by AppMessageService
- * before the turn starts (once per clientMessageId). The claim on the turn is
- * the room lock: `claimOwner` is the inbound message id held in
- * `channelConversations.activeTurnId`, so a turn whose lock expired and was
- * taken over cannot store a second answer.
- */
 @Injectable()
-export class AppChannelAdapter implements ChannelAdapter<
-  AppInboundEvent,
+export class ChannelStoreAdapter implements ChannelAdapter<
+  ChannelInboundEvent,
   ConversationThread
 > {
   constructor(
     private readonly prisma: PrismaService,
     private readonly context: LoadContextService,
     private readonly sessions: UserSessionService,
+    private readonly connectors: ChannelConnectorRegistry,
+    private readonly outbound: ChannelOutboundService,
   ) {}
 
-  findDelivery(event: AppInboundEvent): Promise<DeliveryReference | null> {
+  findDelivery(event: ChannelInboundEvent): Promise<DeliveryReference | null> {
     return this.prisma.channelMessage.findUnique({
       where: { replyToId: event.messageId },
       select: { id: true },
     });
   }
 
-  saveIncomingEvent(event: AppInboundEvent): Promise<ConversationThread> {
+  saveIncomingEvent(event: ChannelInboundEvent): Promise<ConversationThread> {
     return Promise.resolve({ conversationId: event.conversationId });
   }
 
   toChatTurn(
-    event: AppInboundEvent,
+    event: ChannelInboundEvent,
     thread: ConversationThread,
   ): Promise<ChatTurn> {
+    if (event.response)
+      return Promise.resolve({
+        kind: 'response',
+        contextUserText: event.text,
+        response: event.response,
+      });
     return Promise.resolve({
       kind: 'text',
       contextUserText: event.text,
-      // Only these fields reach the core: client metadata and display name
+      // Only these fields reach the core: platform metadata and display names
       // stay out of every prompt. No lineMemberId, so product RAG is skipped.
       request: {
-        userId: appUserId(event.contactId),
+        userId: channelUserId(event.channel, event.contactId),
         conversationId: thread.conversationId,
-        turnId: `app:${event.messageId}`,
+        turnId: this.turnId(event.channel, event.messageId),
         text: event.text,
-        channel: 'APP',
+        channel: event.channel,
       },
     });
   }
 
   async saveReply(
-    event: AppInboundEvent,
+    event: ChannelInboundEvent,
     thread: ConversationThread,
     turn: ChatTurn,
     response: ChatResponse,
@@ -83,8 +91,11 @@ export class AppChannelAdapter implements ChannelAdapter<
   ): Promise<DeliveryReference | null> {
     // Redis is not part of the transaction, so read the mute flag first. An
     // admin who answered while the model was thinking wins over the bot.
-    const muted = await this.sessions.isMuted(appUserId(event.contactId));
+    const muted = await this.sessions.isMuted(
+      channelUserId(event.channel, event.contactId),
+    );
     const silent = muted || !response.text.trim();
+    const pushed = Boolean(this.connectors.find(event.channel));
 
     return this.prisma.$transaction(async (tx) => {
       const claimed = await tx.channelConversation.updateMany({
@@ -93,7 +104,7 @@ export class AppChannelAdapter implements ChannelAdapter<
           activeTurnId: claimOwner ?? event.messageId,
         },
         data: {
-          activeUntil: new Date(Date.now() + APP_LIMITS.turnLockSec * 1000),
+          activeUntil: new Date(Date.now() + CHANNEL_TURN_LOCK_SEC * 1000),
         },
       });
       if (!claimed.count) throw new Error('Turn lock lost');
@@ -134,7 +145,8 @@ export class AppChannelAdapter implements ChannelAdapter<
               ? 'AI'
               : 'SYSTEM',
           text: response.text,
-          status: 'SENT',
+          // Pushed after commit, never inside this transaction.
+          status: pushed ? 'PENDING' : 'SENT',
           source: response.source,
           replyToId: event.messageId,
           turnContext,
@@ -161,7 +173,11 @@ export class AppChannelAdapter implements ChannelAdapter<
     });
   }
 
-  /** Nothing is sent anywhere: the answer goes back in the HTTP response. */
+  /**
+   * Push channels: send (or resume sending) the stored reply; a retryable
+   * failure throws so the queue tries again. Chat context is appended only
+   * once the platform accepted the reply. App: nothing to send.
+   */
   async deliver(deliveryId: string): Promise<void> {
     const reply = await this.prisma.channelMessage.findUnique({
       where: { id: deliveryId },
@@ -170,17 +186,29 @@ export class AppChannelAdapter implements ChannelAdapter<
         replyToId: true,
         turnContext: true,
         createdAt: true,
+        status: true,
+        conversation: { select: { channel: true } },
       },
     });
     const stored = reply?.turnContext as StoredTurnContext | null | undefined;
     if (!reply?.replyToId || !stored) return;
+
+    const channel = reply.conversation.channel;
+    if (reply.status !== 'SENT' && this.connectors.find(channel)) {
+      if ((await this.outbound.deliver(deliveryId)) !== 'SENT') return;
+    }
     // Idempotent per eventId and never throws, so a replay is harmless.
     await this.context.appendTurn({
       conversationId: reply.conversationId,
-      eventId: `app:${reply.replyToId}`,
+      eventId: this.turnId(channel, reply.replyToId),
       userText: stored.userText,
       response: stored.response,
       createdAt: reply.createdAt.getTime(),
     });
+  }
+
+  /** Billing and the decision log key a turn by this; keep it stable per message. */
+  private turnId(channel: StoredChannelKind, messageId: string) {
+    return `${CHANNEL_KINDS[channel].userIdPrefix}${messageId}`;
   }
 }

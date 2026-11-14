@@ -27,6 +27,10 @@ const LOW_CONFIDENCE_FALLBACK: LowConfidenceAnalysis = {
 /** Bounds the operator description so it stays a small classification hint. */
 const BUSINESS_CONTEXT_MAX_CHARS = 1000;
 
+/** A rewrite longer than this is not a search query; it is dropped, not cut. */
+const STANDALONE_QUERY_MAX_CHARS = 300;
+const MAX_SUB_QUESTIONS = 3;
+
 @Injectable()
 export class AiIntentClassifierService {
   private readonly logger = new Logger(AiIntentClassifierService.name);
@@ -65,18 +69,42 @@ export class AiIntentClassifierService {
         },
         context,
       );
+      if (response.finishReason === 'length')
+        this.logger.warn(
+          'low-confidence classification hit the output token cap',
+        );
       const parsed: unknown = JSON.parse(
         stripJsonCodeFence(response.text.trim()),
       );
 
-      return z
+      const analysis = z
         .object({
           classification: z.enum(['BUSINESS', 'GENERAL']),
           confidence: z.number().min(0).max(1),
           reason: z.string().max(500).optional(),
+          // Search aids only: a malformed one is dropped and never fails the
+          // classification itself.
+          standaloneQuery: z.string().optional().catch(undefined),
+          questions: z.array(z.string()).optional().catch(undefined),
         })
         .strict()
         .parse(parsed);
+      const standaloneQuery = analysis.standaloneQuery?.trim();
+      const questions = (analysis.questions ?? [])
+        .map((question) => question.trim())
+        .filter(Boolean)
+        .slice(0, MAX_SUB_QUESTIONS);
+
+      return {
+        classification: analysis.classification,
+        confidence: analysis.confidence,
+        ...(analysis.reason ? { reason: analysis.reason } : {}),
+        ...(standaloneQuery &&
+        standaloneQuery.length <= STANDALONE_QUERY_MAX_CHARS
+          ? { standaloneQuery }
+          : {}),
+        ...(questions.length ? { questions } : {}),
+      };
     } catch (error) {
       rethrowPendingAiUsage(error);
       rethrowInsufficientCredit(error);

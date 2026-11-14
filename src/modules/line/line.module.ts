@@ -1,4 +1,3 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ChatbotModule } from '../chatbot/chatbot.module';
 import { MessagingModule } from '../events/message/messaging.module';
@@ -8,14 +7,8 @@ import { PipelineModule } from '../pipeline/pipeline.module';
 import { AiProviderModule } from '../ai/ai-provider.module';
 import { LineController, LineConversationController } from './line.controller';
 import { LineDashboardController } from './line-dashboard.controller';
-import {
-  LineEventsProcessor,
-  LineEventsRetryProcessor,
-} from './line-events.processor';
-import {
-  LINE_EVENTS_QUEUE,
-  LINE_EVENTS_RETRY_QUEUE,
-} from './line-events.queue';
+import { ChatEventsQueueModule } from '../events/queue/chat-events-queue.module';
+import { LineEventsProcessor } from './line-events.processor';
 import { LineService } from './line-reply.service';
 import { LineAdminService } from './admin/line-admin.service';
 import { LineAdminController } from './admin/line-admin.controller';
@@ -34,28 +27,7 @@ import { LineChannelModule } from './channel/line-channel.module';
     CompanyModule,
     PipelineModule,
     AiProviderModule,
-    BullModule.registerQueue({
-      name: LINE_EVENTS_QUEUE,
-      defaultJobOptions: {
-        attempts: 1,
-        removeOnComplete: {
-          age: 3600,
-          count: 5000,
-        },
-        removeOnFail: {
-          age: 24 * 3600,
-        },
-      },
-    }),
-    BullModule.registerQueue({
-      name: LINE_EVENTS_RETRY_QUEUE,
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
-        removeOnComplete: { age: 3600, count: 5000 },
-        removeOnFail: { age: 24 * 3600 },
-      },
-    }),
+    ChatEventsQueueModule,
   ],
   controllers: [
     LineWebhookController,
@@ -73,8 +45,7 @@ import { LineChannelModule } from './channel/line-channel.module';
     LineSignatureGuard,
     LineWebhookAdapter,
     LineEventsProcessor,
-    LineEventsRetryProcessor,
   ],
-  exports: [LineAdminService],
+  exports: [LineAdminService, LineEventsProcessor],
 })
 export class LineModule {}

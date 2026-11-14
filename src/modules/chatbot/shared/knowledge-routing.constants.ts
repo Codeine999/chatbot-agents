@@ -10,6 +10,13 @@ export const RRF_RANK_CONSTANT = 60;
 export const DEFAULT_VECTOR_CANDIDATE_MIN_SIMILARITY = 0.6;
 export const DEFAULT_LEXICAL_CANDIDATE_MIN_SCORE = 0.1;
 /**
+ * A keyword-only candidate after the first one must cover at least this share
+ * (IDF-weighted) of the question's content terms to take an evidence slot.
+ * BM25 scores are unbounded, so the score floor above cannot reject a hit on one
+ * generic word. The top item is exempt; 0 disables the check.
+ */
+export const DEFAULT_LEXICAL_MIN_COVERAGE = 0.5;
+/**
  * RAG without the BUSINESS/GENERAL classifier needs a vector hit this close;
  * a shared word (BM25) is not enough. Calibrated 2026-10-02 on
  * gemini-embedding-2 (1536 dims): small talk 0.56–0.71, KB questions median
