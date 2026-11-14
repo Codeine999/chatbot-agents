@@ -15,9 +15,13 @@ export class ChannelHandoffRegistry {
     if (!this.handlers.includes(handler)) this.handlers.push(handler);
   }
 
+  /**
+   * The handler whose prefix matches the user id; the longest prefix wins, so
+   * a channel with an empty prefix (LINE) only gets ids nobody else claims.
+   */
   find(userId: string): ChannelHandoffHandler | undefined {
-    return this.handlers.find((handler) =>
-      userId.startsWith(handler.userIdPrefix),
-    );
+    return this.handlers
+      .filter((handler) => userId.startsWith(handler.userIdPrefix))
+      .sort((a, b) => b.userIdPrefix.length - a.userIdPrefix.length)[0];
   }
 }

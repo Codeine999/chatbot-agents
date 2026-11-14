@@ -7,8 +7,6 @@ import {
   ConversationFlow,
   ConversationStatus,
 } from './types/session.types';
-import { NotificationService } from '../admin/notification/notification.service';
-import { PrismaService } from '../../prisma/prisma.service';
 import { ChannelHandoffRegistry } from './channel-handoff.registry';
 import type { AdminRequestResult } from './channel-handoff.registry';
 
@@ -26,8 +24,6 @@ export class UserSessionService {
   constructor(
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     configService: ConfigService,
-    private readonly notificationService: NotificationService,
-    private readonly prisma: PrismaService,
     private readonly handoffs: ChannelHandoffRegistry,
   ) {
     this.sessionTtlSec = this.positiveInteger(
@@ -125,39 +121,10 @@ export class UserSessionService {
     await this.redis.del(this.muteKey(userId));
   }
 
-  /** Marks the room `waiting_admin`; admins are notified only on the transition. */
+  /** Hands the request to the channel that owns this user id. */
   async requestAdmin(userId: string): Promise<AdminRequestResult> {
     const handler = this.handoffs.find(userId);
-    if (handler) return handler.requestAdmin(userId);
-
-    const changed = await this.prisma.lineConversation.updateMany({
-      where: {
-        lineMember: { lineUserId: userId },
-        status: { not: 'waiting_admin' },
-      },
-      data: { status: 'waiting_admin' },
-    });
-    if (changed.count === 0) {
-      const waiting = await this.prisma.lineConversation.count({
-        where: { lineMember: { lineUserId: userId }, status: 'waiting_admin' },
-      });
-      return waiting > 0 ? 'ALREADY_WAITING' : 'NO_ROOM';
-    }
-
-    try {
-      const workflow = await this.get(userId);
-      await this.notificationService.notifyAdminRequired({
-        userId,
-        flow: workflow?.flow ?? 'CONTACT_ADMIN',
-        step: workflow?.step ?? 'WAITING_ADMIN',
-        status: workflow?.status ?? 'ACTIVE',
-      });
-    } catch (error) {
-      this.logger.warn(
-        `failed to notify admins for user=${userId}: ${String(error)}`,
-      );
-    }
-    return 'REQUESTED';
+    return handler ? handler.requestAdmin(userId) : 'NO_ROOM';
   }
 
   async clear(userId: string): Promise<void> {

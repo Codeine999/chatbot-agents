@@ -22,6 +22,9 @@ import { LineWebhookService } from './line-webhook.service';
 import { LineDeliveryService } from './delivery/line-delivery.service';
 import { LineChannelModule } from './connection/line-channel.module';
 
+import { NotificationModule } from '../../admin/notification/notification.module';
+import { LineHandoffHandler } from './handoff/line-handoff.handler';
+
 @Module({
   imports: [
     LineChannelModule,
@@ -31,6 +34,7 @@ import { LineChannelModule } from './connection/line-channel.module';
     PipelineModule,
     AiProviderModule,
     ChatEventsQueueModule,
+    NotificationModule,
   ],
   controllers: [
     LineWebhookController,
@@ -48,6 +52,7 @@ import { LineChannelModule } from './connection/line-channel.module';
     LineSignatureGuard,
     LineWebhookAdapter,
     LineEventsProcessor,
+    LineHandoffHandler,
   ],
   exports: [LineAdminService, LineEventsProcessor],
 })

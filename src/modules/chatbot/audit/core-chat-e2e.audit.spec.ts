@@ -243,6 +243,71 @@ describe('Low-confidence classification', () => {
   });
 });
 
+describe('Fallback notice is said once per admin request', () => {
+  const alreadyWaiting = (harness: ReturnType<typeof buildHarness>) => {
+    harness.spies.conversationUpdateMany.mockResolvedValueOnce({ count: 0 });
+    harness.spies.conversationCount.mockResolvedValueOnce(1);
+  };
+
+  it('stays silent on a business fallback while the room is already waiting_admin', async () => {
+    const harness = buildHarness({
+      generations: ['{"classification":"BUSINESS","confidence":0.8}'],
+      aiSetting: { fallbackMessage: 'เดี๋ยวแอดมินมาดูแลนะครับ' },
+    });
+    alreadyWaiting(harness);
+
+    const response = await harness.chatbot.handleTextMessage(
+      ask('ยอดเงินในบัญชีผมเท่าไหร่'),
+    );
+
+    expect(response).toEqual({
+      text: '',
+      source: 'SYSTEM',
+      contextPolicy: 'CLEAR',
+    });
+    expect(harness.spies.notifyAdminRequired).not.toHaveBeenCalled();
+  });
+
+  it('stays silent on an AI fallback while the room is already waiting_admin', async () => {
+    const harness = buildHarness({
+      budgetAllows: false,
+      aiSetting: { fallbackMessage: 'ขออภัยครับ' },
+    });
+    alreadyWaiting(harness);
+
+    const response = await harness.chatbot.handleTextMessage(
+      ask('ค่าส่งเท่าไหร่'),
+    );
+
+    expect(response.text).toBe('');
+  });
+
+  it('still sends the fallback when no conversation room exists (e.g. preview)', async () => {
+    const harness = buildHarness({
+      budgetAllows: false,
+      aiSetting: { fallbackMessage: 'ขออภัยครับ' },
+    });
+    harness.spies.conversationUpdateMany.mockResolvedValueOnce({ count: 0 });
+
+    const response = await harness.chatbot.handleTextMessage(
+      ask('ค่าส่งเท่าไหร่'),
+    );
+
+    expect(response.text).toBe('ขออภัยครับ');
+  });
+
+  it('still confirms an explicit contact-admin request while waiting', async () => {
+    const harness = buildHarness();
+    alreadyWaiting(harness);
+
+    const response = await harness.chatbot.handleTextMessage(
+      ask('ติดต่อแอดมิน'),
+    );
+
+    expect(response.text).toContain('แอดมิน');
+  });
+});
+
 describe('Grounded answering', () => {
   it('does not answer a fee question from a return policy that omits fees', async () => {
     const harness = buildHarness({

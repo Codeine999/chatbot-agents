@@ -31,6 +31,7 @@ import { AiChatService } from '../answer/answer.service';
 import { ChatbotService } from '../chatbot.service';
 import { UserSessionService } from '../../session/user-session.service';
 import { ChannelHandoffRegistry } from '../../session/channel-handoff.registry';
+import { LineHandoffHandler } from '../../channels/line/handoff/line-handoff.handler';
 import { ReplyTemplateService } from '../../../shared/templates/answer-template.service';
 import { StickerIntentService } from '../intent/sticker-intent.service';
 
@@ -283,13 +284,14 @@ export function buildHarness(options: HarnessOptions = {}) {
 
   const redis = fakeRedis();
   const notifyAdminRequired = jest.fn(() => Promise.resolve(undefined));
-  const sessions = new UserSessionService(
-    redis as never,
-    config,
-    { notifyAdminRequired } as unknown as NotificationService,
+  const handoffs = new ChannelHandoffRegistry();
+  const sessions = new UserSessionService(redis as never, config, handoffs);
+  new LineHandoffHandler(
+    handoffs,
     prisma,
-    new ChannelHandoffRegistry(),
-  );
+    { notifyAdminRequired } as unknown as NotificationService,
+    sessions,
+  ).onModuleInit();
 
   const registrationStart = jest.fn(() => Promise.resolve('เริ่มสมัคร'));
   const registrationHandle = jest.fn(() => Promise.resolve('กรอกต่อ'));
