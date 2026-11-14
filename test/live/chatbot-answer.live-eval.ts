@@ -24,10 +24,10 @@ import { ChatbotModule } from '../../src/modules/chatbot/chatbot.module';
 import { ChatbotService } from '../../src/modules/chatbot/chatbot.service';
 import { AiChatService } from '../../src/modules/chatbot/answer/answer.service';
 import { IntentRouterService } from '../../src/modules/chatbot/intent/intent-router.service';
-import { UserSessionService } from '../../src/modules/users/session/user-session.service';
+import { UserSessionService } from '../../src/modules/session/user-session.service';
 import { UsersAiProviderService } from '../../src/modules/ai/users-ai-provider.service';
 import { EmbeddingService } from '../../src/modules/ai/embeding/embedding.service';
-import { CLARIFY_MESSAGE } from '../../src/modules/chatbot/shared/knowledge-routing.constants';
+import { CLARIFY_MESSAGE } from '../../src/modules/knowledge/knowledge-routing.constants';
 import type {
   ChatContextMessage,
   ChatResponse,

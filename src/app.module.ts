@@ -1,7 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { LineModule } from './modules/line/line.module';
+import { LineModule } from './modules/channels/line/line.module';
 import { RegistrationModule } from './modules/registration/registration.module';
 import { PipelineModule } from './modules/pipeline/pipeline.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -17,10 +17,10 @@ import { AbuseModule } from './modules/abuse/abuse.module';
 import { AuthModule } from './modules/admin/auth/auth.module';
 import { AiProviderModule } from './modules/ai/ai-provider.module';
 import { ProductsModule } from './modules/products/products.module';
-import { AppMessageModule } from './modules/app-message/app-message.module';
+import { AppMessageModule } from './modules/channels/app/app-message.module';
 import { DecisionLogModule } from './modules/decision-log/decision-log.module';
-import { ChannelGatewayModule } from './modules/channels/channel-gateway.module';
-import { ChatEventsWorkerModule } from './modules/events/queue/chat-events-worker.module';
+import { ChannelGatewayModule } from './modules/channels/core/channel-gateway.module';
+import { ChatEventsWorkerModule } from './modules/conversation/queue/chat-events-worker.module';
 import { FacebookModule } from './modules/channels/facebook/facebook.module';
 
 @Module({

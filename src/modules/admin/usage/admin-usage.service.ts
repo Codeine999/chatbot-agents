@@ -5,8 +5,8 @@ import type {
   AdminRole,
   AuthenticatedAdmin,
 } from '../../../shared/guards/admin-auth.types';
-import { LineAdminService } from '../../line/admin/line-admin.service';
-import type { LineMessageQuota } from '../../line/admin/line-admin.service';
+import { LineAdminService } from '../../channels/line/admin/line-admin.service';
+import type { LineMessageQuota } from '../../channels/line/admin/line-admin.service';
 import { CompanyService } from '../company/company.service';
 
 const UUID_PATTERN =

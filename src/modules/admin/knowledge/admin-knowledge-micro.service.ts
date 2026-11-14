@@ -11,11 +11,11 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { buildMicroKnowledgeDocument } from '../../ai/embeding/micro-knowledge-document';
 import { EmbeddingService } from '../../ai/embeding/embedding.service';
 import { MicroKnowledgeVectorRepository } from '../../ai/embeding/micro-knowledge-vector.repository';
-import { AnswerPatternCacheService } from '../../chatbot/knowledge/answer-pattern-cache.service';
+import { AnswerPatternCacheService } from '../../knowledge/answer-pattern-cache.service';
 import {
   knowledgeScope,
   KnowledgeScope,
-} from '../../chatbot/knowledge/utils/knowledge-scope';
+} from '../../knowledge/utils/knowledge-scope';
 import {
   CreateAdminMicroKnowledgeDto,
   UpdateAdminMicroKnowledgeDto,

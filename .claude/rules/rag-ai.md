@@ -2,6 +2,8 @@
 paths:
   - "src/modules/chatbot/**"
   - "src/modules/ai/**"
+  - "src/modules/knowledge/**"
+  - "src/modules/products/rag/**"
   - "src/modules/admin/knowledge/**"
   - "src/ai-provider/**"
   - "src/infra/embedding/**"

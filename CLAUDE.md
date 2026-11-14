@@ -15,12 +15,12 @@
 
 | # | Class (path) | What it does |
 |---|---|---|
-| 1 | `LineWebhookController` `POST /api/line/webhooks[/:channelKey]` (`line/`) | Receives events[], does no AI |
-| 2 | `LineCredentialService` (`line/channel/`) | Resolves secret/accessToken: `forChannelKey()` or `forDeployment()` (`lineChannels` row in DB → env fallback). Cached 60s |
+| 1 | `LineWebhookController` `POST /api/line/webhooks[/:channelKey]` (`channels/line/webhook/`) | Receives events[], does no AI |
+| 2 | `LineCredentialService` (`channels/line/connection/`) | Resolves secret/accessToken: `forChannelKey()` or `forDeployment()` (`lineChannels` row in DB → env fallback). Cached 60s |
 | 3 | `LineSignatureGuard` | HMAC-SHA256(rawBody) + `destination == botUserId`. Any failure = identical 401 |
 | 4 | `LineWebhookAdapter.receive` | zod parse, ingress limit `rl:line:global:ingress`, `queue 'chat-events'.add('process-line-event', jobId=webhookEventId)` (one queue shared with every connector; `ChatEventsProcessor` is the only worker and routes by job name), returns 200 immediately |
 | 5 | `ChatEventsProcessor` → `LineEventsProcessor` (handler) | ban / burst 10 per 10s / hourly 60 / spam → `claimWebhookEvent` (lease 120s, heartbeat 30s, attempts<5). Orders events per user with an **in-memory Map (not cross-process)** |
-| 6 | `MessageProcessorService.process` (`events/message/`) | Shared hub for all channels (see below) |
+| 6 | `MessageProcessorService.process` (`conversation/message/`) | Shared hub for all channels (see below) |
 | 7 | `ChatbotService.handleTextMessage/Image/Sticker` (`chatbot/`) | gates → router → action → ChatResponse |
 | 8 | `LineChannelAdapter.saveReply` → `LineDeliveryService.deliver` | outbox + actual send (section 7) |
 
@@ -87,7 +87,7 @@ Knowledge writes must go through the admin services and call `cache.changed()` (
 
 ### 6. Product RAG (LINE only)
 
-Path: `KnowledgeRetrievalService` → `chatbot/knowledge/product/product-retrieval.service.ts` (`retrieveProduct`)
+Path: `KnowledgeRetrievalService` → `products/rag/product-retrieval.service.ts` (`retrieveProduct`)
 
 1. **Gate**: `PRODUCT_ENABLED` + `PRODUCT_RAG_ENABLED`, has `userId/turnId/lineMemberId/conversationId`, not a pure policy-question regex (e.g. "free shipping?" should hit DIRECT), single-company scope. Any failure = `undefined` (use legacy)
 2. `CommerceTurnService.find/open` (`commerce/`) — per-event snapshot in `commerceTurns`, unique `(companyId, connectionKey='standalone-line', externalEventId=webhookEventId)`; lease 180s; stages `plan → retrieval → response` are persisted and never redone (replay makes no LLM calls and no double billing); another worker holding the lease = 503 → webhook RETRY
@@ -101,7 +101,7 @@ Path: `KnowledgeRetrievalService` → `chatbot/knowledge/product/product-retriev
 
 **Admin catalog writes**: `AdminProductController` → `ProductService` → `ProductCommandService.execute` (single tx, idempotent via `requestId` + fingerprint, advisory lock, lock order: shared preset lock → `lockProduct` FOR UPDATE, optimistic version) → write + `enqueueProductIndex` (outbox `productIndexJobs`) in the same tx. `ProductIndexService` ticks every 5s: claim lease → embed **outside the tx** → re-check document hash before upserting `productVectors` (mismatch = SUPERSEDED). Stock adjustment = command `ADJUST_STOCK` (`InventoryService`, `onHand ≥ reserved`, append-only movements); there is no reservation flow or out-of-stock alert yet
 
-### 7. Delivery / outbox (`line/line-delivery.service.ts`)
+### 7. Delivery / outbox (`channels/line/delivery/line-delivery.service.ts`)
 
 - `saveReply`: tx verifies `processedLineWebhookEvent.leaseOwner` is still ours (otherwise throws `Webhook lease lost`) → empty text = no delivery row → upsert `lineDelivery` with key = `webhookEventId` (admin: `admin:{adminId}:{conversationId}:{clientRequestId}`)
 - `deliver`: claim `PENDING→SENDING` (lease 120s) → mute check (auto reply during admin mute = `FAILED`) → **REPLY** if token exists and `now < timestamp+50s` → only a clearly invalid token switches to **PUSH** (`retryKey` fixed, ≤8 attempts, backoff 2s·2ⁿ⁻¹ ≤60s, firstPushAt ≥ 23h → UNKNOWN)
@@ -121,7 +121,7 @@ Kinds: `LINE_AI_REPLY` scope `'*'` (shared by LINE + App, budgets not split yet)
 
 ### 9. Handoff / mute
 
-- `UserSessionService.requestAdmin(userId)` (`users/session/`): `ChannelHandoffRegistry` picks a handler by userId prefix (`app:` → `AppHandoffHandler` → `channelConversations`); none = LINE path: `lineConversation.status → waiting_admin`, `AdminNotification` only when the status actually changes. **Does not mute the bot**
+- `UserSessionService.requestAdmin(userId)` (`session/`): `ChannelHandoffRegistry` picks a handler by userId prefix (`app:` → `AppHandoffHandler` → `channelConversations`); none = LINE path: `lineConversation.status → waiting_admin`, `AdminNotification` only when the status actually changes. **Does not mute the bot**
 - Admin sends a message (`LineWebhookService.sendAdminMessage`, `AppInboxService.sendAdminMessage`) → delivery PUSH + `sessions.mute` (`chat:control:{userId}`=ADMIN, TTL `AUTO_MUTE_WHEN_REPLY`) + `waiting_admin → open`
 - `resume-bot`: DEL mute + status open + `LoadContextService.clear`
 
@@ -133,7 +133,7 @@ Kinds: `LINE_AI_REPLY` scope `'*'` (shared by LINE + App, budgets not split yet)
 - No row for `ChatTurn.kind='response'` or turns without a `turnId`
 - Read via `GET /api/admin/decision-logs[/summary|/:id]` (roles dev/owner); purged every 6h per `DECISION_LOG_RETENTION_DAYS` (90)
 
-### 11. How the App channel differs from LINE (`app-message/`)
+### 11. How the App channel differs from LINE (`channels/app/`)
 
 `AppClientGuard` (flag `APP_MESSAGE_ENABLED`, Origin, IP ban) → `AppSessionGuard` (Bearer `ags_…` → sha256 → `appGuestSessions`) → `AppMessageService.send`: sanitize ≤2000 + `AppAbuseService` (any hit = **429 + Retry-After**, never silently dropped) → `ensureConversation` → dedupe on `(conversationId, clientMessageId)` (different text = 409) → **DB room lock** `channelConversations.activeTurnId` 120s (collision = 409 BUSY) → store inbound + unread+1 → `MessageProcessorService` (claim = messageId) → release lock → return `{message, replies[], meta}`
 - userId in core = `app:<contactId>`, `turnId = app:<messageId>`, tables `channel*` (parallel to `line*`), no registration, no Product RAG, no BullMQ, no outbox/delivery (`deliver` only appends context)
@@ -172,21 +172,21 @@ Redis: `chat:session:{userId}` (TTL 30m sliding) · `chat:control:{userId}` (mut
 | Task | Start here |
 |---|---|
 | Wrong route / wrong action | `chatbot/intent/intent-router.service.ts`, `utils/route-stages.ts`, `rule-intent.service.ts` |
-| Search misses / wrong hits / thresholds | `chatbot/knowledge/knowledge-retrieval.service.ts`, `answer-pattern.service.ts`, `thai-bm25.ts`, `semantic-search.service.ts` |
+| Search misses / wrong hits / thresholds | `knowledge/knowledge-retrieval.service.ts`, `answer-pattern.service.ts`, `thai-bm25.ts`, `semantic-search.service.ts` |
 | Stale KB / cache | `answer-pattern-cache.service.ts` + admin knowledge services (`cache.changed()`) |
 | FAQ answer invented / frequent fallback | `chatbot/answer/answer.service.ts` (`generateFromKnowledge`), `shared/prompt/ai-setting-prompt.composer.ts` |
 | Classifier / GENERAL | `chatbot/intent/ai-intent-classifier.service.ts`, `answerGeneral` |
-| Wrong product answer / planner | `product/product-retrieval.service.ts`, `products/search/product-search.service.ts`, `product-plan-policy.ts` |
-| Price/stock in prose | `product/product-answer.policy.ts`, `product-answer.grounding.ts` |
+| Wrong product answer / planner | `products/rag/product-retrieval.service.ts`, `products/search/product-search.service.ts`, `product-plan-policy.ts` |
+| Price/stock in prose | `products/rag/product-answer.policy.ts`, `product-answer.grounding.ts` |
 | Business fields / meta | `products/attributes/presets/*`, `search/catalog-fields.ts`, `attributes/utils/attribute-value.util.ts` |
 | Product index / embedding | `products/search/product-index.service.ts`, `product-index-outbox.ts`, `product-vector.repository.ts` |
-| Not delivered / duplicated / reply token | `line/line-delivery.service.ts`, `line/line-reply.service.ts`, `line/admin/line-admin.service.ts` |
-| Stuck / duplicate / retried events | `events/queue/chat-events.processor.ts` (worker), `line/line-events.processor.ts`, `line/line-webhook.service.ts` |
+| Not delivered / duplicated / reply token | `channels/line/delivery/line-delivery.service.ts`, `channels/line/delivery/line-reply.service.ts`, `channels/line/admin/line-admin.service.ts` |
+| Stuck / duplicate / retried events | `conversation/queue/chat-events.processor.ts` (worker), `channels/line/worker/line-events.processor.ts`, `channels/line/line-webhook.service.ts` |
 | Credit / model pricing / replay | `usage/billing/ai-billing.service.ts`, `usage/credit-point/credit.service.ts`, `usage/billing/ai-pricing.service.ts` |
-| Rate limit / ban / spam | `usage/rate-limit/*`, `line-events.processor.ts` (LINE), `app-message/app-abuse.service.ts` (App) |
-| Handoff / mute | `users/session/user-session.service.ts`, `app-message/app-handoff.handler.ts` |
+| Rate limit / ban / spam | `usage/rate-limit/*`, `line-events.processor.ts` (LINE), `channels/app/app-abuse.service.ts` (App) |
+| Handoff / mute | `session/user-session.service.ts`, `channels/core/channel-handoff.handler.ts` |
 | What did this turn decide | `decisionLogs` (`trace`, `answerMode`, `fallbackReason` columns) + `commerceTurns` for products |
-| App channel | `app-message/app-message.service.ts`, `app-channel.adapter.ts`, `app-inbox.service.ts` |
+| App channel | `channels/app/app-message.service.ts`, `channels/core/channel-store.adapter.ts`, `channels/core/inbox/channel-inbox.service.ts` |
 | Registration | `registration/registration-flow.service.ts` |
 
 ### 15. Frequently used env vars

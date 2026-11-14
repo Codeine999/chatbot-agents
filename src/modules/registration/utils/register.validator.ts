@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { REGISTER_REQUIRED_FIELDS } from '../utils/register-fields.constant';
+import { REGISTER_REQUIRED_FIELDS } from './register-fields.constant';
 import {
   CompleteRegisterSessionData,
   RegisterSessionData,

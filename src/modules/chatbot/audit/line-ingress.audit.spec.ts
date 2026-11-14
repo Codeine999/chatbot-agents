@@ -3,9 +3,9 @@
  * No live LINE call can happen here: the LINE services are jest mocks and any
  * unexpected call fails the test.
  */
-import { LineWebhookService } from '../../line/line-webhook.service';
+import { LineWebhookService } from '../../channels/line/line-webhook.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
-import type { LineWebhookEvent } from '../../line/dto/line';
+import type { LineWebhookEvent } from '../../channels/line/dto/line';
 
 type Recorder = {
   service: LineWebhookService;

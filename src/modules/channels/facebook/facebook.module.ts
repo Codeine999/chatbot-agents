@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '../../../prisma/prisma.module';
 import { CompanyModule } from '../../admin/company/company.module';
 import { CommerceAccessModule } from '../../commerce/commerce-access.module';
-import { ChannelGatewayModule } from '../channel-gateway.module';
+import { ChannelGatewayModule } from '../core/channel-gateway.module';
 import { FacebookChannelAdminController } from './admin/facebook-channel-admin.controller';
 import { FacebookChannelAdminService } from './admin/facebook-channel-admin.service';
 import { FacebookConfig } from './facebook.config';

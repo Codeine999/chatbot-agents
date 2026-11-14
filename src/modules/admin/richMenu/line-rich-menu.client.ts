@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { LineCredentialService } from '../../line/channel/line-credential.service';
+import { LineCredentialService } from '../../channels/line/connection/line-credential.service';
 import {
   LINE_API_BASE_URL,
   LINE_DATA_API_BASE_URL,

@@ -2,7 +2,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import type { ConfigService } from '@nestjs/config';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { CompanyService } from '../../admin/company/company.service';
-import { ChannelConnectorRegistry } from '../channel-connector.registry';
+import { ChannelConnectorRegistry } from '../core/channel-connector.registry';
 import { FacebookConfig } from './facebook.config';
 import { FacebookConnector } from './facebook.connector';
 import { FacebookCredentialService } from './facebook-credential.service';

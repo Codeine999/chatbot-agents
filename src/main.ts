@@ -19,7 +19,7 @@ import { AppLogger } from './infra/logging/app-logger';
 import {
   APP_BODY_LIMIT_BYTES,
   AppMessageConfig,
-} from './modules/app-message/app-message.config';
+} from './modules/channels/app/app-message.config';
 import {
   LOCAL_UPLOAD_ROOT,
   LOCAL_UPLOAD_URL_PREFIX,

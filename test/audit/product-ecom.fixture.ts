@@ -24,7 +24,7 @@ import type { AiProviderName } from '../../src/ai-provider/types/ai-provider.typ
 import { EmbeddingService } from '../../src/modules/ai/embeding/embedding.service';
 import { AnswerPatternVectorRepository } from '../../src/modules/ai/embeding/answer-pattern-vector.repository';
 import { MicroKnowledgeVectorRepository } from '../../src/modules/ai/embeding/micro-knowledge-vector.repository';
-import { AnswerPatternCacheService } from '../../src/modules/chatbot/knowledge/answer-pattern-cache.service';
+import { AnswerPatternCacheService } from '../../src/modules/knowledge/answer-pattern-cache.service';
 import { AdminKnowledgePatternService } from '../../src/modules/admin/knowledge/admin-knowledge-pattern.service';
 import { AdminKnowledgeMicroService } from '../../src/modules/admin/knowledge/admin-knowledge-micro.service';
 import type { CreateAdminAnswerPatternDto } from '../../src/modules/admin/knowledge/dto/admin-answer-pattern.dto';

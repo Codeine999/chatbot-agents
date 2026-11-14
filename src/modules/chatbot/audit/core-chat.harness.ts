@@ -16,21 +16,21 @@ import type { UsersAiProviderService } from '../../ai/users-ai-provider.service'
 import type { EmbeddingService } from '../../ai/embeding/embedding.service';
 import type { AnswerPatternVectorRepository } from '../../ai/embeding/answer-pattern-vector.repository';
 import type { MicroKnowledgeVectorRepository } from '../../ai/embeding/micro-knowledge-vector.repository';
-import type { AnswerPatternCacheService } from '../knowledge/answer-pattern-cache.service';
+import type { AnswerPatternCacheService } from '../../knowledge/answer-pattern-cache.service';
 import type { RichMenuReplyCacheService } from '../menu/rich-menu-reply-cache.service';
-import type { KnowledgeRecord } from '../knowledge/answer-pattern.service';
+import type { KnowledgeRecord } from '../../knowledge/answer-pattern.service';
 
-import { AnswerPatternService } from '../knowledge/answer-pattern.service';
-import { MicroKnowledgeService } from '../knowledge/micro-knowledge.service';
-import { SemanticSearchService } from '../knowledge/semantic-search.service';
-import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
+import { AnswerPatternService } from '../../knowledge/answer-pattern.service';
+import { MicroKnowledgeService } from '../../knowledge/micro-knowledge.service';
+import { SemanticSearchService } from '../../knowledge/semantic-search.service';
+import { KnowledgeRetrievalService } from '../../knowledge/knowledge-retrieval.service';
 import { RuleIntentService } from '../intent/rule-intent.service';
 import { AiIntentClassifierService } from '../intent/ai-intent-classifier.service';
 import { IntentRouterService } from '../intent/intent-router.service';
 import { AiChatService } from '../answer/answer.service';
 import { ChatbotService } from '../chatbot.service';
-import { UserSessionService } from '../../users/session/user-session.service';
-import { ChannelHandoffRegistry } from '../../users/session/channel-handoff.registry';
+import { UserSessionService } from '../../session/user-session.service';
+import { ChannelHandoffRegistry } from '../../session/channel-handoff.registry';
 import { ReplyTemplateService } from '../answer/answer-template.service';
 import { StickerIntentService } from '../intent/sticker-intent.service';
 

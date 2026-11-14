@@ -49,15 +49,15 @@ import { AdminAiPricingModule } from '../../src/modules/admin/pricing/admin-ai-p
 import { ChatbotModule } from '../../src/modules/chatbot/chatbot.module';
 import { ChatbotService } from '../../src/modules/chatbot/chatbot.service';
 import { IntentRouterService } from '../../src/modules/chatbot/intent/intent-router.service';
-import { UserSessionService } from '../../src/modules/users/session/user-session.service';
+import { UserSessionService } from '../../src/modules/session/user-session.service';
 import { LoadContextService } from '../../src/modules/chatbot/context/load-context.service';
 import { ProductSearchService } from '../../src/modules/products/search/product-search.service';
 import { DecisionTurnRecorder } from '../../src/modules/decision-log/decision-turn.recorder';
-import { MessageProcessorService } from '../../src/modules/events/message/message-processor.service';
+import { MessageProcessorService } from '../../src/modules/conversation/message/message-processor.service';
 import type {
   ChannelAdapter,
   ConversationThread,
-} from '../../src/modules/events/message/contracts/channel-adapter';
+} from '../../src/modules/conversation/message/contracts/channel-adapter';
 import type {
   ChatResponse,
   RouteDecision,
@@ -75,11 +75,11 @@ import type {
 import {
   productAnswerDecision,
   renderProductAnswer,
-} from '../../src/modules/chatbot/knowledge/product/product-answer.policy';
+} from '../../src/modules/products/rag/product-answer.policy';
 import { OpenRouterProvider } from '../../src/ai-provider/providers/openrouter-ai.provider';
 import type { KnowledgeItem } from '../../src/modules/chatbot/shared/types/chat.types';
 import type { ProductWorkflow } from '../../src/modules/products/search/product-search.types';
-import { CLARIFY_MESSAGE } from '../../src/modules/chatbot/shared/knowledge-routing.constants';
+import { CLARIFY_MESSAGE } from '../../src/modules/knowledge/knowledge-routing.constants';
 import { LOW_CONFIDENCE_CLASSIFIER_SYSTEM_INSTRUCTION } from '../../src/modules/chatbot/shared/prompt/low-confidence-classifier.prompt';
 import {
   CATALOG,

@@ -15,7 +15,7 @@ import { CompanyService } from '../../admin/company/company.service';
 import {
   CHANNEL_KEY_PATTERN,
   CURRENT_CREDENTIAL_KEY_VERSION,
-} from '../../line/channel/line-credential.service';
+} from '../line/connection/line-credential.service';
 import { FacebookConfig } from './facebook.config';
 
 export type FacebookCredentials = Readonly<{

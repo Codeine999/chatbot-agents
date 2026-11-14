@@ -11,7 +11,7 @@ import { REDIS_CLIENT } from '../../../infra/redis/redis.module';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ChatbotService } from '../../chatbot/chatbot.service';
 import { LoadContextService } from '../../chatbot/context/load-context.service';
-import { UserSessionService } from '../../users/session/user-session.service';
+import { UserSessionService } from '../../session/user-session.service';
 import type { ChatResponse } from '../../chatbot/shared/types/chat.types';
 import type { SendPreviewMessageDto } from './dto/admin-userview.dto';
 

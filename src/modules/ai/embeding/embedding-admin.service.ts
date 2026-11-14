@@ -10,7 +10,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import {
   DIRECT_IMMEDIALY,
   MIN_CONTEXT_SCORE,
-} from '../../chatbot/shared/knowledge-routing.constants';
+} from '../../knowledge/knowledge-routing.constants';
 import { AiPricingService } from '../../usage/billing/ai-pricing.service';
 import { buildAnswerPatternDocument } from './answer-pattern-document';
 import { AnswerPatternVectorRepository } from './answer-pattern-vector.repository';

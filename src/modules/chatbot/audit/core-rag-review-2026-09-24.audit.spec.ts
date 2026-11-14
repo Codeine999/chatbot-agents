@@ -12,8 +12,8 @@ import type { AnswerPattern } from '../../../generated/prisma/client';
 import { EmbeddingService } from '../../ai/embeding/embedding.service';
 import { PendingAiUsageError } from '../../usage/billing/pending-ai-usage.error';
 import { CreateAdminAnswerPatternDto } from '../../admin/knowledge/dto/admin-answer-pattern.dto';
-import { AnswerPatternCacheService } from '../knowledge/answer-pattern-cache.service';
-import { resolveRetrievalQuery } from '../knowledge/retrieval-query-planner.service';
+import { AnswerPatternCacheService } from '../../knowledge/answer-pattern-cache.service';
+import { resolveRetrievalQuery } from '../../knowledge/retrieval-query-planner.service';
 import { LoadContextService } from '../context/load-context.service';
 import { buildHarness, fakeRedis, pattern, vector } from './core-chat.harness';
 

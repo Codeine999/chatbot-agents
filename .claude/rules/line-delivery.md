@@ -1,7 +1,7 @@
 ---
 paths:
-  - "src/modules/line/**"
-  - "src/modules/events/**"
+  - "src/modules/channels/**"
+  - "src/modules/conversation/**"
 ---
 
 # LINE, queue, and delivery

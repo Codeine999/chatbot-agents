@@ -4,7 +4,7 @@ import type { ChatResponse } from '../chatbot/shared/types/chat.types';
 import type {
   ChatTurn,
   ConversationThread,
-} from '../events/message/contracts/channel-adapter';
+} from '../conversation/message/contracts/channel-adapter';
 import { DecisionLogService } from './decision-log.service';
 import { DecisionTraceService } from './decision-trace.service';
 import type { DecisionTraceMeta } from './types/decision-log.types';

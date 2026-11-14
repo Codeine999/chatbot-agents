@@ -8,7 +8,7 @@ import type { PrismaService } from '../../../prisma/prisma.service';
 import type { ChatbotService } from '../../chatbot/chatbot.service';
 import type { LoadContextService } from '../../chatbot/context/load-context.service';
 import type { ChatResponse } from '../../chatbot/shared/types/chat.types';
-import type { UserSessionService } from '../../users/session/user-session.service';
+import type { UserSessionService } from '../../session/user-session.service';
 import { AdminUserViewService } from './admin-userview.service';
 
 const ADMIN = '11111111-1111-4111-8111-111111111111';

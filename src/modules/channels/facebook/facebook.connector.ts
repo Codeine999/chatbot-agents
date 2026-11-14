@@ -6,8 +6,8 @@ import type {
   OutboundTarget,
   SendResult,
   WebhookRequest,
-} from '../channel-connector';
-import { ChannelConnectorRegistry } from '../channel-connector.registry';
+} from '../core/channel-connector';
+import { ChannelConnectorRegistry } from '../core/channel-connector.registry';
 import { FacebookConfig } from './facebook.config';
 import {
   FacebookCredentialService,

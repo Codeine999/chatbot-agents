@@ -1,7 +1,9 @@
 ---
 paths:
   - "src/modules/chatbot/**"
-  - "src/modules/line/**"
+  - "src/modules/channels/**"
+  - "src/modules/session/**"
+  - "src/modules/conversation/**"
   - "src/modules/admin/**"
   - "src/modules/registration/**"
 ---

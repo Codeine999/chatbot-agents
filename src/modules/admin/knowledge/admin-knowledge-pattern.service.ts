@@ -10,7 +10,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { EmbeddingService } from '../../ai/embeding/embedding.service';
 import { AnswerPatternVectorRepository } from '../../ai/embeding/answer-pattern-vector.repository';
 import { buildAnswerPatternDocument } from '../../ai/embeding/answer-pattern-document';
-import { AnswerPatternCacheService } from '../../chatbot/knowledge/answer-pattern-cache.service';
+import { AnswerPatternCacheService } from '../../knowledge/answer-pattern-cache.service';
 import {
   CreateAdminAnswerPatternDto,
   UpdateAdminAnswerPatternDto,

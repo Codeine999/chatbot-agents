@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { normalizeText, redactPii } from '../../../utils/text.utils';
-import { bm25Scores } from '../../chatbot/knowledge/utils/thai-bm25';
+import { bm25Scores } from '../../../shared/text/thai-bm25';
 import {
   productCompanyScope,
   productWhere,

@@ -10,7 +10,7 @@ import type {
 } from '../../../ai-provider/types/ai-provider.types';
 import { AiBudgetService } from '../../usage/rate-limit/ai-budget.service';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
+import { KnowledgeRetrievalService } from '../../knowledge/knowledge-retrieval.service';
 import { toAiProviderMessages } from '../context/ai-provider-context';
 import {
   DEFAULT_FALLBACK_MESSAGE,
@@ -19,7 +19,7 @@ import {
   KNOWLEDGE_RULES,
   PARTIAL_ANSWER_NOTE,
 } from '../shared/prompt/ai-chat.constants';
-import { INSUFFICIENT_CONTEXT } from '../shared/knowledge-routing.constants';
+import { INSUFFICIENT_CONTEXT } from '../../knowledge/knowledge-routing.constants';
 import {
   AiAnswerResult,
   AiRequestContext,
@@ -39,8 +39,8 @@ import {
   parseAiSkills,
 } from '../../ai/ai-setting/ai-setting-config';
 import { composeAiAnswerPrompt } from '../shared/prompt/ai-setting-prompt.composer';
-import { isUsableKnowledge } from '../knowledge/utils/knowledge-answer.policy';
-import { ProductAnswerService } from '../knowledge/product/product-answer.service';
+import { isUsableKnowledge } from '../../knowledge/utils/knowledge-answer.policy';
+import { ProductAnswerService } from '../../products/rag/product-answer.service';
 import { IMAGE_ANSWER_RULES } from './image/image-answer.rules';
 import {
   GROUNDED_JSON_SCHEMA,

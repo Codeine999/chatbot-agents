@@ -1,8 +1,8 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { ConversationSession } from '../../users/session/user-session.service';
+import { ConversationSession } from '../../session/user-session.service';
 import { RuleIntentService } from './rule-intent.service';
 import { AiIntentClassifierService } from './ai-intent-classifier.service';
-import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
+import { KnowledgeRetrievalService } from '../../knowledge/knowledge-retrieval.service';
 
 import { RichMenuReplyCacheService } from '../menu/rich-menu-reply-cache.service';
 import { parseMenuPostback } from '../../../shared/richMenu/menu-postback';

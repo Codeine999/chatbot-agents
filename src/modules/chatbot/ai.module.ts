@@ -3,17 +3,17 @@ import { AiProviderModule } from '../ai/ai-provider.module';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { AiChatService } from './answer/answer.service';
 import { AiIntentClassifierService } from './intent/ai-intent-classifier.service';
-import { AnswerPatternService } from './knowledge/answer-pattern.service';
-import { AnswerPatternCacheService } from './knowledge/answer-pattern-cache.service';
-import { SemanticSearchService } from './knowledge/semantic-search.service';
-import { KnowledgeRetrievalService } from './knowledge/knowledge-retrieval.service';
-import { MicroKnowledgeService } from './knowledge/micro-knowledge.service';
+import { AnswerPatternService } from '../knowledge/answer-pattern.service';
+import { AnswerPatternCacheService } from '../knowledge/answer-pattern-cache.service';
+import { SemanticSearchService } from '../knowledge/semantic-search.service';
+import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
+import { MicroKnowledgeService } from '../knowledge/micro-knowledge.service';
 import { MicroKnowledgeVectorRepository } from '../ai/embeding/micro-knowledge-vector.repository';
 import { ProductSearchModule } from '../products/search/product-search.module';
 import { CommerceAccessModule } from '../commerce/commerce-access.module';
-import { CommerceTurnService } from '../commerce/commerce-turn.service';
-import { ProductRetrievalService } from './knowledge/product/product-retrieval.service';
-import { ProductAnswerService } from './knowledge/product/product-answer.service';
+import { CommerceTurnService } from '../products/rag/commerce-turn.service';
+import { ProductRetrievalService } from '../products/rag/product-retrieval.service';
+import { ProductAnswerService } from '../products/rag/product-answer.service';
 
 @Module({
   imports: [

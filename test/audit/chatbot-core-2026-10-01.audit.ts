@@ -4,7 +4,7 @@
  * No claim about real model quality or real vector recall can follow from these tests.
  */
 import { Logger } from '@nestjs/common';
-import { LineEventsProcessor } from '../../src/modules/line/line-events.processor';
+import { LineEventsProcessor } from '../../src/modules/channels/line/worker/line-events.processor';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import http from 'node:http';
@@ -23,11 +23,11 @@ import type {
   KnowledgeRetrievalResult,
   RouteDecision,
 } from '../../src/modules/chatbot/shared/types/chat.types';
-import { resolveRetrievalQuery } from '../../src/modules/chatbot/knowledge/retrieval-query-planner.service';
-import { CLARIFY_MESSAGE } from '../../src/modules/chatbot/shared/knowledge-routing.constants';
-import { thaiTerms } from '../../src/modules/chatbot/knowledge/utils/thai-bm25';
+import { resolveRetrievalQuery } from '../../src/modules/knowledge/retrieval-query-planner.service';
+import { CLARIFY_MESSAGE } from '../../src/modules/knowledge/knowledge-routing.constants';
+import { thaiTerms } from '../../src/shared/text/thai-bm25';
 import { redactPii } from '../../src/utils/text.utils';
-import { AnswerPatternCacheService } from '../../src/modules/chatbot/knowledge/answer-pattern-cache.service';
+import { AnswerPatternCacheService } from '../../src/modules/knowledge/answer-pattern-cache.service';
 import { LoadContextService } from '../../src/modules/chatbot/context/load-context.service';
 import { toAiProviderMessages } from '../../src/modules/chatbot/context/ai-provider-context';
 

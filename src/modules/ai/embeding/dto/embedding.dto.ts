@@ -1,6 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
-import { MAX_RETRIEVAL_CANDIDATES } from '../../../chatbot/shared/knowledge-routing.constants';
+import { MAX_RETRIEVAL_CANDIDATES } from '../../../knowledge/knowledge-routing.constants';
 
 /**
  * Query-string booleans are parsed explicitly rather than with

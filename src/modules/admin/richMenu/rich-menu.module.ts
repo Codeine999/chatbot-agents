@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { StorageModule } from '../../../infra/storage/storage.module';
 import { PrismaModule } from '../../../prisma/prisma.module';
 import { ChatbotModule } from '../../chatbot/chatbot.module';
-import { LineChannelModule } from '../../line/channel/line-channel.module';
+import { LineChannelModule } from '../../channels/line/connection/line-channel.module';
 import { LineRichMenuClient } from './line-rich-menu.client';
 import { RichMenuController } from './rich-menu.controller';
 import { RichMenuImageService } from './rich-menu-image.service';

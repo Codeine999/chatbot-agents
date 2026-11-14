@@ -1,4 +1,4 @@
-import { FUNCTION_WORDS, thaiTerms } from '../../chatbot/knowledge/utils/thai-bm25';
+import { FUNCTION_WORDS, thaiTerms } from '../../../shared/text/thai-bm25';
 
 /**
  * Words that describe the question (price, count, stock, shipping...) rather
