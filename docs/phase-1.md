@@ -201,7 +201,7 @@ idempotency ไม่กระทบ เพราะ admin chat ส่ง `idemp
 
 ## Step 4. Types ที่ step ถัดไปใช้
 
-ไฟล์ `src/modules/chatbot/shared/types/chat.types.ts`
+ไฟล์ `src/shared/contracts/chat.types.ts`
 
 1. `LowConfidenceAnalysis` เพิ่ม 2 field (ก่อน `failed`):
 
@@ -294,7 +294,7 @@ export const GROUNDED_JSON_SCHEMA = {
 export type GroundedResponse = z.infer<typeof groundedResponseSchema>;
 ```
 
-### 5.2 `src/modules/chatbot/shared/prompt/ai-chat.constants.ts`
+### 5.2 `src/modules/ai/prompt/ai-chat.constants.ts`
 
 เพิ่มท้ายไฟล์:
 
@@ -550,7 +550,7 @@ export const PARTIAL_ANSWER_NOTE =
 
 ## Step 8. C8: classifier คืน `standaloneQuery` + `questions[]`
 
-### 8.1 `src/modules/chatbot/shared/prompt/low-confidence-classifier.prompt.ts`
+### 8.1 `src/modules/chatbot/intent/low-confidence-classifier.prompt.ts`
 
 แทนบรรทัดสุดท้ายของ `LOW_CONFIDENCE_CLASSIFIER_SYSTEM_INSTRUCTION` (บรรทัด `Return JSON only: {...}`) ด้วย:
 
@@ -725,7 +725,7 @@ block `CONTACT_ADMIN` ท้าย method คงเดิม (ยังส่ง
 
 เป้าหมาย: ข้อความปกติไม่อ่าน DB สำหรับ lexical search อีก (เดิม: `answerPattern.findMany` 500 แถว + `microKnowledge.findMany` 500 แถว ทุกข้อความ) และตัดคำไทยของแต่ละแถวครั้งเดียวต่อ snapshot
 
-### 9.1 `src/modules/chatbot/knowledge/utils/thai-bm25.ts`: จำผลตัดคำ
+### 9.1 `src/shared/text/thai-bm25.ts`: จำผลตัดคำ
 
 แทน function `frequencies` ด้วย:
 
@@ -759,7 +759,7 @@ function frequencies(record: Bm25Record): Map<string, number> {
 
 ผู้เรียก (`scoreOver`, `coverageOver`) อ่าน Map อย่างเดียว ไม่แก้ค่า จึงแชร์ได้
 
-### 9.2 `src/modules/chatbot/knowledge/answer-pattern-cache.service.ts` (แทนทั้งไฟล์)
+### 9.2 `src/modules/knowledge/answer-pattern-cache.service.ts` (แทนทั้งไฟล์)
 
 คงชื่อ class และชื่อไฟล์เดิม (มีหลายที่ import) เพิ่ม: แถว MicroKnowledge, `snapshot()`, `changed()`, subscriber, log เพดาน
 
@@ -963,7 +963,7 @@ export class AnswerPatternCacheService
 - query ของ `answerPattern.findMany` ต้องเหมือนเดิมทุก key (`answer-pattern-cache.service.spec.ts` ตรวจ `toHaveBeenCalledWith`)
 - `refresh()` คงพฤติกรรมเดิม (เรียกซ้อนกันได้ query เดียว) มี test ตรวจอยู่ 2 ที่; ความถูกต้องหลัง write อยู่ที่ `changed()` → `reload()`
 
-### 9.3 `src/modules/chatbot/knowledge/micro-knowledge.service.ts`
+### 9.3 `src/modules/knowledge/micro-knowledge.service.ts`
 
 แทน method `findMatches`:
 
@@ -991,7 +991,7 @@ export class AnswerPatternCacheService
 
 เปลี่ยน import เป็น `import { AnswerPatternService, type KnowledgeRecord } from './answer-pattern.service';`
 
-### 9.4 `src/modules/chatbot/knowledge/knowledge-retrieval.service.ts` (`runRetrieval`)
+### 9.4 `src/modules/knowledge/knowledge-retrieval.service.ts` (`runRetrieval`)
 
 แทน code ตั้งแต่ `const cached = await read('cache', () =>` จนถึงบรรทัด `read('micro lexical', () => this.micro.findMatches(query)),` ด้วย:
 
@@ -1059,7 +1059,7 @@ DI: `AdminModule` และ `KnowledgeAnswerModule` import `AiModule` ซึ่�
 ### 10.1 แก้ mock ที่ต้องมี `snapshot`
 
 - `src/modules/chatbot/audit/core-chat.harness.ts`: `const patternCache = { getAll: cacheGetAll, snapshot: () => null } as unknown as AnswerPatternCacheService;` (null = ไม่มี snapshot สด harness เดิมจึงเดินทาง DB เหมือนก่อน)
-- `src/modules/chatbot/knowledge/test/knowledge-retrieval.service.spec.ts` ใน `makeService`: เพิ่ม override `snapshot?: { patterns: unknown[]; micro: unknown[] } | null` และ mock เป็น `{ getAll: cachedRows, snapshot: jest.fn().mockReturnValue(overrides.snapshot ?? null) }`
+- `src/modules/knowledge/test/knowledge-retrieval.service.spec.ts` ใน `makeService`: เพิ่ม override `snapshot?: { patterns: unknown[]; micro: unknown[] } | null` และ mock เป็น `{ getAll: cachedRows, snapshot: jest.fn().mockReturnValue(overrides.snapshot ?? null) }`
 
 ### 10.2 `src/ai-provider/providers/openrouter-ai.provider.spec.ts` (เพิ่ม)
 

@@ -124,7 +124,11 @@ describe('Current RAG review: routing and retrieval', () => {
         }),
     );
     const cache = new AnswerPatternCacheService(
-      { answerPattern: { findMany: read } } as unknown as PrismaService,
+      {
+        answerPattern: { findMany: read },
+        // refresh() now loads both lexical sources.
+        microKnowledge: { findMany: () => Promise.resolve([]) },
+      } as unknown as PrismaService,
       { get: () => undefined } as unknown as ConfigService,
     );
     const beforeWrite = cache.refresh();

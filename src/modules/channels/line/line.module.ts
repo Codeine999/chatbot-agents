@@ -3,7 +3,6 @@ import { ChatbotModule } from '../../chatbot/chatbot.module';
 import { MessagingModule } from '../../conversation/message/messaging.module';
 import { LineChannelAdapter } from './line-channel.adapter';
 import { CompanyModule } from '../../admin/company/company.module';
-import { PipelineModule } from '../../pipeline/pipeline.module';
 import { AiProviderModule } from '../../ai/ai-provider.module';
 import {
   LineController,
@@ -31,7 +30,6 @@ import { LineHandoffHandler } from './handoff/line-handoff.handler';
     ChatbotModule,
     MessagingModule,
     CompanyModule,
-    PipelineModule,
     AiProviderModule,
     ChatEventsQueueModule,
     NotificationModule,

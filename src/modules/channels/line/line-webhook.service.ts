@@ -6,7 +6,6 @@ import {
 import {
   LineChatMessageType,
   LineChatSender,
-  Prisma,
 } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { MessageProcessorService } from '../../conversation/message/message-processor.service';
@@ -20,6 +19,7 @@ import type {
 import { LineDeliveryService } from './delivery/line-delivery.service';
 import { randomUUID } from 'node:crypto';
 import { UserSessionService } from '../../session/user-session.service';
+import * as claims from './worker/line-webhook-claim';
 import {
   afterRoom,
   INBOX_ROOM_ORDER,
@@ -349,52 +349,23 @@ export class LineWebhookService {
    * so a duplicate delivery is skipped and never replied to twice.
    */
   async claimWebhookEvent(event: LineWebhookEvent): Promise<string | null> {
-    const owner = randomUUID();
-    const now = new Date();
-    try {
-      await this.prisma.processedLineWebhookEvent.create({
-        data: { webhookEventId: event.webhookEventId, event: event as unknown as Prisma.InputJsonValue, status: 'RETRY', leaseUntil: now },
-      });
-    } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
-    }
-    const claimed = await this.prisma.processedLineWebhookEvent.updateMany({
-      where: { webhookEventId: event.webhookEventId, status: { in: ['RETRY', 'PROCESSING'] },
-        leaseUntil: { lte: now }, attempts: { lt: 5 } },
-      data: { status: 'PROCESSING', leaseOwner: owner, leaseUntil: new Date(Date.now() + 120_000), attempts: { increment: 1 } },
-    });
-    return claimed.count ? owner : null;
+    return claims.claimWebhookEvent(this.prisma, event);
   }
 
   async renewWebhookLease(webhookEventId: string, owner: string) {
-    await this.prisma.processedLineWebhookEvent.updateMany({
-      where: { webhookEventId, leaseOwner: owner, status: 'PROCESSING' },
-      data: { leaseUntil: new Date(Date.now() + 120_000) },
-    });
+    return claims.renewWebhookLease(this.prisma, webhookEventId, owner);
   }
 
-  async finishWebhookEvent(webhookEventId: string, owner: string, error?: unknown) {
-    await this.prisma.processedLineWebhookEvent.updateMany({
-      where: { webhookEventId, leaseOwner: owner, status: 'PROCESSING' },
-      data: {
-        status: error ? 'RETRY' : 'COMPLETED', leaseOwner: null,
-        leaseUntil: new Date(Date.now() + 10_000),
-        lastError: error ? String(error).slice(0, 1000) : null,
-      },
-    });
+  async finishWebhookEvent(
+    webhookEventId: string,
+    owner: string,
+    error?: unknown,
+  ) {
+    return claims.finishWebhookEvent(this.prisma, webhookEventId, owner, error);
   }
 
   async recoverableWebhookEvents(): Promise<LineWebhookEvent[]> {
-    const now = new Date();
-    await this.prisma.processedLineWebhookEvent.updateMany({
-      where: { status: { in: ['PROCESSING', 'RETRY'] }, attempts: { gte: 5 }, leaseUntil: { lte: now } },
-      data: { status: 'FAILED', leaseOwner: null },
-    });
-    const rows = await this.prisma.processedLineWebhookEvent.findMany({
-      where: { status: { in: ['PROCESSING', 'RETRY'] }, attempts: { lt: 5 }, leaseUntil: { lte: now } },
-      orderBy: { processedAt: 'asc' }, take: 20,
-    });
-    return rows.filter(row => row.event).map(row => row.event as unknown as LineWebhookEvent);
+    return claims.recoverableWebhookEvents(this.prisma);
   }
 
   private parseBeforeDate(before?: string): Date | undefined {

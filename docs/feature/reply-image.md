@@ -37,7 +37,7 @@ flowchart LR
 
 ไฟล์ที่เกี่ยวข้อง
 
-- [line-channel.adapter.ts](../../src/modules/line/line-channel.adapter.ts): `toChatTurn()` ดาวน์โหลดรูปผ่าน `LineService.getImageContent()` และบันทึก history เป็น `[image]` โดย `mediaUrl: null`
+- [line-channel.adapter.ts](../../src/modules/channels/line/line-channel.adapter.ts): `toChatTurn()` ดาวน์โหลดรูปผ่าน `LineService.getImageContent()` และบันทึก history เป็น `[image]` โดย `mediaUrl: null`
 - [chatbot.service.ts](../../src/modules/chatbot/chatbot.service.ts): `handleImageMessage()` เช็ก mute แล้วเรียก `answerImage()`
 - [answer.service.ts](../../src/modules/chatbot/answer/answer.service.ts): `answerImage()` ใช้ prompt [image-answer.rules.ts](../../src/modules/chatbot/answer/image/image-answer.rules.ts)
 - [image-analysis.policy.ts](../../src/modules/chatbot/intent/utils/image-analysis.policy.ts): parse ผลลัพธ์และ `BLOCKED_ANSWER_PATTERNS`
@@ -208,7 +208,7 @@ export type ImageObservation = Readonly<{
 
 | Contract | การเปลี่ยน | Caller ที่ต้องตรวจ |
 |---|---|---|
-| `ChatResponse` ([chat.types.ts](../../src/modules/chatbot/shared/types/chat.types.ts)) | เพิ่ม `contextUserText?: string` (optional) | `LineChannelAdapter.saveReply()` ให้ใช้ `response.contextUserText ?? turn.contextUserText`, `AppChannelAdapter`, delivery finalization ที่ append context |
+| `ChatResponse` ([chat.types.ts](../../src/shared/contracts/chat.types.ts)) | เพิ่ม `contextUserText?: string` (optional) | `LineChannelAdapter.saveReply()` ให้ใช้ `response.contextUserText ?? turn.contextUserText`, `AppChannelAdapter`, delivery finalization ที่ append context |
 | `KnowledgeAnswerContext` | เพิ่ม `imageObservation?: ImageObservation` | `AiChatService.answerKnowledge()`, `ProductAnswerService.answer()` ส่งต่อเป็น `dataSections.customerImage` และเลือก `modeRules` แบบ ask-back |
 | `ChatRequest` | เพิ่ม `imageObservation?` (Phase 2 ภายในเท่านั้น) | `ChatbotService.answerText()`, `IntentRouterService.resolve()` input |
 | `ImageChatRequest` | เพิ่ม `lineMessageId`, `imageSet?` | `LineChannelAdapter.toChatTurn()` |
@@ -253,7 +253,7 @@ async handleImageMessage(request: ImageChatRequest): Promise<ChatResponse> {
 }
 ```
 
-- `imageResponse` และ `withImageContext` ตั้งค่า `contextUserText = "[รูปภาพ: ${subject}]"` ทำให้ turn ถัดไปเห็นสรุปของรูปแทน `[image]` และเมื่อ response เป็น INCLUDE กับ `catalogRefs` กลไก "ตัวนี้/อันนี้" (`referenceSignal` ใน [product-retrieval.service.ts](../../src/modules/chatbot/knowledge/product/product-retrieval.service.ts)) ก็ใช้งานต่อได้ทันที
+- `imageResponse` และ `withImageContext` ตั้งค่า `contextUserText = "[รูปภาพ: ${subject}]"` ทำให้ turn ถัดไปเห็นสรุปของรูปแทน `[image]` และเมื่อ response เป็น INCLUDE กับ `catalogRefs` กลไก "ตัวนี้/อันนี้" (`referenceSignal` ใน [product-retrieval.service.ts](../../src/modules/products/rag/product-retrieval.service.ts)) ก็ใช้งานต่อได้ทันที
 - หลังส่งคำตอบสำเร็จ ให้ตั้ง `observation.answered = true` เพื่อไม่ให้ inject สรุปรูปซ้ำใน §7.3
 - มีการเรียก AI ได้มากที่สุด 3 ครั้งต่อรูป ได้แก่ perception, embedding/planner ใน retrieval และ grounded answer `ai-billing.service.ts` คิดค่าใช้จ่ายแบบ idempotent ด้วย fingerprint ของ request แต่ละตัวอยู่แล้ว retry จึงไม่คิดเงินซ้ำ แต่ต้องเพิ่ม `AiBudgetService.tryConsume` ใน perception (เหมือนเดิม) และไม่เรียก provider ภายใน DB transaction
 
@@ -281,7 +281,7 @@ async handleImageMessage(request: ImageChatRequest): Promise<ChatResponse> {
 
 LINE ส่งรูปกับข้อความเป็นคนละ event (ไม่มี caption) ลูกค้ามักส่งรูปแล้วพิมพ์ตามภายในไม่กี่วินาที ถ้าตอบรูปทันทีจะได้ข้อความถามกลับที่ซ้ำซ้อนกับคำถามที่ลูกค้าพิมพ์มาแล้ว
 
-- ตอน ingress ([line-webhook.adapter.ts](../../src/modules/line/line-webhook.adapter.ts)) ให้บันทึก `SET chat:last-inbound:<lineUserId> {timestamp, type}` ก่อน enqueue ซึ่งเป็น Redis call เดียว จึงยังคืน response ได้เร็ว ใช้ ingress แทน DB เพราะ text event ที่ตามมายังไม่ถูก persist จนกว่า job ของรูปจะเสร็จ
+- ตอน ingress ([line-webhook.adapter.ts](../../src/modules/channels/line/webhook/line-webhook.adapter.ts)) ให้บันทึก `SET chat:last-inbound:<lineUserId> {timestamp, type}` ก่อน enqueue ซึ่งเป็น Redis call เดียว จึงยังคืน response ได้เร็ว ใช้ ingress แทน DB เพราะ text event ที่ตามมายังไม่ถูก persist จนกว่า job ของรูปจะเสร็จ
 - หลัง perception แล้ว image turn รอได้สูงสุด `IMAGE_FOLLOWUP_WAIT_MS` (ค่าเริ่มต้น 2500ms) ถ้าระหว่างนั้นพบ text event ที่ timestamp ใหม่กว่ารูป ให้เก็บ observation (`answered=false`) แล้วคืน `''` / `EXCLUDE` เพื่อให้ text turn ตอบแทน (§7.3 Phase 2)
 - ต้องไม่ใช้กลไกนี้กับ `SILENT_HANDOFF` หรือ `TEMPLATE_HANDOFF`
 - ความเสี่ยง: เวลารอทำให้คำตอบของรูปช้าลง และ reply token มีอายุจำกัด จึงต้องให้ค่ารวมต่ำกว่า `LINE_EVENT_MAX_AGE_MS` มาก แล้ววัด latency จริงก่อนเปิด flag

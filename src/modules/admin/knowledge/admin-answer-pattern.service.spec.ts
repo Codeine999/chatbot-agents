@@ -52,8 +52,11 @@ function build() {
   const embeddingService = {
     embedDocument: jest.fn().mockResolvedValue(embedding),
   } as unknown as jest.Mocked<EmbeddingService>;
+  // Writes call changed() (reload + notify other instances); one mock stands for both.
+  const refresh = jest.fn().mockResolvedValue(undefined);
   const cache = {
-    refresh: jest.fn().mockResolvedValue(undefined),
+    refresh,
+    changed: refresh,
   } as unknown as jest.Mocked<AnswerPatternCacheService>;
 
   // The repository is real, not a stub: the vector write is raw SQL, and

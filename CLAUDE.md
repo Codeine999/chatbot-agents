@@ -42,7 +42,7 @@
 **Actions**: `RICH_MENU_REPLY`, `CANCEL_SESSION`, `START_REGISTER/CONTINUE_REGISTER` (RegistrationFlowService, Redis session), `CONTACT_ADMIN`, `START_AI_CHAT`, `GENERAL_QUESTION`, `CLARIFY`, `ANSWER_KNOWLEDGE`
 
 **`ChatbotService.aiResponse` (contextPolicy rules that must not break)**:
-- `isFallback` → `requestAdmin` + `SYSTEM/EXCLUDE` (this turn is not stored, but earlier context is not cleared)
+- `isFallback` → `fallbackResponse`: `requestAdmin`, then `SYSTEM/CLEAR`; when the room is already `waiting_admin` (`ALREADY_WAITING`) the text is `''` so the fallback notice is said once per admin request
 - Partial answer (`result.handoff`) → reply + `requestAdmin`, `INCLUDE`
 - Normal answer → `INCLUDE` (`KNOWLEDGE`/`AI` source)
 - CLEAR is used for menu / cancel / register / customer-initiated "contact admin"
@@ -81,7 +81,7 @@ Knowledge writes must go through the admin services and call `cache.changed()` (
 - Non-empty `unanswered` → append `PARTIAL_ANSWER_NOTE` + handoff
 - `NOT_BUSINESS` is allowed only when `allowGeneralExit` (route `RAG` and source ∈ CACHE/DATABASE/EMBEDDING) → `answerGeneral`
 - Failure → fallback + handoff; reasons: `INSUFFICIENT_CONTEXT, NOT_DIRECTLY_ANSWERED, INVALID_EVIDENCE_REFERENCE, INVALID_GROUNDED_OUTPUT, TRUNCATED_OUTPUT (finishReason=length), NOT_BUSINESS_ON_BUSINESS_ROUTE`
-- Prompt is built by `composeAiAnswerPrompt` (`chatbot/shared/prompt/ai-setting-prompt.composer.ts`): evidence/ragContext sits in the **systemInstruction** (see F6), `& < >` escaped
+- Prompt is built by `composeAiAnswerPrompt` (`ai/prompt/ai-setting-prompt.composer.ts`): evidence/ragContext sits in the **systemInstruction** (see F6), `& < >` escaped
 
 `AiSetting` (`aiSettings`): latest active row in scope `AI_SETTING_TENANT_ID`; only role `dev` may write `systemPrompt`
 
@@ -90,7 +90,7 @@ Knowledge writes must go through the admin services and call `cache.changed()` (
 Path: `KnowledgeRetrievalService` → `products/rag/product-retrieval.service.ts` (`retrieveProduct`)
 
 1. **Gate**: `PRODUCT_ENABLED` + `PRODUCT_RAG_ENABLED`, has `userId/turnId/lineMemberId/conversationId`, not a pure policy-question regex (e.g. "free shipping?" should hit DIRECT), single-company scope. Any failure = `undefined` (use legacy)
-2. `CommerceTurnService.find/open` (`commerce/`) — per-event snapshot in `commerceTurns`, unique `(companyId, connectionKey='standalone-line', externalEventId=webhookEventId)`; lease 180s; stages `plan → retrieval → response` are persisted and never redone (replay makes no LLM calls and no double billing); another worker holding the lease = 503 → webhook RETRY
+2. `CommerceTurnService.find/open` (`products/rag/commerce-turn.service.ts`) — per-event snapshot in `commerceTurns`, unique `(companyId, connectionKey='standalone-line', externalEventId=webhookEventId)`; lease 180s; stages `plan → retrieval → response` are persisted and never redone (replay makes no LLM calls and no double billing); another worker holding the lease = 503 → webhook RETRY
 3. `routeWithoutPlanner`: product signal / reference to earlier refs / probe finds name-alias-SKU / `mentionsCatalog` → PLAN; otherwise run legacy first: DIRECT/RAG/settled → use legacy; policy-like but unsure → `plannerIntent=KNOWLEDGE` (0 LLM); everything else → PLAN (planner replaces the classifier)
 4. **Plan**: broad inquiry / exact SKU at the start of the message / policy-only = rule-based (0 LLM), otherwise LLM slot `PLAN` (`productPlannerSchema`, temp 0.1). `validate`: productIds ⊆ probe/refs, option/filter keys ∈ the preset's `storeOptions/storeFields`, operator matches type, min ≤ max price. Failure = `plan.failed` → fallback (never guess). An EQ filter on an option key (color/size) is converted into an option. `inStockOnly` must come from the customer's words (`groundStockFilter`)
 5. **Search** (`products/search/product-search.service.ts`) in a RepeatableRead tx, 15s: probe → lexical SQL + BM25 (+ vector fallback ≥ 0.65 if `PRODUCT_SEMANTIC_ENABLED`) → `matchesBusinessFields` (options + filters must all hold on the **same variant**) → `evidence()` (price/stock read live from DB) → status `FOUND | MISSING_INPUT | VARIANT_UNAVAILABLE | NO_MATCH | NO_RELIABLE_CANDIDATE | UNAVAILABLE`
@@ -172,16 +172,16 @@ Redis: `chat:session:{userId}` (TTL 30m sliding) · `chat:control:{userId}` (mut
 | Task | Start here |
 |---|---|
 | Wrong route / wrong action | `chatbot/intent/intent-router.service.ts`, `utils/route-stages.ts`, `rule-intent.service.ts` |
-| Search misses / wrong hits / thresholds | `knowledge/knowledge-retrieval.service.ts`, `answer-pattern.service.ts`, `thai-bm25.ts`, `semantic-search.service.ts` |
+| Search misses / wrong hits / thresholds | `knowledge/knowledge-retrieval.service.ts`, `knowledge/retrieval-evidence.ts` (RRF / conflicts / related), `answer-pattern.service.ts`, `thai-bm25.ts`, `semantic-search.service.ts` |
 | Stale KB / cache | `answer-pattern-cache.service.ts` + admin knowledge services (`cache.changed()`) |
-| FAQ answer invented / frequent fallback | `chatbot/answer/answer.service.ts` (`generateFromKnowledge`), `shared/prompt/ai-setting-prompt.composer.ts` |
+| FAQ answer invented / frequent fallback | `chatbot/answer/answer.service.ts` (`generateFromKnowledge`), `chatbot/answer/grounded/knowledge-instruction.ts` (grounded prompt rules), `ai/prompt/ai-setting-prompt.composer.ts` |
 | Classifier / GENERAL | `chatbot/intent/ai-intent-classifier.service.ts`, `answerGeneral` |
 | Wrong product answer / planner | `products/rag/product-retrieval.service.ts`, `products/search/product-search.service.ts`, `product-plan-policy.ts` |
 | Price/stock in prose | `products/rag/product-answer.policy.ts`, `product-answer.grounding.ts` |
 | Business fields / meta | `products/attributes/presets/*`, `search/catalog-fields.ts`, `attributes/utils/attribute-value.util.ts` |
 | Product index / embedding | `products/search/product-index.service.ts`, `product-index-outbox.ts`, `product-vector.repository.ts` |
 | Not delivered / duplicated / reply token | `channels/line/delivery/line-delivery.service.ts`, `channels/line/delivery/line-reply.service.ts`, `channels/line/admin/line-admin.service.ts` |
-| Stuck / duplicate / retried events | `conversation/queue/chat-events.processor.ts` (worker), `channels/line/worker/line-events.processor.ts`, `channels/line/line-webhook.service.ts` |
+| Stuck / duplicate / retried events | `channels/chat-events.processor.ts` (worker), `channels/line/worker/line-events.processor.ts`, `channels/line/worker/line-webhook-claim.ts` (claim / lease / recovery SQL), `channels/line/line-webhook.service.ts` |
 | Credit / model pricing / replay | `usage/billing/ai-billing.service.ts`, `usage/credit-point/credit.service.ts`, `usage/billing/ai-pricing.service.ts` |
 | Rate limit / ban / spam | `usage/rate-limit/*`, `line-events.processor.ts` (LINE), `channels/app/app-abuse.service.ts` (App) |
 | Handoff / mute | `session/user-session.service.ts`, `channels/core/channel-handoff.handler.ts` |

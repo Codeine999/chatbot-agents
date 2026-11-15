@@ -62,7 +62,7 @@ Active REGISTER ปิด product retrieval อยู่แล้ว (`disablePr
 
 ### 2.2 Product retrieval ปัจจุบัน: intent → condition → action
 
-ดู `src/modules/chatbot/knowledge/product/product-retrieval.service.ts`:
+ดู `src/modules/products/rag/product-retrieval.service.ts`:
 
 1. ต้องผ่าน `productRagEnabled` และมี userId/turnId/lineMemberId/conversationId
 2. Policy question รูปประโยคสั้นที่กำหนดไว้คืน legacy โดยตรง

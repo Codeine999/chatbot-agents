@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmbeddingService } from '../../ai/embedding/embedding.service';
 import { MicroKnowledgeVectorRepository } from '../../ai/embedding/micro-knowledge-vector.repository';
+import { AnswerPatternCacheService } from '../../knowledge/answer-pattern-cache.service';
 import { AdminKnowledgeMicroService } from './admin-knowledge-micro.service';
 import { CreateAdminMicroKnowledgeDto } from './dto/admin-micro-knowledge.dto';
 
@@ -67,6 +68,9 @@ function build() {
       embeddingService,
       vectors,
       { get: jest.fn() } as unknown as ConfigService,
+      {
+        changed: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AnswerPatternCacheService,
     ),
     prisma,
     tx,

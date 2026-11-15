@@ -414,6 +414,11 @@ export class ChatbotService {
       this.decisionTrace?.handoff('AI_FALLBACK');
       return this.fallbackResponse(userId, result.text);
     }
+    if (result.handoff) {
+      // Part of the question was answered; staff follow up on the rest.
+      this.decisionTrace?.handoff('PARTIAL_ANSWER');
+      await this.userSessionService.requestAdmin(userId);
+    }
     return {
       ...this.response(result.text, source, 'INCLUDE'),
       ...(result.catalogRefs ? { catalogRefs: result.catalogRefs } : {}),

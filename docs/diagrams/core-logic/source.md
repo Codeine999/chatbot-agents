@@ -34,7 +34,7 @@ flowchart TB
 - Adapter รับ follow/unfollow แต่ saveIncomingEvent คืน null สำหรับ lifecycle event เหล่านี้ จึงไม่มี chatbot turn; event/message type ที่ไม่รองรับถูก acknowledge โดยไม่ enqueue
 - Image จาก LINE ดาวน์โหลดใน adapter ก่อน chatbot mute gate; external image คืน SYSTEM response แบบ EXCLUDE
 - Loading indicator เป็น best effort และไม่บล็อก turn. Automatic outbound history ใน finalize ใช้ sender SYSTEM แม้ ChatResponse.source เป็น AI/KNOWLEDGE
-- Sources: src/modules/line/line-webhook.adapter.ts, line-signature.guard.ts, line-events.processor.ts, line-webhook.service.ts, line-channel.adapter.ts, line-delivery.service.ts; src/modules/events/message/message-processor.service.ts
+- Sources: src/modules/channels/line/webhook/line-webhook.adapter.ts, line-signature.guard.ts, line-events.processor.ts, line-webhook.service.ts, line-channel.adapter.ts, line-delivery.service.ts; src/modules/conversation/message/message-processor.service.ts
 
 ## 02 · Chatbot routing
 
@@ -118,7 +118,7 @@ flowchart TB
 - Retrieval reuse ใน router ส่งต่อให้ AiChatService; ไม่ค้นซ้ำใน path ปกติ. Product gate ที่ตรวจ legacy ใช้ promise เดียวเมื่อ query เดิม
 - REWRITE / follow-up / BOTH ที่ forceGrounded ไม่เข้า safe DIRECT. Read failure ที่จำเป็นหรือ conflict ห้าม generate จาก pool ที่ไม่ครบ
 - RRF เป็น ranking score; confidence gate ใช้ exact match หรือ cosine similarity ไม่เอา RRF เทียบ threshold ของ cosine
-- Sources: src/modules/chatbot/knowledge/knowledge-retrieval.service.ts, semantic-search.service.ts, retrieval-query-planner.service.ts, knowledge-scope.ts; src/modules/chatbot/aichat.service.ts
+- Sources: src/modules/knowledge/knowledge-retrieval.service.ts, semantic-search.service.ts, retrieval-query-planner.service.ts, knowledge-scope.ts; src/modules/chatbot/aichat.service.ts
 
 ## 04 · Product RAG
 
@@ -163,7 +163,7 @@ flowchart TB
 - BOTH เมื่อไม่มี policy evidence ตอบ product half พร้อมข้อความว่ policy ยังยืนยันไม่ได้; ไม่แต่ง policy
 - Product GENERAL ใช้ general rules ภายใต้ workflow นี้. KNOWLEDGE ส่ง plannerIntent กลับ router เพื่อไม่ classify BUSINESS/GENERAL ซ้ำ
 - Feature defaults เป็น false; PRODUCT_SEMANTIC_ENABLED ขึ้นกับสอง flags ก่อนหน้า ไม่ได้อ่าน .env เพื่อสรุป deployment
-- Sources: src/modules/chatbot/knowledge/product-retrieval.service.ts, product-answer.service.ts, product-answer.policy.ts; src/modules/commerce/commerce-turn.service.ts, commerce-scope.service.ts, commerce-feature.service.ts; src/modules/products/search/product-search.service.ts
+- Sources: src/modules/products/rag/product-retrieval.service.ts, product-answer.service.ts, product-answer.policy.ts; src/modules/products/rag/commerce-turn.service.ts, commerce-scope.service.ts, commerce-feature.service.ts; src/modules/products/search/product-search.service.ts
 
 ## 05 · Provider & credit lifecycle
 
@@ -221,7 +221,7 @@ flowchart TB
 - ReplyUntil = event.timestamp + 50 วินาที; event เก่าไม่ได้ drop เพราะอายุ แต่เลือก PUSH ใน delivery
 - Accepted กับ finalizedAt แยกกัน; repair หลัง acceptance ไม่ resend LINE และไม่ generate AI ใหม่
 - LineAdminService.pushText ปัจจุบันส่ง HTTP แล้วบันทึก outbound counter; path นี้ไม่มี CreditService debit หรือ quota pre-check จึงไม่วาดว่า LINE_PUSH_MESSAGE ถูก bill อัตโนมัติ
-- Sources: src/modules/line/line-delivery.service.ts, line-channel.adapter.ts, line-reply.service.ts, admin/line-admin.service.ts
+- Sources: src/modules/channels/line/delivery/line-delivery.service.ts, line-channel.adapter.ts, line-reply.service.ts, admin/line-admin.service.ts
 
 ## 07 · Registration & handoff
 
@@ -250,7 +250,7 @@ flowchart TB
 - waiting_admin คือ durable request queue ไม่ใช่ mute. Admin send ที่ไม่ accepted ยังไม่เปิด conversation
 - Registration gate และ Product flags เป็นคนละเงื่อนไข; registration PII ไม่ใช้เป็น AI context
 - Notification metadata.conversationId เป็น JSON linkage ไม่ใช่ foreign key. Notification failure ถูก catch และไม่มี durable notification outbox ใน path นี้
-- Sources: src/modules/registration/registration-flow.service.ts, registration.service.ts; src/modules/users/customers/customer-identity.service.ts; src/modules/chatbot/user-session.service.ts; src/modules/line/line-webhook.service.ts; src/modules/admin/notification/notification.service.ts
+- Sources: src/modules/registration/registration-flow.service.ts, registration.service.ts; src/modules/users/customers/customer-identity.service.ts; src/modules/session/user-session.service.ts; src/modules/channels/line/line-webhook.service.ts; src/modules/admin/notification/notification.service.ts
 
 ## 08 · Product indexing event
 

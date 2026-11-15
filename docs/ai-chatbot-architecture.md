@@ -134,7 +134,7 @@ AiGenerateResponse = { text; provider; model; usage; providerRequestId?; finishR
 
 `finishReason` มาจาก OpenRouter `finish_reason` และ Gemini `candidates[0].finishReason` (`length` = output ถูกตัดที่ `maxOutputTokens`) ไม่มีค่า = ไม่รู้ ไม่ใช่ "ไม่ถูกตัด" และถูกเก็บในผลที่ billing replay ด้วย Admin chat ตั้ง `maxOutputTokens` 2000 เอง (ลูกค้าใช้ค่า default) และเตือนใน log เมื่อถูกตัด
 
-Shapes ด้านบนย่อเพื่ออ่าน flow; enum/optional fields ฉบับเต็มอยู่ [chat.types.ts](../src/modules/chatbot/types/chat.types.ts) และ [ai-provider.types.ts](../src/ai-provider/types/ai-provider.types.ts)
+Shapes ด้านบนย่อเพื่ออ่าน flow; enum/optional fields ฉบับเต็มอยู่ [chat.types.ts](../src/shared/contracts/chat.types.ts) และ [ai-provider.types.ts](../src/ai-provider/types/ai-provider.types.ts)
 
 - Knowledge scope: trusted `KNOWLEDGE_TENANT_ID` (ไม่ตั้ง=null), `KNOWLEDGE_LANGUAGE` (th)
 - AiSetting scope: trusted `AI_SETTING_TENANT_ID` แยกต่างหาก (ไม่ตั้ง=null); ไม่ fallback ข้าม tenant
@@ -269,7 +269,7 @@ required for this deployment; it does not resume the interrupted form.
 
 ## 5. Function flow: ingress, worker และ delivery
 
-Source: [line.controller.ts](../src/modules/line/line.controller.ts), [processor](../src/modules/line/line-events.processor.ts), [webhook service](../src/modules/line/line-webhook.service.ts), [delivery service](../src/modules/line/line-delivery.service.ts)
+Source: [line.controller.ts](../src/modules/channels/line/inbox/line.controller.ts), [processor](../src/modules/channels/line/worker/line-events.processor.ts), [webhook service](../src/modules/channels/line/line-webhook.service.ts), [delivery service](../src/modules/channels/line/delivery/line-delivery.service.ts)
 
 | Function | รับเข้า → ทำงาน/เรียกต่อ → คืนผล |
 |---|---|
@@ -306,7 +306,7 @@ Delivery error branches: expired SENDING/REPLY → UNKNOWN; PUSH retryable → P
 
 ## 6. Function flow: routing และคำตอบ
 
-Source: [ChatbotService](../src/modules/chatbot/chatbot.service.ts), [IntentRouterService](../src/modules/chatbot/intent-router.service.ts), [AiChatService](../src/modules/chatbot/aichat.service.ts)
+Source: [ChatbotService](../src/modules/chatbot/chatbot.service.ts), [IntentRouterService](../src/modules/chatbot/intent/intent-router.service.ts), [AiChatService](../src/modules/chatbot/aichat.service.ts)
 
 | Function | รับเข้า → ทำงาน/เรียกต่อ → คืนผล |
 |---|---|
@@ -345,7 +345,7 @@ Action executor:
 
 ## 7. Function flow: retrieval และคะแนน
 
-Source: [retrieval](../src/modules/chatbot/knowledge/knowledge-retrieval.service.ts), [matcher](../src/modules/chatbot/knowledge/answer-pattern.service.ts), [semantic](../src/modules/chatbot/knowledge/semantic-search.service.ts)
+Source: [retrieval](../src/modules/knowledge/knowledge-retrieval.service.ts), [matcher](../src/modules/knowledge/answer-pattern.service.ts), [semantic](../src/modules/knowledge/semantic-search.service.ts)
 
 | Function | รับเข้า → ทำงาน/เรียกต่อ → คืนผล |
 |---|---|
@@ -383,7 +383,7 @@ Matcher ส่งรายการที่ BM25>0 หรือ exact; hybrid l
 
 ## 8. Function flow: context, settings และ indexing
 
-Source: [context](../src/modules/chatbot/context/load-context.service.ts), [session](../src/modules/chatbot/user-session.service.ts), [composer](../src/modules/chatbot/prompt/ai-setting-prompt.composer.ts), [admin settings](../src/modules/admin/ai-setting/admin-ai-setting.service.ts)
+Source: [context](../src/modules/chatbot/context/load-context.service.ts), [session](../src/modules/session/user-session.service.ts), [composer](../src/modules/ai/prompt/ai-setting-prompt.composer.ts), [admin settings](../src/modules/admin/ai-setting/admin-ai-setting.service.ts)
 
 | Function | รับเข้า → ทำงาน/เรียกต่อ → คืนผล |
 |---|---|
@@ -429,7 +429,7 @@ MaxPlus ถูกถอดจาก adapter registry, model catalog และ pr
 
 OpenRouter เป็น generation adapter เพิ่มเติม โดยอ่าน `OPEN_ROUTER_KEY` จาก env, ใช้ `AI_OPENROUTER_MODELS` เป็นรายการรุ่นที่เลือกได้ และเก็บ provider/model ที่เลือกจริงใน `AiProviderSetting` เดิมแยก USER/ADMIN ก่อนเรียก provider ต้องมี `AiModelPricing` ของ `OPENROUTER` กับ model ID นั้น รายละเอียดการเปิดใช้และ billing caveats อยู่ที่ [OpenRouter provider](openrouter-provider.md)
 
-Source: [provider](../src/modules/ai/ai-provider.service.ts), [embedding](../src/modules/ai/embeding/embedding.service.ts), [billing](../src/modules/usage/billing/ai-billing.service.ts), [credit](../src/modules/usage/credit-point/credit.service.ts)
+Source: [provider](../src/modules/ai/ai-provider.service.ts), [embedding](../src/modules/ai/embedding/embedding.service.ts), [billing](../src/modules/usage/billing/ai-billing.service.ts), [credit](../src/modules/usage/credit-point/credit.service.ts)
 
 | Function | รับเข้า → ทำงาน/เรียกต่อ → คืนผล |
 |---|---|

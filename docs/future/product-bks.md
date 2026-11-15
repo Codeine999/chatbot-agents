@@ -130,21 +130,21 @@ LINE webhook → queue → ChatbotService.answerText
 ### H — ก่อนเปิดใช้กับ BKS
 
 #### A1 [ใหม่] สัญญาณเข้า flow product เป็นคำศัพท์ ecom ที่เขียนตายตัว
-- **ที่:** [product-retrieval.service.ts:47-59](../../src/modules/chatbot/knowledge/product/product-retrieval.service.ts#L47) (`policySignal`, `productSignal`, `isBroadProductInquiry`, `referenceSignal` มี "สีดำ/สีขาว") และ regex นโยบายทั้งข้อความที่ [:99-104](../../src/modules/chatbot/knowledge/product/product-retrieval.service.ts#L99)
+- **ที่:** [product-retrieval.service.ts:47-59](../../src/modules/products/rag/product-retrieval.service.ts#L47) (`policySignal`, `productSignal`, `isBroadProductInquiry`, `referenceSignal` มี "สีดำ/สีขาว") และ regex นโยบายทั้งข้อความที่ [:99-104](../../src/modules/products/rag/product-retrieval.service.ts#L99)
 - **ผลกับ BKS:** คำอย่าง `รถ`, `ตั๋ว`, `รอบ`, `ที่นั่ง`, `ออกกี่โมง`, `เต็ม` ไม่อยู่ในสัญญาณ การเข้า planner จึงขึ้นกับว่าชื่อ/หมวดสินค้ามีคำนั้นหรือไม่ (`mentionsCatalog`) ตัวอย่าง: "พรุ่งนี้มีรถไหม" อาจไม่เข้า product แล้วไปตอบจาก MicroKnowledge แทน ส่วน `สี` ใน `productSignal` ไป match คำว่า "รถเสีย" ทำให้เสีย planner call เปล่า (M6 เดิม)
 - **แก้:** ย้ายคำทั้งหมดไปไว้ที่ `preset.lexicon.signals` และเทียบเป็นคำด้วย `Intl.Segmenter` (แก้ M6 ไปพร้อมกัน) ค่า default ของ ECOMMERCE ใช้คำชุดปัจจุบัน
 
 #### A2 [ใหม่] ไม่มีวันเวลาปัจจุบันใน prompt ใดๆ และไม่มี field ชนิดวัน/เวลา
-- **ที่:** [ai-setting-prompt.composer.ts](../../src/modules/chatbot/shared/prompt/ai-setting-prompt.composer.ts) และ [product-prompt.ts](../../src/modules/chatbot/knowledge/product/utils/prompt/product-prompt.ts) ไม่มี `now`, timezone หรือวันในสัปดาห์ ส่วน `ATTRIBUTE_TYPES` ([attribute-definition.types.ts:203](../../src/modules/products/attributes/types/attribute-definition.types.ts#L203)) มีแค่ TEXT/NUMBER/BOOLEAN/SELECT/MULTI_SELECT/TAGS
+- **ที่:** [ai-setting-prompt.composer.ts](../../src/modules/ai/prompt/ai-setting-prompt.composer.ts) และ [product-prompt.ts](../../src/modules/products/rag/utils/prompt/product-prompt.ts) ไม่มี `now`, timezone หรือวันในสัปดาห์ ส่วน `ATTRIBUTE_TYPES` ([attribute-definition.types.ts:203](../../src/modules/products/attributes/types/attribute-definition.types.ts#L203)) มีแค่ TEXT/NUMBER/BOOLEAN/SELECT/MULTI_SELECT/TAGS
 - **ผล:** "พรุ่งนี้", "คืนนี้", "ศุกร์นี้", "สองทุ่ม" ถูกตีความไม่ได้ หรือ model เดาวันเอง ถ้าเก็บเวลาเป็น TEXT "07:30" ก็กรองช่วงเวลา (หลัง 18:00) ไม่ได้
 - **แก้:** date resolver (หัวข้อ 5.7) และเก็บเวลาเป็นคอลัมน์ของ slot ไม่เก็บใน meta
 
 #### A3 [ใหม่] ข้อความตอบและตัวกันมั่วผูกกับคำศัพท์ ecom และไม่กันคำว่า "ว่าง/เต็ม"
 - **ที่:**
-  - [product-answer.policy.ts:26-32](../../src/modules/chatbot/knowledge/product/product-answer.policy.ts#L26) `stockLabels` ("มีสินค้าคงเหลือ", "ร้านไม่ได้เปิดระบบติดตามสต็อก")
-  - [:540](../../src/modules/chatbot/knowledge/product/product-answer.policy.ts#L540) หน่วย "ชิ้น"
-  - [:611-618](../../src/modules/chatbot/knowledge/product/product-answer.policy.ts#L611) "หมายถึงสินค้ารุ่นไหนคะ … ระบุสีและขนาด", "ระบุชื่อรุ่นหรือ SKU"
-  - [:404-410](../../src/modules/chatbot/knowledge/product/product-answer.policy.ts#L404) คำต้องห้ามนอก token มีแค่ `มีของ|มีสินค้า|พร้อมส่ง|สินค้าหมด|หมดสต็อก|เหลือ\s|ส่งฟรี|…`
+  - [product-answer.policy.ts:26-32](../../src/modules/products/rag/product-answer.policy.ts#L26) `stockLabels` ("มีสินค้าคงเหลือ", "ร้านไม่ได้เปิดระบบติดตามสต็อก")
+  - [:540](../../src/modules/products/rag/product-answer.policy.ts#L540) หน่วย "ชิ้น"
+  - [:611-618](../../src/modules/products/rag/product-answer.policy.ts#L611) "หมายถึงสินค้ารุ่นไหนคะ … ระบุสีและขนาด", "ระบุชื่อรุ่นหรือ SKU"
+  - [:404-410](../../src/modules/products/rag/product-answer.policy.ts#L404) คำต้องห้ามนอก token มีแค่ `มีของ|มีสินค้า|พร้อมส่ง|สินค้าหมด|หมดสต็อก|เหลือ\s|ส่งฟรี|…`
 - **ผลกับ BKS:**
   1. ลูกค้าถาม "รอบ 20:00 เต็มยัง" แต่ variant ไม่ track stock → ได้คำตอบ "ร้านไม่ได้เปิดระบบติดตามสต็อก"
   2. **ความเสี่ยงหลัก:** model เขียน "รอบนี้ยังว่างอยู่ค่ะ" หรือ "เต็มแล้วค่ะ" ใน prose ได้โดยไม่ใช้ token เพราะทั้งสองคำไม่อยู่ในรายการห้าม ผลคือแต่งสถานะที่นั่งขึ้นเอง ซึ่งเป็นความผิดประเภทเดียวกับการแต่งราคา
@@ -168,7 +168,7 @@ LINE webhook → queue → ChatbotService.answerText
 ### M — แก้ในรอบเดียวกัน
 
 #### P1 [ค้าง: AUDIT.md] policy ที่หลักฐานอ่อนถูกแนบท้ายคำตอบสินค้าทั้งข้อความ
-- **ที่:** [product-retrieval.service.ts:425-432](../../src/modules/chatbot/knowledge/product/product-retrieval.service.ts#L425) เก็บ `selectedItems` แม้ route เป็น `LOW_CONFIDENCE` แล้ว `safeProductAnswer` ต่อ `policies.map(e => e.answer)` ท้ายข้อความ
+- **ที่:** [product-retrieval.service.ts:425-432](../../src/modules/products/rag/product-retrieval.service.ts#L425) เก็บ `selectedItems` แม้ route เป็น `LOW_CONFIDENCE` แล้ว `safeProductAnswer` ต่อ `policies.map(e => e.answer)` ท้ายข้อความ
 - **แก้:** ใช้ policy เฉพาะจาก retrieval ที่ไม่ใช่ `LOW_CONFIDENCE` ไม่งั้นใช้ `POLICY_UNVERIFIED_NOTE`
 
 #### P2 [ค้าง: AUDIT.md] ความถูกต้องขึ้นกับว่า company มี preset ที่ลงทะเบียน + เทสต์ C02 ล้ม
@@ -177,7 +177,7 @@ LINE webhook → queue → ChatbotService.answerText
 - **แก้:** แก้ fixture ของ C02 ให้ใช้ ECOMMERCE, ลบ `custom/prasya.*` หรือลงทะเบียนให้ถูก และเพิ่มเทสต์ที่วนทุก preset (M6 เดิม: `assertSafeDefinition`)
 
 #### M8 [ค้าง] filter EQ บน key ที่เป็น option หายเงียบ
-- **ที่:** [product-retrieval.service.ts:313-330](../../src/modules/chatbot/knowledge/product/product-retrieval.service.ts#L313)
+- **ที่:** [product-retrieval.service.ts:313-330](../../src/modules/products/rag/product-retrieval.service.ts#L313)
 - **ผลกับ BKS:** "VIP หรือชั้น 1 ก็ได้" ได้ option เดียว อีกตัวหายไป
 - **แก้:** ลบออกจาก filters เฉพาะตัวที่ย้ายไป options สำเร็จ
 
@@ -187,7 +187,7 @@ LINE webhook → queue → ChatbotService.answerText
 - **แก้:** ใช้ `field.categories` ของ preset ถ้ามี
 
 #### A5 [ใหม่] ช่อง APP (in-app chat) ไม่มี product เลย
-- **ที่:** [app-channel.adapter.ts:66](../../src/modules/app-message/app-channel.adapter.ts#L66) ไม่มี `lineMemberId` และ `CommerceTurn.lineMemberId` เป็น FK ไป `LineMember`
+- **ที่:** [app-channel.adapter.ts:66](../../src/modules/channels/core/channel-store.adapter.ts#L66) ไม่มี `lineMemberId` และ `CommerceTurn.lineMemberId` เป็น FK ไป `LineMember`
 - **ผล:** ถ้า BKS เปิดแชตในแอป ลูกค้าจะถามรอบรถไม่ได้ ไปตอบด้วย legacy knowledge แทน (ซึ่งก็คือ MicroKnowledge ที่ A4 จะปิด)
 - **แก้ (เมื่อเปิดช่อง APP):** ให้ `CommerceTurn` อ้าง `ChannelConversation` ได้ (`lineMemberId` เป็น nullable + `channelConversationId`) เป็นงานแยก ไม่ใช่ส่วนหนึ่งของ design นี้
 
@@ -196,7 +196,7 @@ LINE webhook → queue → ChatbotService.answerText
 | ID | ที่ | เรื่อง |
 |---|---|---|
 | L-a [ใหม่] | [product-terms.ts](../../src/modules/products/search/product-terms.ts) | `QUESTION_TERMS` มีคำที่เป็นชื่อสินค้าได้ในธุรกิจอื่น (`ลูก`, `ใบ`, `ส่ง`, `ไป`, `ดี`) ให้ย้ายส่วนที่ขึ้นกับธุรกิจไปไว้ใน `lexicon.questionWords` |
-| L-b [ค้าง M7] | [product-retrieval.service.ts:378](../../src/modules/chatbot/knowledge/product/product-retrieval.service.ts#L378) | `language='th'` ตายตัว |
+| L-b [ค้าง M7] | [product-retrieval.service.ts:378](../../src/modules/products/rag/product-retrieval.service.ts#L378) | `language='th'` ตายตัว |
 | L-c [ค้าง M4] | `plannerCatalog` | scan meta ของทุก variant ทุก turn และค่า TAGS ออกมาเป็น JSON string |
 | L-d [ค้าง M3/L9] | `forLineDeployment` | อ่าน company ทุก turn และใช้ได้กับบริษัทเดียวเท่านั้น |
 | L-e [ค้าง] | `package.json` | `test:commerce`, `test:product-audit` ชี้ไป `test/scripts/` ซึ่งไม่มีอยู่แล้ว |

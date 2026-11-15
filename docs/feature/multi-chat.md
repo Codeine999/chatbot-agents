@@ -20,7 +20,7 @@
 - Controller ทำแค่ auth → validate → เรียก service → ตอบ ไม่มี business logic
 - ห้ามเรียก AI/provider/LINE ใน DB transaction
 - ห้ามส่ง PII (ข้อความ guest ที่มีเบอร์/อีเมล) ไปที่ AI นอกเหนือจากที่ core เดิมทำอยู่ · ห้าม log token, IP จริง, ข้อความลูกค้าดิบ (log เฉพาะ id และ ipHash)
-- ห้ามใช้ `any` กับ request body · validate ด้วย zod (`nestjs-zod` `createZodDto`) ตามแบบ `src/modules/line/dto/line-admin.dto.ts`
+- ห้ามใช้ `any` กับ request body · validate ด้วย zod (`nestjs-zod` `createZodDto`) ตามแบบ `src/modules/channels/line/dto/line-admin.dto.ts`
 - ห้ามคืน error ภายในให้ client · ห้ามคืน `costThb`, สถานะ wallet
 - ห้ามแก้ `src/generated/` ด้วยมือ · ห้ามใช้ `prisma db push`
 - ใช้ `bun` ไม่ใช่ `npm` · คำสั่งตรวจ: `bunx tsc --noEmit`, `npx eslint <ไฟล์ที่แก้>` (**อย่าใช้ `bun run lint`** เพราะมี `--fix` แก้ไฟล์อื่นของผู้ใช้), `bun run test -- <ชื่อ>`, `bun run build`
@@ -101,7 +101,7 @@
 | `turnId` | `app:<inboundMessageId>` | billing idempotency (`usage:app:<id>:<hash>`) |
 | ban/strike ของ IP | `appip:<ipHash>` | ใช้กับ `BanService` ตัวเดิม |
 
-`lineMemberId` **ไม่ส่ง** (ว่าง) → Product RAG ถูกข้ามตามที่ core ทำอยู่แล้ว ([product-retrieval.service.ts:90](../../src/modules/chatbot/knowledge/product/product-retrieval.service.ts))
+`lineMemberId` **ไม่ส่ง** (ว่าง) → Product RAG ถูกข้ามตามที่ core ทำอยู่แล้ว ([product-retrieval.service.ts:90](../../src/modules/products/rag/product-retrieval.service.ts))
 
 ---
 
@@ -489,18 +489,18 @@ src/modules/app-message/
 ### 7.2 ใช้ซ้ำของเดิมอย่างไร
 - `RateLimitService.consume(key, limit, windowSec, amount)` ใช้ได้ตรง ๆ (Step 2 เพิ่ม option ปิดกั้นเมื่อ Redis ล่ม โดยค่าเริ่มต้นคือพฤติกรรมเดิม)
 - `BanService` / `SpamDetectorService` รับ `userId` เป็น string อะไรก็ได้ → ส่ง `app:<contactId>` และ `appip:<ipHash>` (ชื่อ key มีคำว่า `line` แต่ใช้ได้ ห้ามเปลี่ยนชื่อ key เพราะจะทำให้ของ LINE เดิมเสีย)
-- limit ของ LINE ในไฟล์ [line-events.processor.ts:168](../../src/modules/line/line-events.processor.ts) เป็น private ของ processor นั้น **ไม่แก้** app มี gate ของตัวเอง (`AppAbuseService`) ที่เรียก service เดียวกัน
+- limit ของ LINE ในไฟล์ [line-events.processor.ts:168](../../src/modules/channels/line/worker/line-events.processor.ts) เป็น private ของ processor นั้น **ไม่แก้** app มี gate ของตัวเอง (`AppAbuseService`) ที่เรียก service เดียวกัน
 
 ### 7.3 แก้ core: ต้องทำ (แต่ละข้อมี default = พฤติกรรมเดิม)
 
 **C1. `channel` ใน ChatRequest + ปิดสมัครสมาชิกสำหรับ app**
-- [chat.types.ts](../../src/modules/chatbot/shared/types/chat.types.ts): เพิ่ม `export type ChatChannelKind = 'LINE' | 'APP';` และใน `ChatRequest` เพิ่ม `channel?: ChatChannelKind` (ไม่ระบุ = LINE)
+- [chat.types.ts](../../src/shared/contracts/chat.types.ts): เพิ่ม `export type ChatChannelKind = 'LINE' | 'APP';` และใน `ChatRequest` เพิ่ม `channel?: ChatChannelKind` (ไม่ระบุ = LINE)
 - [chatbot.service.ts](../../src/modules/chatbot/chatbot.service.ts): ดึง `channel` จาก request ใน `answerText`; แก้ `canRegister(preview = false)` เป็น `canRegister(preview = false, channel: ChatChannelKind = 'LINE')` → `!preview && channel === 'LINE' && isRegistrationEnabled(...)` · ส่ง `channel` ที่ 3 จุดที่เรียก `canRegister` (บรรทัด ~113, ~153, ~170)
 - ผล: guest พิมพ์ "สมัคร" ได้ข้อความ `registerUnavailable()` ที่มีอยู่แล้ว
 
 **C2. ขอคุยแอดมิน (`requestAdmin`) สำหรับ userId ที่ไม่ใช่ LINE**
-ปัจจุบัน [user-session.service.ts:102](../../src/modules/users/session/user-session.service.ts) หา `lineConversation` จาก `lineUserId` ถ้าไม่เจอจะ **เงียบ ไม่แจ้งใคร**
-- สร้าง `src/modules/users/session/channel-handoff.registry.ts`:
+ปัจจุบัน [user-session.service.ts:102](../../src/modules/session/user-session.service.ts) หา `lineConversation` จาก `lineUserId` ถ้าไม่เจอจะ **เงียบ ไม่แจ้งใคร**
+- สร้าง `src/modules/session/channel-handoff.registry.ts`:
   ```ts
   export interface ChannelHandoffHandler {
     readonly userIdPrefix: string;                 // 'app:'
@@ -620,7 +620,7 @@ release = `ZREM`. process ที่ตายกลางทางจะหลุ
 
 ### Step 0 — Preflight
 - `git status` สะอาด (หรือรู้ว่ามีงานของผู้ใช้ค้างอะไร ห้ามแตะ)
-- อ่าน: `src/modules/events/message/**`, `src/modules/line/line-channel.adapter.ts`, `src/modules/users/session/user-session.service.ts`, `src/modules/admin/userview/admin-userview.service.ts` (ต้นแบบ request/response + lock), `src/modules/usage/rate-limit/rate-limit.service.ts`, `src/modules/abuse/*.ts`
+- อ่าน: `src/modules/events/message/**`, `src/modules/channels/line/line-channel.adapter.ts`, `src/modules/session/user-session.service.ts`, `src/modules/admin/userview/admin-userview.service.ts` (ต้นแบบ request/response + lock), `src/modules/usage/rate-limit/rate-limit.service.ts`, `src/modules/abuse/*.ts`
 - บันทึก baseline: `bunx tsc --noEmit | grep -c "error TS"` และรายชื่อ suite ที่ fail จาก `bun run test`
 - **เสร็จเมื่อ:** มีตัวเลข baseline ในคำอธิบาย PR
 
@@ -713,7 +713,7 @@ release = `ZREM`. process ที่ตายกลางทางจะหลุ
 - **เสร็จเมื่อ:** เทสต์ผ่าน
 
 ### Step 11 — Maintenance job
-- `app-maintenance.service.ts`: `setInterval` 10 นาที (`unref`) แบบเดียวกับ [line-events.processor.ts:31](../../src/modules/line/line-events.processor.ts) + Redis lock `SET app:maintenance:lock <id> NX EX 540` กันหลาย instance ทำพร้อมกัน
+- `app-maintenance.service.ts`: `setInterval` 10 นาที (`unref`) แบบเดียวกับ [line-events.processor.ts:31](../../src/modules/channels/line/worker/line-events.processor.ts) + Redis lock `SET app:maintenance:lock <id> NX EX 540` กันหลาย instance ทำพร้อมกัน
 - ก่อนเขียน: `grep` ตาราง usage/billing (`aiUsageEvent`, ledger, reservation) ว่า**ไม่มีคอลัมน์เก็บข้อความลูกค้า** (ควรมีแค่ `conversationId` เป็น UUID) ถ้ามี ให้หยุดถามผู้ใช้ เพราะ retention จะไม่ครบ
 - `cutoff = now - APP_HISTORY_RETENTION_DAYS` (default 7) · ทุกการลบทำเป็นชุด (เลือก `id` `take: 500` แล้ว `deleteMany({ where: { id: { in } } })` วนจนน้อยกว่า 500 หรือใช้เวลาเกิน 60 วินาที) เพื่อไม่ lock ตารางนาน
 - งานตามลำดับ (เขียนเป็น method แยกเพื่อเทสต์ทีละอัน):

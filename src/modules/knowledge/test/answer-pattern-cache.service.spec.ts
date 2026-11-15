@@ -12,7 +12,10 @@ const findManyMock = (rows: unknown[] = []): FindManyMock =>
 
 const makeCache = (findMany: FindManyMock, env: Record<string, string> = {}) =>
   new AnswerPatternCacheService(
-    { answerPattern: { findMany } } as unknown as PrismaService,
+    {
+      answerPattern: { findMany },
+      microKnowledge: { findMany: findManyMock() },
+    } as unknown as PrismaService,
     configStub(env),
   );
 

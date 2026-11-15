@@ -3,6 +3,7 @@
  * Mute -> session -> rule -> rich menu -> retrieval -> LLM -> reply.
  */
 import { buildHarness, pattern, vector } from './core-chat.harness';
+import { PARTIAL_ANSWER_NOTE } from '../../ai/prompt/ai-chat.constants';
 
 const ask = (text: string, extra: Record<string, unknown> = {}) => ({
   userId: 'U1',
@@ -343,6 +344,54 @@ describe('Grounded answering', () => {
       ask('ค่าส่งเท่าไร'),
     );
     expect(response.source).toBe('SYSTEM');
+  });
+
+  it('a partial answer keeps the grounded reply and requests an admin for the rest', async () => {
+    const harness = buildHarness({
+      patterns: [
+        pattern({
+          id: 'ship',
+          keywords: ['จัดส่ง', 'ส่ง'],
+          answer: 'จัดส่งภายใน 3 วัน',
+        }),
+      ],
+      generations: [
+        '{"askedAbout":"จัดส่ง","directlyAnswered":true,"decision":"ANSWER","answer":"จัดส่งภายใน 3 วัน","evidenceIds":["ANSWER_PATTERN:ship"],"unanswered":["เก็บเงินปลายทางได้ไหม"]}',
+      ],
+    });
+
+    const response = await harness.chatbot.handleTextMessage(
+      ask('ส่งกี่วัน และเก็บเงินปลายทางได้ไหม'),
+    );
+
+    expect(response).toEqual({
+      text: `จัดส่งภายใน 3 วัน\n\n${PARTIAL_ANSWER_NOTE}`,
+      source: 'KNOWLEDGE',
+      contextPolicy: 'INCLUDE',
+    });
+    // The note promises staff follow-up, so the room must be handed off.
+    expect(harness.spies.conversationUpdateMany).toHaveBeenCalledTimes(1);
+    expect(harness.spies.notifyAdminRequired).toHaveBeenCalledTimes(1);
+  });
+
+  it('a complete answer does not request an admin', async () => {
+    const harness = buildHarness({
+      patterns: [
+        pattern({
+          id: 'ship',
+          keywords: ['จัดส่ง', 'ส่ง'],
+          answer: 'จัดส่งภายใน 3 วัน',
+        }),
+      ],
+      generations: [
+        '{"askedAbout":"จัดส่ง","directlyAnswered":true,"decision":"ANSWER","answer":"จัดส่งภายใน 3 วัน","evidenceIds":["ANSWER_PATTERN:ship"],"unanswered":[]}',
+      ],
+    });
+
+    const response = await harness.chatbot.handleTextMessage(ask('ส่งกี่วัน'));
+
+    expect(response.text).toBe('จัดส่งภายใน 3 วัน');
+    expect(harness.spies.conversationUpdateMany).not.toHaveBeenCalled();
   });
 
   it('the insufficient-context sentinel is converted into a fallback plus an admin handoff', async () => {

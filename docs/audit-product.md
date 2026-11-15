@@ -40,12 +40,12 @@
 - **แก้:** ทิ้ง term ที่สั้นกว่า 3 ตัวอักษรหรือไม่ใช่คำเต็ม (ตรวจกับ dictionary ของ segmenter) ส่วน lexical candidate ให้ใช้ทั้ง phrase ก่อน แล้วค่อย fallback เป็น term และนับ hit เฉพาะ name/alias/category ไม่รวม description (description ใช้แค่ให้คะแนน) ระยะยาวพิจารณาใช้ `pg_trgm`/`pg_bigm` ร่วมกับ `similarity()` แทน `position()`
 
 ### H2 ✅ field ประเภท TAGS ใช้ `CONTAINS` แบบเทียบเท่ากันทั้งค่า และเมื่อไม่เจอ ลูกค้าจะได้ข้อความว่า "ระบบตรวจสอบไม่ได้"
-- **ที่:** [business-match.ts:199-207](../src/modules/products/business/business-match.ts#L199) ค่าที่เป็น array ใช้ `optionMatcher().matches` ซึ่งเทียบ equality และ [product-retrieval.service.ts:391](../src/modules/chatbot/knowledge/product/product-retrieval.service.ts#L391) ส่ง `embedQuery(plan.query)` ทั้งที่ query ว่าง
+- **ที่:** [business-match.ts:199-207](../src/modules/products/business/business-match.ts#L199) ค่าที่เป็น array ใช้ `optionMatcher().matches` ซึ่งเทียบ equality และ [product-retrieval.service.ts:391](../src/modules/products/rag/product-retrieval.service.ts#L391) ส่ง `embedQuery(plan.query)` ทั้งที่ query ว่าง
 - **หลักฐาน:** probe ด้วย `features CONTAINS "กันน้ำ"` ได้ `NO_MATCH` ส่วน `"กันน้ำ IPX4"` ได้ FOUND 3 ตัว และ `embedQuery('')` throw `Cannot embed empty text` ทำให้ status เป็น `UNAVAILABLE` และลูกค้าได้ข้อความ *"ขณะนี้ยังตรวจสอบข้อมูลสินค้าไม่ได้"* ในรันแรก (C03 "หูฟังรุ่นไหนกันน้ำบ้าง") ผลขึ้นกับว่า planner คัดลอกค่า tag มาครบหรือไม่ ซึ่งไม่ deterministic
 - **แก้:** TAGS/MULTI_SELECT `CONTAINS` ให้ match เมื่อ tag ใด tag หนึ่ง *มี* คำที่ถาม (normalize แล้ว) และข้าม semantic fallback เมื่อ `plan.query.trim()` ว่าง
 
 ### H3 ✅ คำถามสเปกของสินค้า (รับประกัน) ถูกส่งไปเส้นทางนโยบายร้านโดยไม่ผ่าน planner
-- **ที่:** [product-retrieval.service.ts:47-50, 236-246](../src/modules/chatbot/knowledge/product/product-retrieval.service.ts#L47) `policySignal` มีคำว่า "รับประกัน" ส่วน `productSignal` ไม่มีคำประเภทสินค้าทั่วไป และ `probe()` ต้องการชื่อเต็มหรือ alias เต็ม
+- **ที่:** [product-retrieval.service.ts:47-50, 236-246](../src/modules/products/rag/product-retrieval.service.ts#L47) `policySignal` มีคำว่า "รับประกัน" ส่วน `productSignal` ไม่มีคำประเภทสินค้าทั่วไป และ `probe()` ต้องการชื่อเต็มหรือ alias เต็ม
 - **หลักฐาน:** C01 *"หูฟัง TWS Pro รับประกันกี่ปี"* ใช้ LLM 0 call ได้ KNOWLEDGE แล้วไป fallback แอดมิน ทั้งที่ `warranty = "รับประกัน 1 ปี"` อยู่ใน meta
 - **แก้:** ถ้าข้อความมี term ที่ match identity ของสินค้า (`mentionsCatalog`) หรือ field label ของ preset ให้ส่งเข้า planner (หรือใช้ BOTH) ห้ามตัดสินเป็น KNOWLEDGE ด้วย regex อย่างเดียว
 
@@ -70,7 +70,7 @@
   - คำปฏิเสธมีคำว่า "มีของ" (A07 "ยืนยันไม่ได้ว่ามีของไหม")
   - "ยังไม่ได้ระบุราคา" โดยไม่มี token (A09)
   - สีที่เขียนเป็น prose (A01)
-- **ผล:** ลูกค้าได้ list แบบ `ชื่อ · สี · ไซส์ · ราคา` ([safeProductAnswer](../src/modules/chatbot/knowledge/product/product-answer.policy.ts#L595)) หรือข้อความ fallback และบางเคสต้องจ่าย CRITICAL_REPAIR เป็น call ที่ 3
+- **ผล:** ลูกค้าได้ list แบบ `ชื่อ · สี · ไซส์ · ราคา` ([safeProductAnswer](../src/modules/products/rag/product-answer.policy.ts#L595)) หรือข้อความ fallback และบางเคสต้องจ่าย CRITICAL_REPAIR เป็น call ที่ 3
 - **แก้ (ยังรักษา invariant ว่าตัวเลขมาจาก DB):**
   1. ก่อน validate ให้แปลง substring ที่ตรงกับค่า evidence เป๊ะ (ชื่อ, attr, opt) กลับเป็น token อัตโนมัติ
   2. เพิ่ม token สำหรับสถานะ "ไม่มีข้อมูล" เช่น `price` ที่เป็น null ให้นับว่าผ่าน PRICE
@@ -78,7 +78,7 @@
   4. วัด rejection rate เป็น metric ต่อ release
 
 ### M2 🔍 ช่องโหว่ของ guard ข้อความ: ราคาเขียนเป็นคำไทย และ claim นโยบายที่ไม่มีตัวเลข
-- **ที่:** [product-answer.policy.ts:398-410](../src/modules/chatbot/knowledge/product/product-answer.policy.ts#L398) block แค่เลขอารบิก/ไทย "บาท" และ "ส่งฟรี" เท่านั้น
+- **ที่:** [product-answer.policy.ts:398-410](../src/modules/products/rag/product-answer.policy.ts#L398) block แค่เลขอารบิก/ไทย "บาท" และ "ส่งฟรี" เท่านั้น
 - **ช่อง:** "ราคาห้าร้อยห้าสิบ" (ไม่มีคำว่าบาท) และ "รับประกันตลอดชีพ"/"คืนได้ภายในเดือน"/"ของแท้" ผ่าน guard ได้ ตอนนี้กันได้ด้วย prompt อย่างเดียว ในรันนี้ไม่พบเคสที่หลุดจริง
 - **แก้:** เพิ่ม pattern จำนวนเงินเป็นคำไทย (หนึ่ง…เก้า, สิบ, ร้อย, พัน) และคำ claim นโยบาย (รับประกัน, คืน, เปลี่ยน, แท้) ให้ต้องมาจาก token `attr.*`/`p*.answer`
 
@@ -87,7 +87,7 @@
 - **แก้:** ตรวจ intent ซื้อหรือจ่ายแบบ deterministic แล้วต่อท้ายข้อความ handoff ที่กำหนดไว้ (หรือ `requestAdmin`)
 
 ### M4 ✅ LIST ตัด evidence ระดับ variant ทำให้สินค้าตัวเดียวกินพื้นที่ทั้งหมด
-- **ที่:** aggregate เก็บ evidence 12 แถวแบบ variant ([product-search.service.ts:386-395](../src/modules/products/search/product-search.service.ts#L386)) และ safe answer ใช้ `evidence.slice(0, 5)` ([product-answer.policy.ts:622](../src/modules/chatbot/knowledge/product/product-answer.policy.ts#L622))
+- **ที่:** aggregate เก็บ evidence 12 แถวแบบ variant ([product-search.service.ts:386-395](../src/modules/products/search/product-search.service.ts#L386)) และ safe answer ใช้ `evidence.slice(0, 5)` ([product-answer.policy.ts:622](../src/modules/products/rag/product-answer.policy.ts#L622))
 - **หลักฐาน:** B01 *"มีเสื้ออะไรบ้าง"* ได้แค่ "เสื้อยืดโอเวอร์ไซส์" 5 สีหรือไซส์ ทั้งที่มีเสื้อ 4 แบบ ส่วน B04 (≤700 บาท) พบ 24 variant แต่แสดง 5 ตัวตามลำดับ id ไม่ใช่ตามราคา
 - **แก้:** LIST ให้ group ตาม product ก่อน (1 แถวต่อสินค้า ใช้ `priceRange`/`opts`) แล้วค่อย cap จำนวน และเรียงให้มีความหมาย (ราคาเมื่อมี min/maxPrice)
 
@@ -104,8 +104,8 @@
 ### L (แก้เมื่อสะดวก)
 - **L1** 🔍 `categoryFilter` ใช้ `findFirst` โดยไม่กรอง `status`/`language` ([product-search.service.ts:568](../src/modules/products/search/product-search.service.ts#L568)) หมวดที่มีแต่สินค้า DRAFT จะถูกเลือกเป็น exact match ไม่ leak เพราะ filter หลักยังกรอง ACTIVE
 - **L2** 🔍 `redactPii` ถูกใช้กับชื่อสินค้า/alias ([product-search.service.ts:637](../src/modules/products/search/product-search.service.ts#L637)) ชื่อที่มีบาร์โค้ด 13 หลักหรือเลขรุ่นที่ขึ้นต้นด้วย 0 และยาว 9–10 หลักจะกลายเป็น `[REDACTED_*]`
-- **L3** 🔍 snapshot ที่ส่ง LLM มี `onHand`/`reserved`/`fetchedAt` ([product-answer.policy.ts:275-281](../src/modules/chatbot/knowledge/product/product-answer.policy.ts#L275)) แสดงให้ลูกค้าไม่ได้ แต่ส่งข้อมูลภายในให้ provider โดยไม่จำเป็น (data minimization) ควรส่งแค่ `stockQuantity`
-- **L4** 🔍 planner prompt มี indentation 14 ช่องทุกบรรทัด ([product-prompt.ts:454-468](../src/modules/chatbot/knowledge/product/utils/prompt/product-prompt.ts#L454)) เปลือง token โดยไม่จำเป็น
+- **L3** 🔍 snapshot ที่ส่ง LLM มี `onHand`/`reserved`/`fetchedAt` ([product-answer.policy.ts:275-281](../src/modules/products/rag/product-answer.policy.ts#L275)) แสดงให้ลูกค้าไม่ได้ แต่ส่งข้อมูลภายในให้ provider โดยไม่จำเป็น (data minimization) ควรส่งแค่ `stockQuantity`
+- **L4** 🔍 planner prompt มี indentation 14 ช่องทุกบรรทัด ([product-prompt.ts:454-468](../src/modules/products/rag/utils/prompt/product-prompt.ts#L454)) เปลือง token โดยไม่จำเป็น
 - **L5** ✅ เทสต์: `product-answer.policy.spec.ts` fail 1/11 (ยังใช้ `FASHION`) ส่วน [test/product-test.mjs](../test/product-test.mjs) เรียก `test/audit/product-test.cjs` ที่ไม่มีอยู่ และ script `test:commerce`/`test:product-audit` ชี้ไป `test/scripts/*` ที่ถูกลบไปแล้ว fixture ใน [product-ecom.fixture.ts](../test/audit/product-ecom.fixture.ts) ยัง `applyPreset('FASHION')`
 
 ---

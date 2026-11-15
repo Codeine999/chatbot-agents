@@ -47,7 +47,11 @@ const makeService = (
         findMatchesFromPatterns: cacheMatches,
         findMatches: databaseMatches,
       } as unknown as AnswerPatternService,
-      { getAll: cachedRows } as unknown as AnswerPatternCacheService,
+      // No fresh snapshot: the lexical sources are read from the database.
+      {
+        getAll: cachedRows,
+        snapshot: () => null,
+      } as unknown as AnswerPatternCacheService,
       { search: semanticSearch } as unknown as SemanticSearchService,
       { findMatches: microMatches } as unknown as MicroKnowledgeService,
       configStub(overrides.env),
@@ -551,7 +555,10 @@ describe('KnowledgeRetrievalService — ต่อกับตัวจับค�
     );
     const service = new KnowledgeRetrievalService(
       matcher,
-      { getAll: () => [] } as unknown as AnswerPatternCacheService,
+      {
+        getAll: () => [],
+        snapshot: () => null,
+      } as unknown as AnswerPatternCacheService,
       {
         search: jest.fn().mockResolvedValue([]),
       } as unknown as SemanticSearchService,

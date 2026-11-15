@@ -1,9 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  LineChatMessageType,
-  LineChatSender,
-  Prisma,
-} from '../../../generated/prisma/client';
+import { LineChatSender } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { RichMenuReplyCacheService } from '../../chatbot/menu/rich-menu-reply-cache.service';
 import type { ChatResponse } from '../../../shared/contracts/chat.types';
@@ -11,29 +7,14 @@ import type {
   ChannelAdapter,
   ChatTurn,
 } from '../../../shared/contracts/channel-adapter';
-import type {
-  LineMessageEvent,
-  LinePostbackEvent,
-  LineWebhookEvent,
-} from './dto/line';
+import type { LineWebhookEvent } from './dto/line';
 import { LineService } from './delivery/line-reply.service';
 import { LINE_EVENT_MAX_AGE_MS } from './worker/line-events.queue';
 import { LineAdminService } from './admin/line-admin.service';
 import { LineDeliveryService } from './delivery/line-delivery.service';
 import { UserSessionService } from '../../session/user-session.service';
-
-type IncomingLineChatMessage = {
-  messageType: LineChatMessageType;
-  lastMessage: string;
-  text?: string;
-  lineMessageId?: string;
-  replyToken?: string;
-  stickerPackageId?: string;
-  stickerId?: string;
-  stickerResourceType?: string;
-  mediaUrl?: string | null;
-  postbackData?: string;
-};
+import { isUniqueConstraint, toChatMessage } from './line-message.mapper';
+import { findOrCreateLineMember } from './line-member.repository';
 
 type SavedIncomingEvent = {
   conversationId: string;
@@ -241,7 +222,7 @@ export class LineChannelAdapter implements ChannelAdapter<
 
     if (!lineUserId) return null;
 
-    const chatMessage = this.toChatMessage(event);
+    const chatMessage = toChatMessage(event);
 
     if (!chatMessage) return null;
 
@@ -262,7 +243,11 @@ export class LineChannelAdapter implements ChannelAdapter<
       if (existing) return existing;
     }
 
-    const member = await this.findOrCreateLineMember(lineUserId);
+    const member = await findOrCreateLineMember(
+      this.prisma,
+      this.lineAdminService,
+      lineUserId,
+    );
     const messageAt = new Date(event.timestamp || Date.now());
 
     try {
@@ -328,7 +313,7 @@ export class LineChannelAdapter implements ChannelAdapter<
       // transaction that already rolled back its unread increment.
       if (
         chatMessage.lineMessageId &&
-        this.isUniqueConstraint(error, 'lineMessageId')
+        isUniqueConstraint(error, 'lineMessageId')
       ) {
         const existing = await this.prisma.lineChatHistory.findUnique({
           where: {
@@ -345,118 +330,5 @@ export class LineChannelAdapter implements ChannelAdapter<
 
       throw error;
     }
-  }
-
-  private async findOrCreateLineMember(lineUserId: string) {
-    const existingMember = await this.prisma.lineMember.findUnique({
-      where: {
-        lineUserId,
-      },
-    });
-
-    if (existingMember) {
-      return existingMember;
-    }
-
-    const profile = await this.lineAdminService.getProfile(lineUserId);
-    const syncedAt = new Date();
-
-    return this.prisma.lineMember.upsert({
-      where: {
-        lineUserId,
-      },
-      create: {
-        lineUserId,
-        displayName: profile.displayName || lineUserId,
-        pictureUrl: profile.pictureUrl,
-        statusMessage: profile.statusMessage,
-        profileSyncedAt: syncedAt,
-      },
-      update: {
-        displayName: profile.displayName || lineUserId,
-        pictureUrl: profile.pictureUrl,
-        statusMessage: profile.statusMessage,
-        profileSyncedAt: syncedAt,
-      },
-    });
-  }
-
-  private toChatMessage(
-    event: LineWebhookEvent,
-  ): IncomingLineChatMessage | null {
-    if (event.type === 'message') {
-      return this.toMessageEventChatMessage(event);
-    }
-
-    if (event.type === 'postback') {
-      return this.toPostbackEventChatMessage(event);
-    }
-
-    return null;
-  }
-
-  private toMessageEventChatMessage(
-    event: LineMessageEvent,
-  ): IncomingLineChatMessage | null {
-    const { message } = event;
-
-    if (message.type === 'text') {
-      return {
-        messageType: LineChatMessageType.TEXT,
-        lastMessage: message.text,
-        text: message.text,
-        lineMessageId: message.id,
-        replyToken: event.replyToken,
-      };
-    }
-
-    if (message.type === 'image') {
-      return {
-        messageType: LineChatMessageType.IMAGE,
-        lastMessage: '[image]',
-        lineMessageId: message.id,
-        replyToken: event.replyToken,
-        mediaUrl: null,
-      };
-    }
-
-    if (message.type === 'sticker') {
-      const stickerText = message.text?.trim();
-
-      return {
-        messageType: LineChatMessageType.STICKER,
-        lastMessage: stickerText || '[sticker]',
-        text: stickerText || undefined,
-        lineMessageId: message.id,
-        replyToken: event.replyToken,
-        stickerPackageId: message.packageId,
-        stickerId: message.stickerId,
-        stickerResourceType: message.stickerResourceType,
-      };
-    }
-
-    return null;
-  }
-
-  private toPostbackEventChatMessage(
-    event: LinePostbackEvent,
-  ): IncomingLineChatMessage {
-    return {
-      messageType: LineChatMessageType.POSTBACK,
-      lastMessage: event.postback.data,
-      replyToken: event.replyToken,
-      postbackData: event.postback.data,
-    };
-  }
-
-  private isUniqueConstraint(error: unknown, field: string): boolean {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
-      return false;
-    }
-
-    if (error.code !== 'P2002') return false;
-
-    const target = error.meta?.target;
-    return Array.isArray(target) ? target.includes(field) : target === field;
   }
 }
