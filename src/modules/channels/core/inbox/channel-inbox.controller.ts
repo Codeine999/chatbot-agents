@@ -117,6 +117,19 @@ export class ChannelInboxController {
     );
   }
 
+  @Post(':conversationId/admin-hold')
+  hold(
+    @Req() request: AdminRequest,
+    @Param('channel') channel: string | undefined,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+  ) {
+    return this.inbox.holdBotForAdmin(
+      this.admin(request),
+      this.channel(channel),
+      conversationId,
+    );
+  }
+
   @Post(':conversationId/resume-bot')
   resume(
     @Req() request: AdminRequest,

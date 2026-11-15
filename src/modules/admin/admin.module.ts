@@ -26,6 +26,8 @@ import { AdminAiSettingService } from './ai-setting/admin-ai-setting.service';
 import { StorageModule } from '../../infra/storage/storage.module';
 import { AdminProductModule } from './product/admin-product.module';
 import { AdminUserViewModule } from './userview/admin-userview.module';
+import { MessagingModule } from '../conversation/message/messaging.module';
+import { AdminChatPipelineController } from './pipeline/admin-chat-pipeline.controller';
 import { KnowledgeAnswerModule } from './dev/answer/knowledge-answer.module';
 
 @Module({
@@ -47,6 +49,7 @@ import { KnowledgeAnswerModule } from './dev/answer/knowledge-answer.module';
     AdminProductModule,
     AdminUserViewModule,
     KnowledgeAnswerModule,
+    MessagingModule,
   ],
   controllers: [
     AdminController,
@@ -54,6 +57,7 @@ import { KnowledgeAnswerModule } from './dev/answer/knowledge-answer.module';
     AdminSysCategoryController,
     AdminKnowledgeMicroController,
     AdminAiSettingController,
+    AdminChatPipelineController,
   ],
   providers: [
     AdminService,

@@ -41,6 +41,15 @@ export interface ChannelAdapter<TEvent, TThread extends ConversationThread> {
     response: ChatResponse,
     claimOwner?: string,
   ): Promise<DeliveryReference | null>;
+  /**
+   * Settle an already-stored inbound event as "decided without a reply" (global
+   * pause): no model call, no delivery, and a redelivery must not answer it.
+   */
+  markNoReply(
+    event: TEvent,
+    thread: TThread,
+    claimOwner?: string,
+  ): Promise<void>;
   /** Resume persisted delivery; do not reconstruct or blindly resend it. */
   deliver(deliveryId: string): Promise<void>;
 }

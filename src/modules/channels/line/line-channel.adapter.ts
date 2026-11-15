@@ -66,6 +66,27 @@ export class LineChannelAdapter implements ChannelAdapter<
     });
   }
 
+  async markNoReply(
+    event: LineWebhookEvent,
+    thread: SavedIncomingEvent,
+    claimOwner?: string,
+  ): Promise<void> {
+    // An empty reply is already the "stay silent" path of saveReply: it keeps
+    // the turn lock / lease honest and records NO_REPLY without delivering.
+    const response: ChatResponse = {
+      text: '',
+      source: 'SYSTEM',
+      contextPolicy: 'EXCLUDE',
+    };
+    await this.saveReply(
+      event,
+      thread,
+      { kind: 'response', contextUserText: '', response },
+      response,
+      claimOwner,
+    );
+  }
+
   async deliver(deliveryId: string): Promise<void> {
     await this.deliveryService.deliver(deliveryId);
   }

@@ -54,6 +54,7 @@ import { LoadContextService } from '../../src/modules/chatbot/context/load-conte
 import { ProductSearchService } from '../../src/modules/products/search/product-search.service';
 import { DecisionTurnRecorder } from '../../src/modules/decision-log/decision-turn.recorder';
 import { MessageProcessorService } from '../../src/modules/conversation/message/message-processor.service';
+import type { PipelineSwitchService } from '../../src/modules/conversation/message/pipeline-switch.service';
 import type {
   ChannelAdapter,
   ConversationThread,
@@ -1879,6 +1880,7 @@ live(`live product e-commerce audit (${RUN})`, () => {
       moduleRef.get(ChatbotService, { strict: false }),
       context,
       new DecisionTurnRecorder(),
+      { isPaused: () => Promise.resolve(false) } as PipelineSwitchService,
     );
 
     store = await seedFashionStore(moduleRef, MODEL, (line) => {
@@ -2139,6 +2141,7 @@ live(`live product e-commerce audit (${RUN})`, () => {
           pending.set(id, { reply, userText: turn.text, eventId });
           return Promise.resolve({ id });
         },
+        markNoReply: () => Promise.resolve(),
         // Acceptance by LINE: only now does the turn (with catalogRefs) enter context.
         deliver: async (id) => {
           const accepted = pending.get(id);

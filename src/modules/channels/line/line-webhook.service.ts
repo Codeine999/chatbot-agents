@@ -18,7 +18,10 @@ import type {
 } from './dto/line-admin.dto';
 import { LineDeliveryService } from './delivery/line-delivery.service';
 import { randomUUID } from 'node:crypto';
-import { UserSessionService } from '../../session/user-session.service';
+import {
+  BOT_PAUSE_TTL_SEC,
+  UserSessionService,
+} from '../../session/user-session.service';
 import * as claims from './worker/line-webhook-claim';
 import {
   afterRoom,
@@ -324,6 +327,51 @@ export class LineWebhookService {
     await this.prisma.lineConversation.update({ where: { id: conversationId }, data: { status: 'open' } });
     await this.loadContextService.clear(conversationId);
     return { status: 'open' };
+  }
+
+  /**
+   * Stops automatic replies to this one customer until resume-bot (or
+   * BOT_PAUSE_TTL_SEC). Incoming messages are still stored; admins can still
+   * reply, and an admin reply keeps the pause instead of shortening it.
+   */
+  async pauseBot(conversationId: string) {
+    const lineUserId = await this.lineUserIdOf(conversationId);
+    await this.sessions.mute(lineUserId, 'PAUSE', BOT_PAUSE_TTL_SEC);
+    return this.botState(lineUserId);
+  }
+
+  /**
+   * Marks the customer as handled by an admin, exactly as an admin reply does:
+   * the bot stays quiet for AUTO_MUTE_WHEN_REPLY, then answers again, and an
+   * open admin request (waiting_admin) is closed.
+   */
+  async holdBotForAdmin(conversationId: string) {
+    const lineUserId = await this.lineUserIdOf(conversationId);
+    await this.sessions.mute(lineUserId, 'ADMIN');
+    await this.prisma.lineConversation.updateMany({
+      where: { id: conversationId, status: 'waiting_admin' },
+      data: { status: 'open' },
+    });
+    return { status: 'open' as const, ...(await this.botState(lineUserId)) };
+  }
+
+  private async lineUserIdOf(conversationId: string): Promise<string> {
+    const conversation = await this.prisma.lineConversation.findUnique({
+      where: { id: conversationId },
+      select: { lineMember: { select: { lineUserId: true } } },
+    });
+    if (!conversation)
+      throw new NotFoundException('LINE conversation not found');
+    return conversation.lineMember.lineUserId;
+  }
+
+  /** Same `botMode` / `botMuteUntil` fields as the conversation list. */
+  private async botState(lineUserId: string) {
+    const mute = await this.sessions.getMuteState(lineUserId);
+    return {
+      botMode: mute ? (mute.mode === 'ADMIN' ? 'admin' : 'paused') : 'auto',
+      botMuteUntil: mute?.expiresAt?.toISOString() ?? null,
+    };
   }
 
   listDeliveries() {

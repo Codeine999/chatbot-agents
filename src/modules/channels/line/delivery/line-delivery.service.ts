@@ -147,7 +147,7 @@ export class LineDeliveryService implements OnModuleInit, OnModuleDestroy {
       if (!transition.count) return;
       // Applied on actual attempts, including recovery, never on replay of an
       // already accepted delivery. A Redis failure prevents the admin send.
-      if (row.adminMemberId) await this.sessions.mute(row.lineUserId);
+      if (row.adminMemberId) await this.sessions.holdForAdmin(row.lineUserId);
       else if (await this.sessions.isMuted(row.lineUserId)) {
         await this.finishAttempt(id, owner, {
           status: 'FAILED',

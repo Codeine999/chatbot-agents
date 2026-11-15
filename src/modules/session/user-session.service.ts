@@ -15,6 +15,18 @@ export type { ConversationSession } from './types/session.types';
 const SESSION_KEY_PREFIX = 'chat:session:';
 const DEFAULT_SESSION_TTL_SEC = 30 * 60;
 
+/** How long a manual per-customer pause lasts unless an admin resumes the bot first. */
+export const BOT_PAUSE_TTL_SEC = 7 * 86_400;
+
+/**
+ * ADMIN hold after an admin reply, unless the bot is already paused: a manual
+ * PAUSE outlives the short ADMIN window, so an admin reply must not shorten it.
+ */
+const HOLD_FOR_ADMIN_SCRIPT = `
+if redis.call('GET', KEYS[1]) == 'PAUSE' then return 0 end
+redis.call('SET', KEYS[1], 'ADMIN', 'EX', ARGV[1])
+return 1`;
+
 @Injectable()
 export class UserSessionService {
   private readonly logger = new Logger(UserSessionService.name);
@@ -115,6 +127,20 @@ export class UserSessionService {
     ttlSec: number = this.muteTtlSec,
   ): Promise<void> {
     await this.redis.set(this.muteKey(userId), mode, 'EX', ttlSec);
+  }
+
+  /**
+   * Mute after an admin reply: ADMIN for AUTO_MUTE_WHEN_REPLY, but a PAUSE in
+   * force is kept as it is. Returns false when the PAUSE was kept.
+   */
+  async holdForAdmin(userId: string): Promise<boolean> {
+    const set = await this.redis.eval(
+      HOLD_FOR_ADMIN_SCRIPT,
+      1,
+      this.muteKey(userId),
+      String(this.muteTtlSec),
+    );
+    return set === 1;
   }
 
   async resume(userId: string): Promise<void> {

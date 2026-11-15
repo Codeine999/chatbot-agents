@@ -178,6 +178,27 @@ export class ChannelStoreAdapter implements ChannelAdapter<
    * failure throws so the queue tries again. Chat context is appended only
    * once the platform accepted the reply. App: nothing to send.
    */
+  async markNoReply(
+    event: ChannelInboundEvent,
+    thread: ConversationThread,
+    claimOwner?: string,
+  ): Promise<void> {
+    // An empty reply is already the "stay silent" path of saveReply: it keeps
+    // the turn lock / lease honest and records NO_REPLY without delivering.
+    const response: ChatResponse = {
+      text: '',
+      source: 'SYSTEM',
+      contextPolicy: 'EXCLUDE',
+    };
+    await this.saveReply(
+      event,
+      thread,
+      { kind: 'response', contextUserText: '', response },
+      response,
+      claimOwner,
+    );
+  }
+
   async deliver(deliveryId: string): Promise<void> {
     const reply = await this.prisma.channelMessage.findUnique({
       where: { id: deliveryId },

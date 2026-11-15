@@ -306,7 +306,9 @@ export class ChannelInboxService {
     // Also on a repeat: the first attempt may have stored the message and then
     // failed to mute.
     try {
-      await this.sessions.mute(channelUserId(channel, conversation.contactId));
+      await this.sessions.holdForAdmin(
+        channelUserId(channel, conversation.contactId),
+      );
     } catch (error) {
       this.logger.warn(
         `mute after admin reply failed: ${error instanceof Error ? error.name : 'unknown'}`,
@@ -332,6 +334,34 @@ export class ChannelInboxService {
       CHANNEL_PAUSE_BOT_SEC,
     );
     return { botMode: 'paused' as const };
+  }
+
+  /**
+   * As after an admin reply: bot quiet for AUTO_MUTE_WHEN_REPLY, then automatic
+   * again, and an open admin request (waiting_admin) is closed.
+   */
+  async holdBotForAdmin(
+    admin: AuthenticatedAdmin,
+    channel: StoredChannelKind,
+    conversationId: string,
+  ) {
+    const conversation = await this.requireConversation(
+      admin,
+      channel,
+      conversationId,
+    );
+    const userId = channelUserId(channel, conversation.contactId);
+    await this.sessions.mute(userId, 'ADMIN');
+    await this.prisma.channelConversation.updateMany({
+      where: { id: conversation.id, status: 'waiting_admin' },
+      data: { status: 'open' },
+    });
+    const mute = await this.sessions.getMuteState(userId);
+    return {
+      status: 'open' as const,
+      botMode: 'admin' as const,
+      botMuteUntil: mute?.expiresAt?.toISOString() ?? null,
+    };
   }
 
   async resumeBot(

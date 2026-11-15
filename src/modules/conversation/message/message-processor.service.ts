@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ChatbotService } from '../../chatbot/chatbot.service';
 import { LoadContextService } from '../../chatbot/context/load-context.service';
 import type {
@@ -14,13 +14,17 @@ import {
   DecisionTurnRecorder,
   type TurnOutcome,
 } from '../../decision-log/decision-turn.recorder';
+import { PipelineSwitchService } from './pipeline-switch.service';
 
 @Injectable()
 export class MessageProcessorService {
+  private readonly logger = new Logger(MessageProcessorService.name);
+
   constructor(
     private readonly chatbot: ChatbotService,
     private readonly context: LoadContextService,
     private readonly turns: DecisionTurnRecorder,
+    private readonly pipelineSwitch: PipelineSwitchService,
   ) {}
 
   async process<TEvent, TThread extends ConversationThread>(
@@ -36,6 +40,16 @@ export class MessageProcessorService {
 
     const thread = await adapter.saveIncomingEvent(event);
     if (!thread) return;
+
+    // Global stop: the message is already stored above; skip search, model and
+    // reply entirely. Only identifiers are logged, never the message text.
+    if (await this.pipelineSwitch.isPaused()) {
+      this.logger.warn(
+        `pipeline paused, message stored without reply conversation=${thread.conversationId}`,
+      );
+      await adapter.markNoReply(event, thread, claimOwner);
+      return;
+    }
 
     // A typing indicator must never delay or fail the turn.
     void adapter.indicateProcessing?.(event).catch(() => undefined);

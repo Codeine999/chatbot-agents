@@ -59,6 +59,20 @@ export class LineController {
     return this.lineWebhookService.resumeBot(conversationId);
   }
 
+  @Post('conversations/:conversationId/pause-bot')
+  @AdminGuard()
+  pauseBot(@Param('conversationId', ParseUUIDPipe) conversationId: string) {
+    return this.lineWebhookService.pauseBot(conversationId);
+  }
+
+  @Post('conversations/:conversationId/admin-hold')
+  @AdminGuard()
+  holdBotForAdmin(
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+  ) {
+    return this.lineWebhookService.holdBotForAdmin(conversationId);
+  }
+
   @Get('conversations/:conversationId/messages')
   @AdminGuard()
   getConversationMessages(
