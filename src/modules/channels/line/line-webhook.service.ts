@@ -26,11 +26,13 @@ import * as claims from './worker/line-webhook-claim';
 import {
   afterRoom,
   INBOX_ROOM_ORDER,
-  isPagedInboxQuery,
   messageKeyset,
   pageInboxRooms,
   type ListInboxConversationsQuery,
 } from '../../../shared/inbox/inbox-page';
+
+/** Rooms per page of the LINE inbox when the dashboard sends no `limit`. */
+const LINE_INBOX_PAGE_SIZE = 20;
 
 @Injectable()
 export class LineWebhookService {
@@ -56,13 +58,12 @@ export class LineWebhookService {
   }
 
   /**
-   * Any query parameter returns one `{ items, nextCursor }` page; without
-   * any, the legacy full array is kept for dashboards not yet paging.
+   * Always one `{ items, nextCursor }` page (LINE_INBOX_PAGE_SIZE rooms unless
+   * `limit` is sent), so a large inbox never loads every room at once.
    */
   async listConversations(query: ListInboxConversationsQuery = {}) {
-    if (!isPagedInboxQuery(query)) return this.listAllConversations();
-
-    const page = await pageInboxRooms(query, (waiting, after, take) =>
+    const paged = { ...query, limit: query.limit ?? LINE_INBOX_PAGE_SIZE };
+    const page = await pageInboxRooms(paged, (waiting, after, take) =>
       this.prisma.lineConversation.findMany({
         where: {
           AND: [
@@ -114,35 +115,6 @@ export class LineWebhookService {
       if (!exists) throw new NotFoundException('LINE conversation not found');
     }
     return { id: conversationId, unreadCount: 0 };
-  }
-
-  private async listAllConversations() {
-    const conversations = await this.prisma.lineConversation.findMany({
-      orderBy: [
-        {
-          lastMessageAt: 'desc',
-        },
-        {
-          updatedAt: 'desc',
-        },
-        {
-          id: 'desc',
-        },
-      ],
-      include: {
-        lineMember: true,
-      },
-    });
-
-    const withBotMode = await this.withBotMode(conversations);
-
-    const waitingAdmin = withBotMode.filter(
-      (conversation) => conversation.status === 'waiting_admin',
-    );
-    const otherConversations = withBotMode.filter(
-      (conversation) => conversation.status !== 'waiting_admin',
-    );
-    return [...waitingAdmin, ...otherConversations];
   }
 
   // Mute lives in Redis and is the only source of truth for the bot mode,
