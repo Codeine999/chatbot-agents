@@ -228,6 +228,12 @@ export class LineDeliveryService implements OnModuleInit, OnModuleDestroy {
       data: { ...data, leaseOwner: null, leaseUntil: null },
     });
   }
+  private senderOf(row: LineDelivery): 'ADMIN' | 'AI' | 'SYSTEM' {
+    if (row.adminMemberId) return 'ADMIN';
+    const source = (row.context as { response?: { source?: unknown } } | null)
+      ?.response?.source;
+    return source === 'AI' || source === 'KNOWLEDGE' ? 'AI' : 'SYSTEM';
+  }
 
   private async finalize(row: LineDelivery) {
     // Unique deliveryId makes repairing history safe after a crash.
@@ -239,7 +245,7 @@ export class LineDeliveryService implements OnModuleInit, OnModuleDestroy {
           deliveryId: row.id,
           conversationId: row.conversationId,
           lineMemberId: row.lineMemberId,
-          sender: row.adminMemberId ? 'ADMIN' : 'SYSTEM',
+          sender: this.senderOf(row),
           sentByAdminId: row.adminMemberId,
           messageType: 'TEXT',
           text: row.text,

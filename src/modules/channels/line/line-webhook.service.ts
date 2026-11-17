@@ -138,6 +138,39 @@ export class LineWebhookService {
     );
   }
 
+  /**
+   * Message totals for one room, over its whole history. The message list is
+   * paged, so a client counting what it has loaded under-reports.
+   */
+  async getConversationStats(conversationId: string) {
+    const conversation = await this.prisma.lineConversation.findUnique({
+      where: { id: conversationId },
+      select: { id: true },
+    });
+    if (!conversation)
+      throw new NotFoundException('LINE conversation not found');
+
+    const rows = await this.prisma.lineChatHistory.groupBy({
+      by: ['sender'],
+      where: { conversationId },
+      _count: { _all: true },
+    });
+    const count = (sender: LineChatSender) =>
+      rows.find((row) => row.sender === sender)?._count._all ?? 0;
+    const user = count(LineChatSender.USER);
+    const ai = count(LineChatSender.AI);
+    const admin = count(LineChatSender.ADMIN);
+    const system = count(LineChatSender.SYSTEM);
+    return {
+      conversationId,
+      total: user + ai + admin + system,
+      user,
+      ai,
+      admin,
+      system,
+    };
+  }
+
   async getConversationMessages(
     conversationId: string,
     query: GetLineMessagesQueryDto,
@@ -226,7 +259,9 @@ export class LineWebhookService {
       where: { id: { in: ids } },
       select: { id: true, username: true },
     });
-    const usernames = new Map(admins.map((admin) => [admin.id, admin.username]));
+    const usernames = new Map(
+      admins.map((admin) => [admin.id, admin.username]),
+    );
 
     return messages.map((message) => ({
       ...message,
@@ -266,16 +301,31 @@ export class LineWebhookService {
       create: {
         key: deliveryKey,
         lineUserId: conversation.lineMember.lineUserId,
-        conversationId, lineMemberId: conversation.lineMemberId,
-        adminMemberId: sentByAdminId, text: body.text, method: 'PUSH',
+        conversationId,
+        lineMemberId: conversation.lineMemberId,
+        adminMemberId: sentByAdminId,
+        text: body.text,
+        method: 'PUSH',
       },
     });
-    if (delivery.text !== body.text) throw new BadRequestException('clientRequestId was already used for different text');
+    if (delivery.text !== body.text)
+      throw new BadRequestException(
+        'clientRequestId was already used for different text',
+      );
     await this.deliveryService.deliver(delivery.id);
-    const message = await this.prisma.lineChatHistory.findUnique({ where: { deliveryId: delivery.id } });
+    const message = await this.prisma.lineChatHistory.findUnique({
+      where: { deliveryId: delivery.id },
+    });
     if (message) return (await this.withAdminUsernames([message]))[0];
-    const current = await this.prisma.lineDelivery.findUniqueOrThrow({ where: { id: delivery.id } });
-    return { id: current.id, deliveryId: current.id, text: current.text, sentStatus: current.status.toLowerCase() };
+    const current = await this.prisma.lineDelivery.findUniqueOrThrow({
+      where: { id: delivery.id },
+    });
+    return {
+      id: current.id,
+      deliveryId: current.id,
+      text: current.text,
+      sentStatus: current.status.toLowerCase(),
+    };
   }
 
   async saveSystemReplyMessage(
@@ -317,9 +367,15 @@ export class LineWebhookService {
   }
 
   async resumeBot(conversationId: string) {
-    const conversation = await this.prisma.lineConversation.findUniqueOrThrow({ where: { id: conversationId }, include: { lineMember: true } });
+    const conversation = await this.prisma.lineConversation.findUniqueOrThrow({
+      where: { id: conversationId },
+      include: { lineMember: true },
+    });
     await this.sessions.resume(conversation.lineMember.lineUserId);
-    await this.prisma.lineConversation.update({ where: { id: conversationId }, data: { status: 'open' } });
+    await this.prisma.lineConversation.update({
+      where: { id: conversationId },
+      data: { status: 'open' },
+    });
     await this.loadContextService.clear(conversationId);
     return { status: 'open' };
   }
@@ -372,15 +428,30 @@ export class LineWebhookService {
   listDeliveries() {
     return this.prisma.lineDelivery.findMany({
       where: { status: { in: ['PENDING', 'SENDING', 'FAILED', 'UNKNOWN'] } },
-      select: { id: true, conversationId: true, status: true, method: true, attempts: true, lastError: true, createdAt: true },
-      orderBy: { createdAt: 'desc' }, take: 100,
+      select: {
+        id: true,
+        conversationId: true,
+        status: true,
+        method: true,
+        attempts: true,
+        lastError: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
     });
   }
 
   listFailedWebhookEvents() {
     return this.prisma.processedLineWebhookEvent.findMany({
       where: { status: { in: ['RETRY', 'FAILED'] } },
-      select: { webhookEventId: true, status: true, attempts: true, lastError: true, processedAt: true },
+      select: {
+        webhookEventId: true,
+        status: true,
+        attempts: true,
+        lastError: true,
+        processedAt: true,
+      },
       orderBy: { processedAt: 'desc' },
       take: 100,
     });
@@ -438,5 +509,4 @@ export class LineWebhookService {
 
     return date;
   }
-
 }

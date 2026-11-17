@@ -73,6 +73,14 @@ export class LineController {
     return this.lineWebhookService.holdBotForAdmin(conversationId);
   }
 
+  @Get('conversations/:conversationId/stats')
+  @AdminGuard()
+  getConversationStats(
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+  ) {
+    return this.lineWebhookService.getConversationStats(conversationId);
+  }
+
   @Get('conversations/:conversationId/messages')
   @AdminGuard()
   getConversationMessages(
@@ -120,6 +128,13 @@ export class LineConversationController {
     @Param('conversationId', ParseUUIDPipe) conversationId: string,
   ) {
     return this.lineWebhookService.markConversationRead(conversationId);
+  }
+
+  @Get(':conversationId/stats')
+  getConversationStats(
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+  ) {
+    return this.lineWebhookService.getConversationStats(conversationId);
   }
 
   @Get(':conversationId/messages')

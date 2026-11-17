@@ -281,6 +281,13 @@ model MicroKnowledge {
   @@map("microKnowledge")
 }
 
+enum LineMemberGrade {
+  NORMAL
+  VIP
+  VVIP
+  ELITE
+}
+
 model LineMember {
   id String @id @default(uuid()) @db.Uuid
 
@@ -297,6 +304,9 @@ model LineMember {
 
   lastActiveAt    DateTime?
   profileSyncedAt DateTime?
+
+  /// Lead tier for LINE users. Unregistered users have no Customer, so it lives here.
+  grade LineMemberGrade @default(NORMAL)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
