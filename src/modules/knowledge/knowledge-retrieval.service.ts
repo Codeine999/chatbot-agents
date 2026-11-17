@@ -25,6 +25,7 @@ import {
 } from '../../shared/contracts/chat.types';
 import { AnswerPatternCacheService } from './answer-pattern-cache.service';
 import { AnswerPatternService } from './answer-pattern.service';
+import { filterByPlace } from '../../shared/knowledge/knowledge-places';
 import { MicroKnowledgeService } from './micro-knowledge.service';
 import { SemanticSearchService } from './semantic-search.service';
 import { resolveRetrievalQuery } from './retrieval-query-planner.service';
@@ -248,12 +249,17 @@ export class KnowledgeRetrievalService {
         ),
       ),
     ]);
-    const lexical = [...database, ...micro].filter(
+    // A fact tied to another province/place must not answer this question.
+    const places = fresh?.micro.map((row) => row.meta) ?? [];
+    const lexical = [
+      ...database,
+      ...filterByPlace(micro, query, places),
+    ].filter(
       (item) =>
         item.metadata?.exactMatch === true ||
         rawMetric(item, 'rawScore') >= this.lexicalNoiseFloor,
     );
-    const vectors = semantic.filter(
+    const vectors = filterByPlace(semantic, query, places).filter(
       (item) => rawMetric(item, 'vectorSimilarity') >= this.vectorNoiseFloor,
     );
     const merged = rankCandidates(lexical, vectors);

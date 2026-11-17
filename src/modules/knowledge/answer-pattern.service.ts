@@ -20,6 +20,7 @@ export type KnowledgeRecord = Omit<AnswerPattern, 'renderMode'> & {
   renderMode?: 'DIRECT' | 'REWRITE';
   entityKey?: string | null;
   topicKey?: string | null;
+  meta?: unknown;
 };
 const BROAD_DIRECT_QUERIES = new Set([
   'ราคา',
@@ -172,6 +173,7 @@ export class AnswerPatternService {
         active: pattern.active,
         entityKey: pattern.entityKey,
         topicKey: pattern.topicKey,
+        meta: pattern.meta,
         questionExamples: pattern.questionExamples,
         priority: pattern.priority,
         intentKey: pattern.intentKey,

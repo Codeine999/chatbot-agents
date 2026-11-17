@@ -23,6 +23,8 @@ import { LineChannelModule } from './connection/line-channel.module';
 
 import { NotificationModule } from '../../admin/notification/notification.module';
 import { LineHandoffHandler } from './handoff/line-handoff.handler';
+import { StorageModule } from '../../../infra/storage/storage.module';
+import { LineImageArchiveService } from './media/line-image-archive.service';
 
 @Module({
   imports: [
@@ -33,6 +35,7 @@ import { LineHandoffHandler } from './handoff/line-handoff.handler';
     AiProviderModule,
     ChatEventsQueueModule,
     NotificationModule,
+    StorageModule,
   ],
   controllers: [
     LineWebhookController,
@@ -51,6 +54,7 @@ import { LineHandoffHandler } from './handoff/line-handoff.handler';
     LineWebhookAdapter,
     LineEventsProcessor,
     LineHandoffHandler,
+    LineImageArchiveService,
   ],
   exports: [LineAdminService, LineEventsProcessor],
 })

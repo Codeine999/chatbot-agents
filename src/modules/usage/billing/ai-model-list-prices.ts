@@ -303,6 +303,13 @@ export const AI_MODEL_LIST_PRICES: readonly AiModelListPrice[] = [
     outputUsdPerMillTokens: 0,
     inputOnly: true,
   },
+  {
+    provider: 'OPENROUTER',
+    model: 'gemini-embedding-2',
+    inputUsdPerMillTokens: 0.4,
+    outputUsdPerMillTokens: 0,
+    inputOnly: true,
+  },
 ];
 
 /**

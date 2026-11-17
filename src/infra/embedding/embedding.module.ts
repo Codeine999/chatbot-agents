@@ -1,35 +1,48 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { EMBEDDING_ADAPTER } from './embedding-adapter.interface';
+import { configuredEmbeddingProvider } from './embedding-model';
 import { GeminiEmbeddingAdapter } from './gemini-embedding.adapter';
+import { OpenRouterEmbeddingAdapter } from './openrouter-embedding.adapter';
 
 /**
- * Embeddings are Gemini-only, and the provider is deliberately NOT switchable.
- *
- * Unlike chat — where `AiProviderSetting` lets an owner move between GEMINI,
- * OPENAI and ANTHROPIC at runtime — this binding is fixed at compile time.
- * Swapping it is not a config change, because:
+ * Binds the embedding backend named by `EMBEDDING_PROVIDER` (`GEMINI`, the
+ * default, or `OPENROUTER`). It is chosen at boot, never at runtime:
  *
  * 1. Vectors are not comparable across models. `SemanticSearchService` filters
- *    on `AnswerPatternVector.embeddingModel`, so the moment the model changes,
- *    every stored vector stops matching and the pgvector query returns nothing.
- *    Retrieval then degrades to keyword-only *silently*, because
- *    `KnowledgeRetrievalService` catches the miss as a normal empty result.
- * 2. The column is `vector(1536)` (see `EMBEDDING_DIMENSIONS`), which a
- *    different provider's output size would not fit without a migration.
- * 3. Anthropic publishes no embedding API at all, so parity with the three
- *    chat providers is not reachable anyway.
+ *    on `embeddingModel`, so when the model changes every stored vector stops
+ *    matching and retrieval degrades to keyword-only *silently*.
+ * 2. The column is `vector(1536)` (see `EMBEDDING_DIMENSIONS`); a model that
+ *    cannot return 1536 dimensions needs a migration.
  *
- * Changing `GEMINI_EMBEDDING_MODEL` carries the same cost as (1): the whole
- * knowledge base must be reindexed (the admin answer-pattern and micro-knowledge
- * reindex routes) before vector search works again. Treat it as a migration, not a
- * setting.
+ * Switching provider for the SAME model is safe when the adapter reports the
+ * same `model` (OpenRouter `google/gemini-embedding-2` = `gemini-embedding-2`,
+ * measured identical; see `embedding-model.ts`). Any other change — a new
+ * model on either provider — is a migration: reindex answer patterns, micro
+ * knowledge and products, then re-measure the cosine thresholds with Thai
+ * retrieval tests before going live.
+ *
+ * A new provider = one adapter class + one case below + its price rows.
  */
 @Module({
   providers: [
     GeminiEmbeddingAdapter,
+    OpenRouterEmbeddingAdapter,
     {
       provide: EMBEDDING_ADAPTER,
-      useExisting: GeminiEmbeddingAdapter,
+      inject: [
+        ConfigService,
+        GeminiEmbeddingAdapter,
+        OpenRouterEmbeddingAdapter,
+      ],
+      useFactory: (
+        config: ConfigService,
+        gemini: GeminiEmbeddingAdapter,
+        openRouter: OpenRouterEmbeddingAdapter,
+      ) =>
+        configuredEmbeddingProvider(config) === 'OPENROUTER'
+          ? openRouter
+          : gemini,
     },
   ],
   exports: [EMBEDDING_ADAPTER],

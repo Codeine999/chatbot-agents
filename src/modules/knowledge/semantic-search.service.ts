@@ -79,6 +79,7 @@ export class SemanticSearchService {
             : ('DIRECT' as const),
         entityKey: null,
         topicKey: null,
+        meta: null,
       })),
       ...facts.map((row) => ({
         ...row,
@@ -102,6 +103,7 @@ export class SemanticSearchService {
         active: true,
         entityKey: row.entityKey,
         topicKey: row.topicKey,
+        meta: row.meta,
         questionExamples: row.questionExamples,
         vectorSimilarity: Number(row.score),
         priority: row.priority,

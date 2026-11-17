@@ -15,6 +15,7 @@ import { LineDeliveryService } from './delivery/line-delivery.service';
 import { UserSessionService } from '../../session/user-session.service';
 import { isUniqueConstraint, toChatMessage } from './line-message.mapper';
 import { findOrCreateLineMember } from './line-member.repository';
+import { LineImageArchiveService } from './media/line-image-archive.service';
 
 type SavedIncomingEvent = {
   conversationId: string;
@@ -36,6 +37,7 @@ export class LineChannelAdapter implements ChannelAdapter<
     private readonly deliveryService: LineDeliveryService,
     private readonly richMenuReplies: RichMenuReplyCacheService,
     private readonly sessions: UserSessionService,
+    private readonly images: LineImageArchiveService,
   ) {}
 
   async indicateProcessing(event: LineWebhookEvent): Promise<void> {
@@ -71,6 +73,14 @@ export class LineChannelAdapter implements ChannelAdapter<
     thread: SavedIncomingEvent,
     claimOwner?: string,
   ): Promise<void> {
+    // No turn downloads the photo while paused; fetch it for the inbox anyway.
+    if (
+      event.type === 'message' &&
+      event.message.type === 'image' &&
+      event.message.contentProvider?.type !== 'external'
+    ) {
+      this.images.fetchAndKeep(event.message.id);
+    }
     // An empty reply is already the "stay silent" path of saveReply: it keeps
     // the turn lock / lease honest and records NO_REPLY without delivering.
     const response: ChatResponse = {
@@ -91,10 +101,18 @@ export class LineChannelAdapter implements ChannelAdapter<
     await this.deliveryService.deliver(deliveryId);
   }
 
-  async toChatTurn(
+  toChatTurn(
     event: LineWebhookEvent,
     savedIncomingEvent: SavedIncomingEvent,
   ): Promise<ChatTurn | null> {
+    return Promise.resolve(this.chatTurnOf(event, savedIncomingEvent));
+  }
+
+  /** Nothing here waits on I/O: an image's inbox copy is made in the background. */
+  private chatTurnOf(
+    event: LineWebhookEvent,
+    savedIncomingEvent: SavedIncomingEvent,
+  ): ChatTurn | null {
     if (event.type !== 'message' && event.type !== 'postback') return null;
 
     if (
@@ -151,28 +169,20 @@ export class LineChannelAdapter implements ChannelAdapter<
       };
     } else if (event.message.type === 'image') {
       contextUserText = '[image]';
-      if (event.message.contentProvider?.type === 'external') {
-        return {
-          kind: 'response',
-          contextUserText,
-          response: {
-            text: 'ขออภัย ระบบยังไม่รองรับรูปภาพจากผู้ให้บริการภายนอก',
-            source: 'SYSTEM',
-            contextPolicy: 'EXCLUDE',
-          },
-        };
-      } else {
-        const image = await this.lineService.getImageContent(event.message.id);
-        return {
-          kind: 'image',
-          contextUserText,
-          request: {
-            userId: event.source.userId,
-            ...thread,
-            image,
-          },
-        };
+      // The chatbot hands every photo to an admin without looking at it, so
+      // the turn never waits for the download; the inbox copy is made in the
+      // background. An external-provider image has no LINE content to copy.
+      if (event.message.contentProvider?.type !== 'external') {
+        this.images.fetchAndKeep(event.message.id);
       }
+      return {
+        kind: 'image',
+        contextUserText,
+        request: {
+          userId: event.source.userId,
+          ...thread,
+        },
+      };
     } else {
       contextUserText = event.message.text?.trim() || '[sticker]';
       return {

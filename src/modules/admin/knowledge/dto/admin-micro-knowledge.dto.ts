@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { knowledgeMetaSchema } from '../../../../shared/knowledge/knowledge-places';
 
 const languageSchema = z.preprocess(
   (value) =>
@@ -14,6 +15,7 @@ const microKnowledgeFields = {
   intentKey: z.string().trim().max(100).nullable().optional(),
   entityKey: z.string().trim().max(50).nullable().optional(),
   topicKey: z.string().trim().max(50).nullable().optional(),
+  meta: knowledgeMetaSchema.nullable().optional(),
   keywords: z.array(z.string().trim().min(1).max(100)).max(100),
   questionExamples: z.array(z.string().trim().min(1).max(2_000)).max(100),
   answer: z.string().trim().min(1).max(50_000),

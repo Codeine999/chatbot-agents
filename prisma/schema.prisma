@@ -263,6 +263,10 @@ model MicroKnowledge {
   keywords         String[] @default([])
   questionExamples String[] @default([])
 
+  /// Where this fact applies: { provinces?: string[], places?: string[] }.
+  /// A fact with places is only offered when the question names one of them.
+  meta Json?
+
   answer   String @db.Text
   language String @default("th") @db.VarChar(10)
 

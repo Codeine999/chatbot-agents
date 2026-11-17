@@ -33,6 +33,10 @@ import type {
   AttributeDefinition,
   AttributeScope,
 } from './attributes/types/attribute-definition.types';
+import {
+  configuredEmbeddingModel,
+  DEFAULT_GEMINI_EMBEDDING_MODEL,
+} from '../../infra/embedding/embedding-model';
 
 const catalogInclude = {
   company: { select: { productBusinessType: true } },
@@ -420,8 +424,9 @@ export class ProductService {
       tx,
       id,
       scope.companyId,
-      this.config?.get<string>('GEMINI_EMBEDDING_MODEL') ||
-        'gemini-embedding-2',
+      this.config
+        ? configuredEmbeddingModel(this.config)
+        : DEFAULT_GEMINI_EMBEDDING_MODEL,
     );
   }
 }

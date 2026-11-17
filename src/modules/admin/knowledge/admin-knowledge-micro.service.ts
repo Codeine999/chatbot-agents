@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MicroKnowledge } from '../../../generated/prisma/client';
+import { MicroKnowledge, Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { buildMicroKnowledgeDocument } from '../../ai/embedding/micro-knowledge-document';
 import { EmbeddingService } from '../../ai/embedding/embedding.service';
@@ -77,7 +77,11 @@ export class AdminKnowledgeMicroService {
 
     return this.prisma.$transaction(async (tx) => {
       const knowledge = await tx.microKnowledge.create({
-        data: { ...input, tenantId: this.scope.tenantId },
+        data: {
+          ...input,
+          meta: this.metaColumn(input.meta),
+          tenantId: this.scope.tenantId,
+        },
       });
       await this.vectors.upsert(
         tx,
@@ -145,11 +149,18 @@ export class AdminKnowledgeMicroService {
       addKeywords !== undefined || removeKeywords !== undefined
         ? this.patchKeywords(existing.keywords, addKeywords, removeKeywords)
         : updates.keywords;
+    const { meta, ...fields } = updates;
     const data = {
-      ...updates,
+      ...fields,
+      ...(keywords !== undefined ? { keywords } : {}),
+      ...(meta !== undefined ? { meta: this.metaColumn(meta) } : {}),
+    };
+    const merged = {
+      ...existing,
+      ...fields,
+      ...(meta !== undefined ? { meta } : {}),
       ...(keywords !== undefined ? { keywords } : {}),
     };
-    const merged = { ...existing, ...data };
     const embedding = await this.embeddingService.embedDocument(
       buildMicroKnowledgeDocument(merged),
       { adminMemberId },
@@ -171,6 +182,14 @@ export class AdminKnowledgeMicroService {
     });
     await this.knowledgeCache.changed();
     return updated;
+  }
+
+  /** Prisma wants an explicit marker for a JSON column set to null. */
+  private metaColumn(
+    meta: Prisma.InputJsonValue | null | undefined,
+  ): Prisma.InputJsonValue | typeof Prisma.DbNull | undefined {
+    if (meta === undefined) return undefined;
+    return meta === null ? Prisma.DbNull : meta;
   }
 
   async remove(id: string): Promise<{ deleted: true }> {

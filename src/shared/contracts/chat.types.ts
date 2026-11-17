@@ -161,7 +161,12 @@ export type ChatRequest = LineAiUsageContext &
 export type ImageChatRequest = LineAiUsageContext &
   Readonly<{
     userId: string;
-    image: AiProviderImage;
+    /**
+     * Not read by the chatbot any more: a customer photo goes straight to an
+     * admin (see `ChatbotService.handleImageMessage`). Kept optional for
+     * callers that still pass it.
+     */
+    image?: AiProviderImage;
     recentMessages?: readonly ChatContextMessage[];
   }>;
 

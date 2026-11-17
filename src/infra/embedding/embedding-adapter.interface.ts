@@ -29,17 +29,15 @@ export type EmbeddingResult = Readonly<{
 }>;
 
 /**
- * One embedding backend. Only `GeminiEmbeddingAdapter` implements this, and
- * the provider is NOT switchable at runtime — see `EmbeddingModule` for why.
+ * One embedding backend (Gemini API or OpenRouter). The provider is chosen at
+ * boot by `EMBEDDING_PROVIDER`, not at runtime — see `EmbeddingModule` for why.
  */
 export interface EmbeddingAdapter {
-  /**
-   * Provider and model the next `embed()` will use — the billing identity
-   * `AiModelPricing` is keyed by. Read off the adapter rather than hardcoded
-   * at the call site so the charge can never drift from whatever actually ran;
-   * this is about billing accuracy, not about supporting a provider swap.
-   */
+ 
   readonly provider: AiProviderName;
   readonly model: string;
+  readonly apiKeyName: string;
+  readonly requestTimeoutMs: number;
+  isConfigured(): boolean;
   embed(request: EmbeddingRequest): Promise<EmbeddingResult>;
 }

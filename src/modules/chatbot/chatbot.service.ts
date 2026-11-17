@@ -303,21 +303,13 @@ export class ChatbotService {
       this.decisionTrace?.answer({ mode: 'ADMIN_MUTED' });
       return this.response('', 'SYSTEM', 'EXCLUDE');
     }
-    try {
-      return await this.aiResponse(
-        await this.aiChatService.answerImage(request.image, {
-          userId: request.userId,
-          lineMemberId: request.lineMemberId,
-          conversationId: request.conversationId,
-          turnId: request.turnId,
-          recentMessages: request.recentMessages,
-        }),
-        'AI',
-        request.userId,
-      );
-    } catch (error) {
-      return this.withoutCredit(error, request);
-    }
+    // A photo (slip, damage, document) is for a person to look at: no search,
+    // no model call and no reply. The room is queued for an admin (notified
+    // only when it was not already waiting) and the bot says nothing.
+    this.decisionTrace?.handoff('IMAGE');
+    this.decisionTrace?.answer({ mode: 'IMAGE_HANDOFF' });
+    await this.userSessionService.requestAdmin(request.userId);
+    return this.response('', 'SYSTEM', 'CLEAR');
   }
 
   //  Image Handle Sticker

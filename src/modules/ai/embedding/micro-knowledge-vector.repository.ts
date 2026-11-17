@@ -21,7 +21,7 @@ export class MicroKnowledgeVectorRepository {
     return this.prisma.$queryRaw<MicroKnowledgeSearchRow[]>(Prisma.sql`
       SELECT fact."id", fact."title", fact."description", fact."category",
         fact."intentKey", fact."entityKey", fact."topicKey", fact."answer",
-        fact."priority", fact."tenantId", fact."language", fact."questionExamples",
+        fact."priority", fact."tenantId", fact."language", fact."questionExamples", fact."meta",
         (1 - (vector."embedding" <=> ${literal}::vector))::float8 AS "score"
       FROM "microKnowledgeVector" AS vector
       INNER JOIN "microKnowledge" AS fact ON fact."id" = vector."microKnowledgeId"
@@ -69,4 +69,5 @@ export class MicroKnowledgeVectorRepository {
 export type MicroKnowledgeSearchRow = Omit<SemanticSearchRow, 'renderMode'> & {
   entityKey: string | null;
   topicKey: string | null;
+  meta: unknown;
 };

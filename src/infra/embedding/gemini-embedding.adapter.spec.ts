@@ -1,4 +1,7 @@
-import { BadGatewayException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EMBEDDING_DIMENSIONS } from './embedding-adapter.interface';
 import { GeminiEmbeddingAdapter } from './gemini-embedding.adapter';
@@ -13,7 +16,8 @@ jest.mock('@google/genai', () => ({
   })),
 }));
 
-const validValues = () => Array.from({ length: EMBEDDING_DIMENSIONS }, () => 0.1);
+const validValues = () =>
+  Array.from({ length: EMBEDDING_DIMENSIONS }, () => 0.1);
 
 function buildAdapter(env: Record<string, string | undefined>) {
   const configService = {
@@ -71,7 +75,10 @@ describe('GeminiEmbeddingAdapter', () => {
       });
       const adapter = buildAdapter({ GEMINI_API_KEY: 'key' });
 
-      const result = await adapter.embed({ text: 'x', task: 'RETRIEVAL_DOCUMENT' });
+      const result = await adapter.embed({
+        text: 'x',
+        task: 'RETRIEVAL_DOCUMENT',
+      });
 
       expect(result.model).toBe('gemini-embedding-001');
       expect(mockEmbedContent.mock.calls[0][0].config.taskType).toBe(
@@ -120,20 +127,25 @@ describe('GeminiEmbeddingAdapter', () => {
       ['embedding-2', true],
       ['gemini-embedding-001', false],
       ['gemini-embedding-21', false],
-    ])('model %s -> prompt-instruction path = %s', async (model, usesPrompt) => {
-      mockEmbedContent.mockResolvedValue({
-        embeddings: [{ values: validValues() }],
-      });
-      const adapter = buildAdapter({
-        GEMINI_API_KEY: 'key',
-        GEMINI_EMBEDDING_MODEL: model,
-      });
+    ])(
+      'model %s -> prompt-instruction path = %s',
+      async (model, usesPrompt) => {
+        mockEmbedContent.mockResolvedValue({
+          embeddings: [{ values: validValues() }],
+        });
+        const adapter = buildAdapter({
+          GEMINI_API_KEY: 'key',
+          GEMINI_EMBEDDING_MODEL: model,
+        });
 
-      await adapter.embed({ text: 'q', task: 'RETRIEVAL_QUERY' });
+        await adapter.embed({ text: 'q', task: 'RETRIEVAL_QUERY' });
 
-      const call = mockEmbedContent.mock.calls[0][0];
-      expect(call.contents === 'task: search result | query: q').toBe(usesPrompt);
-    });
+        const call = mockEmbedContent.mock.calls[0][0];
+        expect(call.contents === 'task: search result | query: q').toBe(
+          usesPrompt,
+        );
+      },
+    );
   });
 
   describe('response validation', () => {
@@ -202,45 +214,24 @@ describe('GeminiEmbeddingAdapter', () => {
       );
     });
 
-    /**
-     * DEFECT: the repo .env sets GEMINI_EMBEDDING_REQUEST_TIMEOUT_MS=8_000.
-     * Numeric separators are a JS *literal* feature; Number('8_000') is NaN,
-     * so the adapter ships NaN as the HTTP timeout instead of 8 seconds.
-     */
-    it('DEFECT: an underscore-separated value silently becomes NaN', async () => {
-      mockEmbedContent.mockResolvedValue({
-        embeddings: [{ values: validValues() }],
-      });
-      const adapter = buildAdapter({
-        GEMINI_API_KEY: 'key',
-        GEMINI_EMBEDDING_REQUEST_TIMEOUT_MS: '8_000',
-      });
+    it.each([['8_000'], ['']])(
+      'falls back to 8000 when the value %j is not a usable number',
+      async (value) => {
+        mockEmbedContent.mockResolvedValue({
+          embeddings: [{ values: validValues() }],
+        });
+        const adapter = buildAdapter({
+          GEMINI_API_KEY: 'key',
+          GEMINI_EMBEDDING_REQUEST_TIMEOUT_MS: value,
+        });
 
-      await adapter.embed({ text: 'x', task: 'RETRIEVAL_QUERY' });
+        await adapter.embed({ text: 'x', task: 'RETRIEVAL_QUERY' });
 
-      expect(
-        Number.isNaN(
+        expect(
           mockEmbedContent.mock.calls[0][0].config.httpOptions.timeout,
-        ),
-      ).toBe(true);
-    });
-
-    /** DEFECT: an empty value parses to 0, i.e. "no timeout" for the SDK. */
-    it('DEFECT: an empty value becomes 0 rather than the 8000 default', async () => {
-      mockEmbedContent.mockResolvedValue({
-        embeddings: [{ values: validValues() }],
-      });
-      const adapter = buildAdapter({
-        GEMINI_API_KEY: 'key',
-        GEMINI_EMBEDDING_REQUEST_TIMEOUT_MS: '',
-      });
-
-      await adapter.embed({ text: 'x', task: 'RETRIEVAL_QUERY' });
-
-      expect(mockEmbedContent.mock.calls[0][0].config.httpOptions.timeout).toBe(
-        0,
-      );
-    });
+        ).toBe(8000);
+      },
+    );
   });
 
   /** DEFECT: EMBEDDING_DIMENSIONS is a hardcoded constant; .env is ignored. */

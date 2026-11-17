@@ -1,3 +1,5 @@
+import { metaPlaces } from '../../../shared/knowledge/knowledge-places';
+
 export type MicroKnowledgeDocumentInput = {
   title: string;
   description?: string | null;
@@ -6,6 +8,7 @@ export type MicroKnowledgeDocumentInput = {
   entityKey?: string | null;
   topicKey?: string | null;
   keywords: string[];
+  meta?: unknown;
   questionExamples: string[];
   answer: string;
 };
@@ -25,6 +28,9 @@ export function buildMicroKnowledgeDocument(
     input.intentKey ? `เจตนา: ${input.intentKey}` : null,
     input.entityKey ? `สิ่งที่อ้างถึง: ${input.entityKey}` : null,
     input.topicKey ? `ประเด็น: ${input.topicKey}` : null,
+    metaPlaces(input.meta).length
+      ? `พื้นที่: ${metaPlaces(input.meta).join(', ')}`
+      : null,
     input.keywords.length ? `คำสำคัญ: ${input.keywords.join(', ')}` : null,
     input.questionExamples.length
       ? `ตัวอย่างคำถาม:\n${input.questionExamples.join('\n')}`

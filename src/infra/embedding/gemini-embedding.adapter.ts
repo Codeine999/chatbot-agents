@@ -16,20 +16,36 @@ import {
   estimateEmbeddingTokenUsage,
   toTokenCount,
 } from '../../ai-provider/utils/token-usage.utils';
-
-const DEFAULT_EMBEDDING_MODEL = 'gemini-embedding-2';
+import {
+  DEFAULT_GEMINI_EMBEDDING_MODEL,
+  embeddingRequestTimeoutMs,
+  geminiTaskPrefixed,
+  usesGeminiTaskPrefix,
+} from './embedding-model';
 
 @Injectable()
 export class GeminiEmbeddingAdapter implements EmbeddingAdapter {
   constructor(private readonly configService: ConfigService) {}
 
   readonly provider = 'GEMINI' as const;
+  readonly apiKeyName = 'GEMINI_API_KEY';
 
   get model(): string {
     return (
       this.configService.get<string>('GEMINI_EMBEDDING_MODEL') ||
-      DEFAULT_EMBEDDING_MODEL
+      DEFAULT_GEMINI_EMBEDDING_MODEL
     );
+  }
+
+  get requestTimeoutMs(): number {
+    return embeddingRequestTimeoutMs(
+      this.configService,
+      'GEMINI_EMBEDDING_REQUEST_TIMEOUT_MS',
+    );
+  }
+
+  isConfigured(): boolean {
+    return Boolean(this.configService.get<string>('GEMINI_API_KEY')?.trim());
   }
 
   async embed(request: EmbeddingRequest): Promise<EmbeddingResult> {
@@ -40,13 +56,13 @@ export class GeminiEmbeddingAdapter implements EmbeddingAdapter {
     }
 
     const model = this.model;
-    const usesPromptTaskInstruction = this.usesPromptTaskInstruction(model);
+    const usesPromptTaskInstruction = usesGeminiTaskPrefix(model);
 
     try {
       const response = await new GoogleGenAI({ apiKey }).models.embedContent({
         model,
         contents: usesPromptTaskInstruction
-          ? this.toEmbedding2Content(request)
+          ? geminiTaskPrefixed(request)
           : request.text,
         config: {
           ...(usesPromptTaskInstruction
@@ -55,13 +71,7 @@ export class GeminiEmbeddingAdapter implements EmbeddingAdapter {
                 taskType: request.task,
               }),
           outputDimensionality: EMBEDDING_DIMENSIONS,
-          httpOptions: {
-            timeout: Number(
-              this.configService.get<string>(
-                'GEMINI_EMBEDDING_REQUEST_TIMEOUT_MS',
-              ) ?? 8_000,
-            ),
-          },
+          httpOptions: { timeout: this.requestTimeoutMs },
         },
       });
 
@@ -97,21 +107,5 @@ export class GeminiEmbeddingAdapter implements EmbeddingAdapter {
         `Gemini embedding failed: ${String(error)}`,
       );
     }
-  }
-
-  /**
-   * Gemini Embedding 2 does not support taskType. Retrieval intent must be
-   * included in the text instead. Embedding 1 keeps using taskType.
-   */
-  private usesPromptTaskInstruction(model: string): boolean {
-    return /(^|\/)(?:gemini-)?embedding-2(?:$|-)/i.test(model.trim());
-  }
-
-  private toEmbedding2Content(request: EmbeddingRequest): string {
-    if (request.task === 'RETRIEVAL_QUERY') {
-      return `task: search result | query: ${request.text}`;
-    }
-
-    return `title: none | text: ${request.text}`;
   }
 }

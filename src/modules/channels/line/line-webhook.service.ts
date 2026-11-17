@@ -23,6 +23,7 @@ import {
   UserSessionService,
 } from '../../session/user-session.service';
 import * as claims from './worker/line-webhook-claim';
+import { FileStorageService } from '../../../infra/storage/file-storage.service';
 import {
   afterRoom,
   INBOX_ROOM_ORDER,
@@ -43,6 +44,7 @@ export class LineWebhookService {
     private readonly loadContextService: LoadContextService,
     private readonly deliveryService: LineDeliveryService,
     private readonly sessions: UserSessionService,
+    private readonly storage: FileStorageService,
   ) {}
 
   /** Keep the worker entry point stable while messaging owns turn orchestration. */
@@ -170,7 +172,7 @@ export class LineWebhookService {
         take: limit,
       });
 
-      return this.withAdminUsernames(messages);
+      return this.withMediaUrls(await this.withAdminUsernames(messages));
     }
 
     const messages = await this.prisma.lineChatHistory.findMany({
@@ -179,7 +181,28 @@ export class LineWebhookService {
       take: limit,
     });
 
-    return this.withAdminUsernames(messages.reverse());
+    return this.withMediaUrls(
+      await this.withAdminUsernames(messages.reverse()),
+    );
+  }
+
+  /**
+   * `mediaUrl` is stored as a storage reference; the dashboard gets a URL it
+   * can open (a short-lived signed URL for private R2 files). A file that
+   * cannot be signed is shown as missing rather than failing the whole page.
+   */
+  private withMediaUrls<T extends { mediaUrl: string | null }>(
+    messages: T[],
+  ): Promise<T[]> {
+    return Promise.all(
+      messages.map(async (message) => {
+        if (!message.mediaUrl) return message;
+        const mediaUrl = await this.storage
+          .url(message.mediaUrl)
+          .catch(() => null);
+        return { ...message, mediaUrl };
+      }),
+    );
   }
 
   /**

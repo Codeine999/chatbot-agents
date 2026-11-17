@@ -78,9 +78,7 @@ export class EmbeddingHealthService {
   }
 
   private checkConfig(): ConfigGate {
-    const apiKeyConfigured = Boolean(
-      this.configService.get<string>('GEMINI_API_KEY')?.trim(),
-    );
+    const apiKeyConfigured = this.adapter.isConfigured();
 
     return {
       ok: apiKeyConfigured,
@@ -88,11 +86,10 @@ export class EmbeddingHealthService {
       model: this.adapter.model,
       dimensions: EMBEDDING_DIMENSIONS,
       apiKeyConfigured,
-      requestTimeoutMs: Number(
-        this.configService.get<string>('GEMINI_EMBEDDING_REQUEST_TIMEOUT_MS') ??
-          8_000,
-      ),
-      reason: apiKeyConfigured ? undefined : 'GEMINI_API_KEY is not configured',
+      requestTimeoutMs: this.adapter.requestTimeoutMs,
+      reason: apiKeyConfigured
+        ? undefined
+        : `${this.adapter.apiKeyName} is not configured`,
     };
   }
 

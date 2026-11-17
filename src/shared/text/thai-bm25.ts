@@ -1,4 +1,5 @@
 import { normalizeText } from '../../utils/text.utils';
+import { metaPlaces } from '../knowledge/knowledge-places';
 import type { KnowledgeRecord } from '../../modules/knowledge/answer-pattern.service';
 
 const segmenter = new Intl.Segmenter('th', { granularity: 'word' });
@@ -92,7 +93,7 @@ export type Bm25Record = Pick<
   | 'category'
   | 'description'
   | 'answer'
->;
+> & { meta?: unknown };
 
 // Segmenting Thai is the dominant cost of lexical search. Rows of the
 // in-memory knowledge snapshot keep their identity between messages, so each
@@ -103,7 +104,7 @@ function frequencies(record: Bm25Record): Map<string, number> {
   const cached = frequencyCache.get(record);
   if (cached) return cached;
   const fields: readonly [string, number][] = [
-    [record.keywords.join(' '), 4],
+    [[...record.keywords, ...metaPlaces(record.meta)].join(' '), 4],
     [record.questionExamples.join(' '), 3],
     [record.title, 2],
     [record.intentKey ?? '', 2],
