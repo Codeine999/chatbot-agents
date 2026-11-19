@@ -7,7 +7,7 @@
 
 - Stack: NestJS + Fastify, Prisma + Postgres (pgvector), Redis, BullMQ, Zod
 - Two channels share one core: **LINE** (webhook → BullMQ) and **App** (REST, reply returned in a single HTTP response). Both enter `MessageProcessorService` through a `ChannelAdapter` (`LineChannelAdapter` / `AppChannelAdapter`)
-- LINE-only features: member registration, Product RAG (requires `lineMemberId`; the App channel has none, so it always falls through to legacy RAG)
+- LINE-only feature: member registration. Product RAG works on every channel with a durable conversation (LINE thread, App/Facebook `channel*` room; see §6). The back-office preview uses it too (owner kind `PREVIEW`, no room). Only a turn with no owner skips it and uses legacy RAG
 - Idempotency key used across the system: `turnId` = `webhookEventId` (LINE) or `app:<messageId>` (App)
 - Single-company deployment: `CompanyService.getCompanyId()` / `CommerceScopeService.forLineDeployment` (multiple companies = fail closed, use legacy)
 
@@ -54,7 +54,7 @@
 
 `KnowledgeRetrievalService.retrieve` is the single entry point (classifier re-search also goes through it). Order: product gate first (section 6) → legacy (memoized per turn to avoid duplicate embedding/billing)
 
-Legacy `runRetrieval`:
+Legacy `matchKnowledgePipeline`:
 1. `resolveRetrievalQuery` — **deterministic, not an LLM**. Fills in "model X" from the last 6 history messages; unclear reference = `missingReference` → CLARIFY
 2. `AnswerPatternCacheService.snapshot()` — one in-memory set of AnswerPattern + MicroKnowledge (≤500 rows/table, TTL 240s, reloaded via Redis pub/sub `knowledge:changed`). Stale = read DB
 3. Exact FAQ (`questionExamples` match, `safeDirect`, `renderMode≠REWRITE`) → route `DIRECT` (0 LLM, 0 embedding)
@@ -85,12 +85,12 @@ Knowledge writes must go through the admin services and call `cache.changed()` (
 
 `AiSetting` (`aiSettings`): latest active row in scope `AI_SETTING_TENANT_ID`; only role `dev` may write `systemPrompt`
 
-### 6. Product RAG (LINE only)
+### 6. Product RAG (every channel)
 
 Path: `KnowledgeRetrievalService` → `products/rag/product-retrieval.service.ts` (`retrieveProduct`)
 
-1. **Gate**: `PRODUCT_ENABLED` + `PRODUCT_RAG_ENABLED`, has `userId/turnId/lineMemberId/conversationId`, not a pure policy-question regex (e.g. "free shipping?" should hit DIRECT), single-company scope. Any failure = `undefined` (use legacy)
-2. `CommerceTurnService.find/open` (`products/rag/commerce-turn.service.ts`) — per-event snapshot in `commerceTurns`, unique `(companyId, connectionKey='standalone-line', externalEventId=webhookEventId)`; lease 180s; stages `plan → retrieval → response` are persisted and never redone (replay makes no LLM calls and no double billing); another worker holding the lease = 503 → webhook RETRY
+1. **Gate**: `PRODUCT_ENABLED` + `PRODUCT_RAG_ENABLED`, has `userId/turnId/conversationId` and an owner (`commerceOwner(context)` in `products/rag/commerce-owner.ts`: `lineMemberId` set = LINE; otherwise the channel is parsed from the userId prefix `app:`/`fb:` via `parseChannelUserId`), not a pure policy-question regex (e.g. "free shipping?" should hit DIRECT), single-company scope. Any failure = `undefined` (use legacy)
+2. `CommerceTurnService.find/open` (`products/rag/commerce-turn.service.ts`) — per-event snapshot in `commerceTurns`, unique `(companyId, connectionKey, externalEventId=turnId)` with `connectionKey` from `CommerceFeatureService.connectionKeyFor(owner)` (`standalone-line` / `standalone-app` / `standalone-facebook`); the owner is exactly one of LINE (`lineMemberId`+`conversationId`), a room (`channelConversationId`) or a back-office preview session (`previewSessionKey`=`<adminId>:<sessionId>`, `standalone-preview`, purged after 1 day), enforced by CHECK `commerceTurns_owner_check`; `open` verifies in the DB that the conversation belongs to that member/contact+channel+company (mismatch = Forbidden = product RAG skipped); lease 180s; stages `plan → retrieval → response` are persisted and never redone (replay makes no LLM calls and no double billing); another worker holding the lease = 503 → webhook RETRY
 3. `routeWithoutPlanner`: product signal / reference to earlier refs / probe finds name-alias-SKU / `mentionsCatalog` → PLAN; otherwise run legacy first: DIRECT/RAG/settled → use legacy; policy-like but unsure → `plannerIntent=KNOWLEDGE` (0 LLM); everything else → PLAN (planner replaces the classifier)
 4. **Plan**: broad inquiry / exact SKU at the start of the message / policy-only = rule-based (0 LLM), otherwise LLM slot `PLAN` (`productPlannerSchema`, temp 0.1). `validate`: productIds ⊆ probe/refs, option/filter keys ∈ the preset's `storeOptions/storeFields`, operator matches type, min ≤ max price. Failure = `plan.failed` → fallback (never guess). An EQ filter on an option key (color/size) is converted into an option. `inStockOnly` must come from the customer's words (`groundStockFilter`)
 5. **Search** (`products/search/product-search.service.ts`) in a RepeatableRead tx, 15s: probe → lexical SQL + BM25 (+ vector fallback ≥ 0.65 if `PRODUCT_SEMANTIC_ENABLED`) → `matchesBusinessFields` (options + filters must all hold on the **same variant**) → `evidence()` (price/stock read live from DB) → status `FOUND | MISSING_INPUT | VARIANT_UNAVAILABLE | NO_MATCH | NO_RELIABLE_CANDIDATE | UNAVAILABLE`
@@ -136,7 +136,7 @@ Kinds: `LINE_AI_REPLY` scope `'*'` (shared by LINE + App, budgets not split yet)
 ### 11. How the App channel differs from LINE (`channels/app/`)
 
 `AppClientGuard` (flag `APP_MESSAGE_ENABLED`, Origin, IP ban) → `AppSessionGuard` (Bearer `ags_…` → sha256 → `appGuestSessions`) → `AppMessageService.send`: sanitize ≤2000 + `AppAbuseService` (any hit = **429 + Retry-After**, never silently dropped) → `ensureConversation` → dedupe on `(conversationId, clientMessageId)` (different text = 409) → **DB room lock** `channelConversations.activeTurnId` 120s (collision = 409 BUSY) → store inbound + unread+1 → `MessageProcessorService` (claim = messageId) → release lock → return `{message, replies[], meta}`
-- userId in core = `app:<contactId>`, `turnId = app:<messageId>`, tables `channel*` (parallel to `line*`), no registration, no Product RAG, no BullMQ, no outbox/delivery (`deliver` only appends context)
+- userId in core = `app:<contactId>`, `turnId = app:<messageId>`, tables `channel*` (parallel to `line*`), no registration, Product RAG on (turn owned by the room, purged with it by `AppMaintenanceService`), no BullMQ, no outbox/delivery (`deliver` only appends context)
 - Admin request → `AppHandoffHandler`; a failed turn = 503 and the inbound message stays `PROCESSING`; resending the same id is safe (billing replay)
 
 ### 12. Redis keys / key tables
@@ -148,7 +148,7 @@ Redis: `chat:session:{userId}` (TTL 30m sliding) · `chat:control:{userId}` (mut
 | `processedLineWebhookEvent` | `webhookEventId`; lease owner/until; status `RETRY/PROCESSING/COMPLETED/FAILED` |
 | `lineDelivery` | `key` (send idempotency); `context` json used for append after ACCEPTED |
 | `lineChatHistory` | `lineMessageId`, `deliveryId` unique; `rawEvent` holds raw PII |
-| `commerceTurns` / `commerceLlmCalls` | plan/retrieval/response snapshot; slots `PLAN/ANSWER/CRITICAL_REPAIR` |
+| `commerceTurns` / `commerceLlmCalls` | plan/retrieval/response snapshot; slots `PLAN/ANSWER/CRITICAL_REPAIR`; owner = `lineMemberId`+`conversationId` XOR `channelConversationId` (FK RESTRICT, App turns purged before their room); `input` holds a redacted copy of the message, so App turns follow `APP_HISTORY_RETENTION_DAYS` |
 | `productVariants` | `(companyId, sku)`; `meta` jsonb |
 | `productCatalogCommands` | `(companyId, requestId)` idempotency for every catalog write |
 | `creditReservation` | `operationKey` unique, status `HELD/SETTLED/RELEASED/UNKNOWN`, `result` json for replay |

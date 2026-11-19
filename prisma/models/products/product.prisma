@@ -77,10 +77,13 @@ model ProductVariant {
   product       Product  @relation(fields: [productId, companyId], references: [id, companyId], onDelete: Restrict)
   sku           String   @db.VarChar(100)
   price Decimal? @db.Decimal(12, 2)
+  /// Set = the price is not final yet and lies in price..maxPrice (CHECK > price).
+  maxPrice Decimal? @db.Decimal(12, 2)
   compareAtPrice Decimal? @db.Decimal(12, 2)
 
   inventory InventoryBalance?
   movements InventoryMovement[]
+  slots     ProductSlot[]
 
   /// Business field values for every business type, keyed by the selected
   /// preset's field keys (e.g. color/size, ram_gb, bed_type/max_guests).
@@ -97,6 +100,52 @@ model ProductVariant {
   @@unique([companyId, sku])
   @@index([productId, companyId, active])
   @@map("productVariants")
+}
+
+enum ProductSlotStatus {
+  /// On sale / answerable.
+  OPEN
+  /// Closed for sale (near departure or closed by an admin).
+  CLOSED
+  /// This occurrence does not run.
+  CANCELLED
+}
+
+/// One dated occurrence of a variant: a bus departure, tour date or class intake.
+/// capacity/reserved are perishable inventory of this occurrence only.
+model ProductSlot {
+  id        String         @id @default(uuid()) @db.Uuid
+  companyId String         @db.Uuid
+  variantId String         @db.Uuid
+  variant   ProductVariant @relation(fields: [variantId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// UTC, timestamp(3) like every other table; shown in Asia/Bangkok by code.
+  startsAt DateTime
+  /// Estimated arrival / end (may fall on a later day).
+  endsAt   DateTime?
+  status   ProductSlotStatus @default(OPEN)
+
+  /// null = seat count not known yet.
+  capacity       Int?
+  reserved       Int       @default(0)
+  /// When capacity/reserved were last confirmed; null = never confirmed.
+  availabilityAt DateTime?
+  /// This slot's own fare; null = the variant's price/maxPrice pair applies
+  /// (never mixed: a slot price replaces both variant values).
+  price          Decimal?  @db.Decimal(12, 2)
+  /// Set = this slot's fare is not final yet and lies in price..maxPrice.
+  maxPrice       Decimal?  @db.Decimal(12, 2)
+  /// Values of the preset's SLOT-scope fields (never price or quantities).
+  meta           Json      @default("{}")
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([id, companyId])
+  @@unique([variantId, startsAt])
+  @@index([companyId, startsAt])
+  @@map("productSlots")
 }
 
 model InventoryBalance {

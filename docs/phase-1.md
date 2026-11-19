@@ -714,7 +714,7 @@ export function evidenceStrength(
 block `CONTACT_ADMIN` ท้าย method คงเดิม (ยังส่ง `retrieval` ตัวแรก)
 
 พฤติกรรมที่ต้องเข้าใจ:
-- `retrieve()` ต้องเป็นทางเข้าเดียวของ retrieval (กฎใน CLAUDE.md) ห้ามเรียก `runRetrieval` หรือ service ย่อยตรง ๆ
+- `retrieve()` ต้องเป็นทางเข้าเดียวของ retrieval (กฎใน CLAUDE.md) ห้ามเรียก `matchKnowledgePipeline` หรือ service ย่อยตรง ๆ
 - ข้อความที่ส่งให้ model ตอบยังเป็น `input` เดิมของลูกค้า (ดู `chatbot.service.ts` `answerKnowledge(input, ...)`) `rewritten` ใช้ค้นหลักฐานเท่านั้น
 - ถ้ารอบสองล้ม (`RETRIEVAL_ERROR`), ขัดแย้ง, หรือไม่เจออะไร `selectedItems` จะว่าง ระบบใช้ผลรอบแรกเหมือนก่อนแก้
 - `InsufficientCreditException` / `PendingAiUsageError` จากรอบสองถูกโยนต่อเองโดย `read()` ใน retrieval ไม่ต้องดักเพิ่ม
@@ -991,7 +991,7 @@ export class AnswerPatternCacheService
 
 เปลี่ยน import เป็น `import { AnswerPatternService, type KnowledgeRecord } from './answer-pattern.service';`
 
-### 9.4 `src/modules/knowledge/knowledge-retrieval.service.ts` (`runRetrieval`)
+### 9.4 `src/modules/knowledge/knowledge-retrieval.service.ts` (`matchKnowledgePipeline`)
 
 แทน code ตั้งแต่ `const cached = await read('cache', () =>` จนถึงบรรทัด `read('micro lexical', () => this.micro.findMatches(query)),` ด้วย:
 
@@ -1151,7 +1151,7 @@ const grounded = (o: Record<string, unknown>) =>
 | `resolveLowConfidence`, `classifyLowConfidence` | classifier คืน `standaloneQuery`, `questions`; BUSINESS + query ต่างจากเดิม → `retrieve` รอบสอง (`disableProduct`, `forceGrounded`, ไม่มี history) แล้วเลือกผลที่หลักฐานแข็งกว่า |
 | ตารางจำนวน call | เพิ่มแถว: RAG → `NOT_BUSINESS` → general = 2 generation; LOW → BUSINESS + rewrite = +1 embedding |
 | "RAG sentinel ... ไม่วน classifier" | เพิ่ม: `NOT_BUSINESS` ออก general ได้เฉพาะ route `RAG` ที่ source เป็น CACHE/DATABASE/EMBEDDING |
-| `runRetrieval`, `cache.*` | snapshot เดียวของสองตาราง; สด → ไม่อ่าน DB สำหรับ lexical; `changed()` + Redis channel `knowledge:changed`; warn เมื่อถึง 500 แถว |
+| `matchKnowledgePipeline`, `cache.*` | snapshot เดียวของสองตาราง; สด → ไม่อ่าน DB สำหรับ lexical; `changed()` + Redis channel `knowledge:changed`; warn เมื่อถึง 500 แถว |
 | "MicroKnowledge ไม่มี in-memory snapshot" | มีแล้ว และ CRUD เรียก `changed()` |
 | grounded contract | schema มี `unanswered`, decision มี `NOT_BUSINESS`; citation ที่ไม่รู้จักถูกตัดทิ้ง ต้องเหลืออย่างน้อย 1; fallback reason ใหม่ `TRUNCATED_OUTPUT`, `NOT_BUSINESS_ON_BUSINESS_ROUTE`; answer mode ใหม่ `GROUNDED_PARTIAL` |
 | provider | `AiGenerateResponse.finishReason`; admin chat ใช้ `maxOutputTokens` 2000 |

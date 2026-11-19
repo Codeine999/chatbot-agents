@@ -83,7 +83,9 @@ model ChannelConversation {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  messages ChannelMessage[]
+  messages      ChannelMessage[]
+  /// Product RAG snapshots of this room; the App retention purge removes them first.
+  commerceTurns CommerceTurn[]
 
   @@index([companyId, channel, lastMessageAt])
   /// Finds rooms that went quiet longer than the retention window.

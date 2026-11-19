@@ -60,7 +60,7 @@ Vector confidence gate (ตั้งแต่ 2026-10-02): RAG ข้าม clas
 | Delivery | `LineDeliveryService.deliver/finalize` | durable row → claim → check mute → REPLY/PUSH → ACCEPTED → unique deliveryId history + context append; repeat repair ไม่ส่งซ้ำ |
 | Admin PUSH | `sendAdminMessage` → delivery | key ใช้ admin/conversation/clientRequestId ถ้ามี; mute ทุก actual attempt; accepted admin PUSH เปิด waiting_admin เป็น open ใน transaction |
 
-ช่องอื่นนอกจาก LINE (App, Facebook Messenger) เข้า `MessageProcessorService` ตัวเดียวกันผ่าน channel gateway (`src/modules/channels/`, ตาราง `channel*`) ดู [channel-gateway-current.md](channel-gateway-current.md) ส่วน routing/RAG/answer/billing ด้านล่างใช้ร่วมกันทุกช่อง ต่างกันแค่ `ChatRequest.channel` ซึ่งกำหนดว่าสมัครสมาชิกได้ไหม (LINE เท่านั้น) และ Product RAG ทำงานเฉพาะเมื่อมี `lineMemberId` (LINE เท่านั้น)
+ช่องอื่นนอกจาก LINE (App, Facebook Messenger) เข้า `MessageProcessorService` ตัวเดียวกันผ่าน channel gateway (`src/modules/channels/`, ตาราง `channel*`) ดู [channel-gateway-current.md](channel-gateway-current.md) ส่วน routing/RAG/answer/billing ด้านล่างใช้ร่วมกันทุกช่อง ต่างกันแค่ `ChatRequest.channel` ซึ่งกำหนดว่าสมัครสมาชิกได้ไหม (LINE เท่านั้น) ส่วน Product RAG ทำงานได้ทุกช่องที่มี conversation ถาวร (LINE thread หรือห้อง `channel*`) ดู [product-all-channels.md](product-all-channels.md)
 
 REPLY ใช้ token เมื่อ deadline timestamp+50s ยังไม่ผ่าน; invalid token แบบชัดเจนจึง fallback PUSH ได้ ambiguous REPLY acceptance เป็น UNKNOWN; PUSH ใช้ retryKey คงเดิม, retry สูงสุด 8 attempts และหยุดเมื่อ key อายุใกล้ 23h; delivery recovery ทุก 5s อ่านสูงสุด 20 rows ไม่อ้างว่า ledger success = LINE delivered เพราะเป็นคนละสถานะ
 
@@ -350,8 +350,8 @@ Source: [retrieval](../src/modules/knowledge/knowledge-retrieval.service.ts), [m
 | Function | รับเข้า → ทำงาน/เรียกต่อ → คืนผล |
 |---|---|
 | resolveRetrievalQuery | current+history6 messages → หา reference และ explicit รุ่น/model; ไม่กำกวมคืน original หรือ query เติมรุ่น; ไม่พบ/หลายรุ่น→missingReference=true |
-| retrieve | message/context → runRetrieval → logRetrieval → KnowledgeRetrievalResult |
-| runRetrieval | resolved query → cached lexical + directResult → DB lexical + directResult → parallel micro lexical/semantic → noise filters → rank → read failure gate → selectContexts → conflicts เฉพาะ selected และ related facts → result |
+| retrieve | message/context → matchKnowledgePipeline → logRetrieval → KnowledgeRetrievalResult |
+| matchKnowledgePipeline | resolved query → cached lexical + directResult → DB lexical + directResult → parallel micro lexical/semantic → noise filters → rank → read failure gate → selectContexts → conflicts เฉพาะ selected และ related facts → result |
 | eligible | KnowledgeItem → active/scope/language/answer/nonfinite score checks + reject SNAPSHOT/test content → boolean |
 | directResult | candidate[] → ตรวจความขัดแย้งเฉพาะ exact FAQ → เลือก safeDirect ANSWER_PATTERN ที่ไม่ใช่ REWRITE เป็น DIRECT; REWRITE/ไม่มี direct candidate → unified retrieval |
 | rank | แยก AP BM25 / Micro BM25 / vector เป็น 3 lists → dedupe source:id ต่อ list → sum 1/(60+rank) → sort RRF/priority/key; content ของ DB lexical ชนะ vector เมื่อ source/id เดียวกัน |
@@ -369,7 +369,7 @@ Source: [retrieval](../src/modules/knowledge/knowledge-retrieval.service.ts), [m
 | MicroKnowledgeService.findMatches | query (+ snapshot rows ถ้ามี) → ไม่มี snapshot: active+scope DB rowsสูงสุด500 (layer DATABASE) / มี: ใช้แถวใน memory (layer CACHE) → shared findMatchesFromPatterns source MICRO_KNOWLEDGE |
 | cache.onModuleInit / onModuleDestroy | load snapshot + timer240s + subscribe ช่อง Redis `knowledge:changed` (ไม่ await, ล้มก็ใช้ TTL) / clear timer + ปิด subscriber |
 | cache.getAll | snapshot age≤TTL→entries; expired→start refresh แล้วคืน[] |
-| cache.snapshot | age≤TTL→{patterns, micro} ชุดเดียวกัน; expired/ยังไม่โหลด→null (ผู้เรียกอ่าน DB) และ `runRetrieval` ใช้ชุดนี้แทนการอ่าน answerPattern + microKnowledge จาก DB ทุกข้อความ (`routeSource` ของ lexical จึงเป็น CACHE) |
+| cache.snapshot | age≤TTL→{patterns, micro} ชุดเดียวกัน; expired/ยังไม่โหลด→null (ผู้เรียกอ่าน DB) และ `matchKnowledgePipeline` ใช้ชุดนี้แทนการอ่าน answerPattern + microKnowledge จาก DB ทุกข้อความ (`routeSource` ของ lexical จึงเป็น CACHE) |
 | cache.refresh / doRefresh | share in-flight promise → read scoped active 500 แถวของ answerPattern **และ** microKnowledge พร้อมกัน → replace ทั้งคู่+loadedAt; ตารางใดล้มเก็บ snapshot/timeเดิมทั้งชุด; ถึง 500 แถวเตือน (log warn ครั้งเดียว) |
 | cache.changed | เรียกหลัง admin เขียน knowledge: รอ refresh ที่ค้างอยู่จบแล้วอ่านใหม่ (กัน snapshot ก่อนเขียน) → publish `knowledge:changed` ให้ instance อื่น reload; ไม่โยน error. Pub/sub ส่งครั้งเดียว ถ้าพลาด instance อื่นเห็นภายใน TTL 240s |
 | thaiTerms memo | `frequencies` ใน `thai-bm25.ts` จำผลตัดคำต่อแถวด้วย WeakMap (แถวใน snapshot คงตัวจนกว่าจะ refresh) |

@@ -1,4 +1,8 @@
 /// Durable, redacted Product RAG snapshot. No checkout/payment mutations.
+/// One turn belongs to exactly one conversation: a LINE thread (lineMemberId +
+/// conversationId), a channel* room (channelConversationId) or a back-office
+/// preview session (previewSessionKey = "<adminMemberId>:<sessionId>", no
+/// durable room; purged by age); a CHECK in the migration enforces it. `connectionKey` tells the channels apart.
 model CommerceTurn {
   id String @id @default(uuid()) @db.Uuid
   companyId String @db.Uuid
@@ -6,10 +10,13 @@ model CommerceTurn {
   tenantId String? @db.Uuid
   connectionKey String @db.VarChar(100)
   externalEventId String @db.VarChar(255)
-  lineMemberId String @db.Uuid
-  lineMember LineMember @relation(fields: [lineMemberId], references: [id], onDelete: Restrict)
-  conversationId String @db.Uuid
-  conversation LineConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  lineMemberId String? @db.Uuid
+  lineMember LineMember? @relation(fields: [lineMemberId], references: [id], onDelete: Restrict)
+  conversationId String? @db.Uuid
+  conversation LineConversation? @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  channelConversationId String? @db.Uuid
+  channelConversation ChannelConversation? @relation(fields: [channelConversationId], references: [id], onDelete: Restrict)
+  previewSessionKey String? @db.VarChar(80)
   provider String @db.VarChar(30)
   model String @db.VarChar(100)
   input Json
@@ -24,6 +31,8 @@ model CommerceTurn {
 
   @@unique([companyId, connectionKey, externalEventId])
   @@index([conversationId, createdAt])
+  @@index([channelConversationId, createdAt])
+  @@index([previewSessionKey, createdAt])
   @@map("commerceTurns")
 }
 

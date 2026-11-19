@@ -86,7 +86,7 @@ flowchart TB
 ```mermaid
 flowchart TB
   K["KnowledgeRetrievalService.retrieve"] --> P["ProductRetrievalService gate<br/>อาจ return product หรือ delegate legacy"]
-  P --> LEG["runRetrieval<br/>resolveRetrievalQuery + redactPii"]
+  P --> LEG["matchKnowledgePipeline<br/>resolveRetrievalQuery + redactPii"]
   LEG --> MISS{"missing reference?"}
   MISS -->|ใช่| CL["LOW_CONFIDENCE / MISSING_USER_INFORMATION"]
   MISS -->|ไม่| CACHE["AnswerPatternCacheService<br/>AnswerPatternService.findMatchesFromPatterns"]
