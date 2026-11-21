@@ -29,6 +29,12 @@ import { filterByPlace } from '../../shared/knowledge/knowledge-places';
 import { MicroKnowledgeService } from './micro-knowledge.service';
 import { SemanticSearchService } from './semantic-search.service';
 import { resolveRetrievalQuery } from './retrieval-query-planner.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CommerceScopeService } from '../commerce/commerce-scope.service';
+import {
+  catalogLexicon,
+  loadCatalogContext,
+} from '../products/search/catalog-fields';
 import {
   knowledgeScope,
   KnowledgeScope,
@@ -76,6 +82,8 @@ export class KnowledgeRetrievalService {
     config: ConfigService,
     @Optional() private readonly products?: ProductRetrievalService,
     @Optional() private readonly decisionTrace?: DecisionTraceService,
+    @Optional() private readonly scopes?: CommerceScopeService,
+    @Optional() private readonly prisma?: PrismaService,
   ) {
     this.scope = knowledgeScope(config);
     // Candidate/noise thresholds only. Never compare these against RRF scores.
@@ -121,13 +129,14 @@ export class KnowledgeRetrievalService {
     // The product gate may need the legacy result first; compute (and bill) it once.
     this.decisionTrace?.enter('retrieval');
     let legacy: Promise<KnowledgeRetrievalResult> | undefined;
-    const runLegacy = () => (legacy ??= this.runRetrieval(message, context));
+    const runLegacy = () =>
+      (legacy ??= this.matchKnowledgePipeline(message, context));
     const product = !context.disableProduct
       ? await this.products?.retrieveProduct(
           message,
           context,
           (query, embedding, forceGrounded) =>
-            this.runRetrieval(query, {
+            this.matchKnowledgePipeline(query, {
               ...context,
               turnId: context.turnId
                 ? `product-policy:${context.turnId}`
@@ -153,13 +162,36 @@ export class KnowledgeRetrievalService {
     return result;
   }
 
-  private async runRetrieval(
+  /**
+   * Business wording that marks an item name ("รุ่น", "เส้นทาง", "หลักสูตร").
+   * A deployment without a readable company falls back to ECOMMERCE, as the
+   * catalog does everywhere else.
+   */
+  private async entityMarkers(): Promise<readonly string[]> {
+    const fallback = catalogLexicon(null).entityMarkers;
+    if (!this.scopes || !this.prisma) return fallback;
+    try {
+      const scope = await this.scopes.forLineDeployment();
+      const catalog = await loadCatalogContext(this.prisma, scope);
+      return catalog.lexicon.entityMarkers;
+    } catch (error) {
+      this.logger.warn(
+        `business wording unavailable, using default: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+      return fallback;
+    }
+  }
+
+  private async matchKnowledgePipeline(
     message: string,
     context: RetrievalContext = {},
   ): Promise<KnowledgeRetrievalResult> {
     const resolved = resolveRetrievalQuery(
       redactPii(message),
       context.recentMessages ?? [],
+      await this.entityMarkers(),
     );
 
     if (resolved.missingReference) {

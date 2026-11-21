@@ -6,7 +6,7 @@ import {
   ConflictException,
   Optional,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmbeddingService } from '../../ai/embedding/embedding.service';
 import { CommerceFeatureService } from '../../commerce/commerce-feature.service';
@@ -23,6 +23,15 @@ import { ProductCommandService } from '../product-command.service';
 import { lockProduct } from '../product-lock';
 import { CommerceScopeService } from '../../commerce/commerce-scope.service';
 import { loadCatalogFields } from './catalog-fields';
+
+const MAX_BULK_REINDEX = 500;
+/** A stable UUID per (batch request, product), so a retried batch replays. */
+const derivedRequestId = (requestId: string, productId: string) => {
+  const hex = createHash('sha256')
+    .update(`reindex:${requestId}:${productId}`)
+    .digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+};
 
 /** DB jobs are the durable outbox. A bounded poller recovers crashes and reindexes model changes. */
 @Injectable()
@@ -87,6 +96,88 @@ export class ProductIndexService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  /**
+   * Every ACTIVE product of the company in one call: queues the missing
+   * index jobs and retries failed ones (the same rules as `reindex`). `force`
+   * also re-embeds products whose current job is already DONE, which bills
+   * one embedding each. The background poller does the embedding; this only
+   * queues and kicks it once.
+   */
+  async reindexAll(
+    scopeInput: CommerceScope,
+    actorId: string,
+    requestId: string,
+    force: boolean,
+    commands: ProductCommandService,
+  ) {
+    const scope = productCompanyScope(scopeInput);
+    this.features.assertCatalogEnabled();
+    if (!this.features.productSemanticEnabled)
+      throw new ConflictException(
+        'Product semantic search is disabled (PRODUCT_SEMANTIC_ENABLED)',
+      );
+    const products = await this.prisma.product.findMany({
+      where: { ...productWhere(scope), status: 'ACTIVE' },
+      select: { id: true, revision: true, searchRevision: true },
+      orderBy: { id: 'asc' },
+      take: MAX_BULK_REINDEX + 1,
+    });
+    if (products.length > MAX_BULK_REINDEX)
+      throw new ConflictException(
+        `More than ${MAX_BULK_REINDEX} active products; reindex them one by one`,
+      );
+    const queued: string[] = [];
+    const failed: { productId: string; reason: string }[] = [];
+    let requeued = 0;
+    for (const product of products) {
+      try {
+        // One catalog command per product, keyed by the batch id, so a retry
+        // of the whole call replays the finished ones.
+        await this.reindex(
+          scope,
+          actorId,
+          product.id,
+          derivedRequestId(requestId, product.id),
+          product.revision,
+          commands,
+        );
+        queued.push(product.id);
+        if (force)
+          requeued += (
+            await this.prisma.productIndexJob.updateMany({
+              where: {
+                productId: product.id,
+                companyId: scope.companyId,
+                searchRevision: product.searchRevision,
+                embeddingModel: this.embeddings.model,
+                state: 'DONE',
+              },
+              data: {
+                state: 'PENDING',
+                attempts: 0,
+                retryAt: new Date(),
+                lastErrorCode: null,
+              },
+            })
+          ).count;
+      } catch (error) {
+        failed.push({
+          productId: product.id,
+          reason:
+            error instanceof Error ? error.message.slice(0, 200) : 'error',
+        });
+      }
+    }
+    void this.tick();
+    return {
+      embeddingModel: this.embeddings.model,
+      requested: products.length,
+      queued: queued.length,
+      forcedReembed: requeued,
+      failed,
+    };
+  }
+
   reindex(
     scopeInput: CommerceScope,
     actorId: string,
@@ -107,6 +198,18 @@ export class ProductIndexService implements OnModuleInit, OnModuleDestroy {
         const product = await lockProduct(tx, scope, productId);
         if (product.revision !== expectedVersion)
           throw new ConflictException('Product version changed');
+        // A job superseded while the product was a draft (or by a changed
+        // document) is never picked up again and the enqueue below keeps an
+        // existing row, so drop it and let the enqueue write a fresh document.
+        await tx.productIndexJob.deleteMany({
+          where: {
+            productId,
+            companyId: scope.companyId,
+            searchRevision: product.searchRevision,
+            embeddingModel: this.embeddings.model,
+            state: 'SUPERSEDED',
+          },
+        });
         await enqueueProductIndex(
           tx,
           productId,

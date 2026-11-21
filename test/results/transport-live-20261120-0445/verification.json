@@ -1,0 +1,1597 @@
+[
+ {
+  "id": "P01",
+  "conversation": "s-P01",
+  "question": "พัทยาไปกรุงเทพ",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Route พัทยา→กรุงเทพฯ correct direction; price range 316-350 equals min/max of OPEN slot prices; asks for date.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P02",
+  "conversation": "s-P02",
+  "question": "กรุงเทพ พัทยา",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Direction กรุงเทพฯ→พัทยา correct; only route profile (no price/rounds) but user gave no date; description matches DB (2.5 ชม.).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": "weak but acceptable"
+ },
+ {
+  "id": "P03",
+  "conversation": "s-P03",
+  "question": "กรุงเทพ เชียงใหม่",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "Prices correct (650 / 990-1090) but reply prints raw SKU \"BKK-CNX-STD/VIP\" as option names.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "RAW_SKU_LEAK",
+    "severity": "medium",
+    "detail": "LLM template used {{eN.sku}}; internal SKU codes shown to customer instead of class label (Standard/VIP)",
+    "code": "rag/product-answer.policy.ts:142,473"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": false,
+  "agreeNote": "agent1 PASS; I rate PARTIAL because internal SKU is shown"
+ },
+ {
+  "id": "P04",
+  "conversation": "s-P04",
+  "question": "กทม-เชียงใหม่ VIP ราคาเท่าไหร่",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "User asked VIP price; reply lists 650 and 990-1090 in two unlabeled lines (same name). Correct VIP number is present but customer cannot tell which is VIP. LLM template (\"ประเภท VIP ... {{e2.price}}\") was rejected by renderer because prose contained \"ตายตัว\" (certainWords) even though negated.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "UNLABELED_VARIANTS",
+    "severity": "medium",
+    "detail": "Safe template has no variant/class label; Standard price shown to a VIP question",
+    "code": "rag/product-answer.policy.ts:698-706,945-956; attributes/presets/transport.lexicon.ts:35"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PARTIAL",
+  "agreeWithAgent1": true,
+  "agreeNote": "agree PARTIAL"
+ },
+ {
+  "id": "P05",
+  "conversation": "s-P05",
+  "question": "พรุ่งนี้เช้าไประยองมีกี่โมง",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "06:30 and 09:00 correct for Sat 21 morning, price 280 correct; 09:00 is FULL (13/13) but not flagged.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 2,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "FULL_ROUND_NOT_FLAGGED",
+    "severity": "medium",
+    "detail": "BKK-RYG-STD Sat 21 09:00 is FULL (capacity=reserved) per DB slot a170b57c; compact timetable lists it as a normal departure with no \"เต็ม\" mark",
+    "code": "slots/slot-answer.ts:111-120,173-215"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PARTIAL",
+  "agreeWithAgent1": true,
+  "agreeNote": "agree PARTIAL"
+ },
+ {
+  "id": "P09",
+  "conversation": "s-P09",
+  "question": "เชียงใหม่ไปกรุงเทพ",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "Direction เชียงใหม่→กรุงเทพฯ and prices correct but reply prints \"รหัส CNX-BKK-STD / CNX-BKK-VIP\" (raw SKU).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "RAW_SKU_LEAK",
+    "severity": "medium",
+    "detail": "LLM template used {{eN.sku}}; internal SKU codes shown to customer instead of class label (Standard/VIP)",
+    "code": "rag/product-answer.policy.ts:142,473"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": false,
+  "agreeNote": "agent1 PASS; I rate PARTIAL"
+ },
+ {
+  "id": "P11",
+  "conversation": "s-P11",
+  "question": "วันอาทิตย์นี้พัทยาไปกรุงเทพ",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Sun 22 PTY->BKK 09:00,13:00,16:00,19:00 match DB; price range 316-350 matches slot prices (16:00 has 2 seats left, not asked).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 4,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P12",
+  "conversation": "s-P12",
+  "question": "กรุงเทพไปเชียงใหม่คืนนี้ รอบไหนบ้าง",
+  "consistencyVerdict": "FAIL",
+  "consistencyReason": "PLAN truncated -> fallback+handoff. DB has BKK-CNX Fri 20 20:30 STD(26), 21:00 VIP(2), 22:00 STD(20).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "UNNECESSARY_FALLBACK_PLAN_TRUNCATED",
+    "severity": "high",
+    "detail": "PLAN call finishReason=length at 900 output tokens (reasoning tokens consumed budget); bot said \"ขอให้เจ้าหน้าที่ช่วยตรวจสอบ\" + handoff although DB has: BKK-CNX 20:30 STD, 21:00 VIP (2 left), 22:00 STD",
+    "code": "rag/product-retrieval.service.ts:297-298"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "FAIL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P17",
+  "conversation": "s-P17",
+  "question": "พัทยาไปกรุงเทพพรุ่งนี้ 10 โมง",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "10:00 round is CANCELLED in DB; reply says not found and offers 07:00,14:00,17:30 (all OPEN, prices 316/316/350, arrival times match).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 3,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P20",
+  "conversation": "s-P20",
+  "question": "กรุงเทพไประยองพรุ่งนี้ 9 โมง ที่นั่งว่างไหม",
+  "consistencyVerdict": "FAIL",
+  "consistencyReason": "PLAN truncated. DB: RYG Sat 21 09:00 is FULL; should say full and offer 06:30/13:00.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "UNNECESSARY_FALLBACK_PLAN_TRUNCATED",
+    "severity": "high",
+    "detail": "PLAN call finishReason=length at 900 output tokens (reasoning tokens consumed budget); bot said \"ขอให้เจ้าหน้าที่ช่วยตรวจสอบ\" + handoff although DB has: RYG Sat 21 09:00 FULL, 06:30 left 11, 13:00 left 7",
+    "code": "rag/product-retrieval.service.ts:297-298"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "FAIL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P23",
+  "conversation": "s-P23",
+  "question": "พัทยากรุงเทพวันอาทิตย์ 4 โมงเย็นเหลือกี่ที่นั่ง",
+  "consistencyVerdict": "FAIL",
+  "consistencyReason": "PLAN truncated. DB: PTY->BKK Sun 22 16:00 left 2 (38/40).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "UNNECESSARY_FALLBACK_PLAN_TRUNCATED",
+    "severity": "high",
+    "detail": "PLAN call finishReason=length at 900 output tokens (reasoning tokens consumed budget); bot said \"ขอให้เจ้าหน้าที่ช่วยตรวจสอบ\" + handoff although DB has: PTY-BKK Sun 22 16:00 left 2",
+    "code": "rag/product-retrieval.service.ts:297-298"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "FAIL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P29",
+  "conversation": "s-P29",
+  "question": "กรุงเทพไปน่านมีรถไหม",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "No Nan route; reply says route not found but asks user to give origin and destination although both were given; never says Nan is unavailable. No invented data.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "MISLEADING_CLARIFY",
+    "severity": "low",
+    "detail": "asks for origin/destination already provided",
+    "code": "attributes/presets/transport.lexicon.ts clarify.notFound"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": false,
+  "agreeNote": "agent1 PASS; PARTIAL"
+ },
+ {
+  "id": "P14",
+  "conversation": "s-P14",
+  "question": "กรุงเทพไปเกาะช้างต้องต่อรถไหม",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Transfer points ตราด, ท่าเรือเลมงอบ = variant meta transfer_points; correct.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D01",
+  "conversation": "s-D01",
+  "question": "จองตั๋วที่ไหน",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "FAQ booking channels equal AP b7cbb023 text; no product data. (Opened commerceTurn + 1 PLAN call by design.)",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "KNOWLEDGE",
+  "flowExpected": "KNOWLEDGE",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D02",
+  "conversation": "s-D02",
+  "question": "ขึ้นรถที่ไหน",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Equals AP 391f3b0a.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "KNOWLEDGE",
+  "flowExpected": "KNOWLEDGE",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D04",
+  "conversation": "s-D04",
+  "question": "ยกเลิกตั๋วคืนเงินได้ไหม",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "No refund/cancel KB in answerPattern/microKnowledge -> fallback+handoff correct. 2 LLM calls wasted.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "FALLBACK",
+  "flowExpected": "FALLBACK",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D08",
+  "conversation": "s-D08",
+  "question": "สวัสดีครับ",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Greeting.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "GENERAL",
+  "flowExpected": "GENERAL",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D12",
+  "conversation": "s-D12",
+  "question": "ขับรถเองไปพัทยากี่ชั่วโมง",
+  "consistencyVerdict": "FAIL",
+  "consistencyReason": "Planner said GENERAL, clamped to PRODUCT, LLM answer INSUFFICIENT_CONTEXT -> generic fallback+handoff for a general question (LLM had produced a polite refusal).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "UNNECESSARY_HANDOFF_DECOY",
+    "severity": "medium",
+    "detail": "bare alias \"พัทยา\" on BKK-PTY made probe non-empty; clamp forced PRODUCT",
+    "code": "rag/product-retrieval.service.ts:379-381,602-640"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "GENERAL",
+  "flowAgree": false,
+  "agent1Verdict": "FAIL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D13",
+  "conversation": "s-D13",
+  "question": "ไปเที่ยวเชียงใหม่ช่วงไหนดี",
+  "consistencyVerdict": "FAIL",
+  "consistencyReason": "Same as D12 (alias \"เชียงใหม่\" on BKK-CNX).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "UNNECESSARY_HANDOFF_DECOY",
+    "severity": "medium",
+    "detail": "planner GENERAL clamped to PRODUCT",
+    "code": "rag/product-retrieval.service.ts:379-381"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "GENERAL",
+  "flowAgree": false,
+  "agent1Verdict": "FAIL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "FA1",
+  "conversation": "conv-A",
+  "question": "สอบถามรอบรถค่ะ",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Clarifies route (lists 5 of 8).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "FA2",
+  "conversation": "conv-A",
+  "question": "กรุงเทพไปเชียงใหม่",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "All 11 OPEN BKK->CNX rounds in DB (cancelled Mon 23 VIP excluded), times/arrival/prices correct, Sat 21 22:00 FULL flagged. Long list but asked all rounds; STD/VIP distinguishable only by price.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 11,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": "length"
+ },
+ {
+  "id": "FA3",
+  "conversation": "conv-A",
+  "question": "มีรอบกี่โมงบ้าง",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Context kept; same 11 rounds correct.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 11,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "FA4",
+  "conversation": "conv-A",
+  "question": "รอบ 4 ทุ่มราคาเท่าไหร่",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "22:00 rounds Fri 20, Sat 21 (FULL flagged), Wed 25; 650 correct. Wasted ANSWER LLM call (askFields origin/destination) then safe template.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 3,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "FC1",
+  "conversation": "conv-C",
+  "question": "กรุงเทพไประยองพรุ่งนี้",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "Sat 21 RYG 06:30, 09:00, 13:00; 09:00 FULL not flagged.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 3,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "FULL_ROUND_NOT_FLAGGED",
+    "severity": "medium",
+    "detail": "BKK-RYG-STD Sat 21 09:00 is FULL (capacity=reserved) per DB slot a170b57c; compact timetable lists it as a normal departure with no \"เต็ม\" mark",
+    "code": "slots/slot-answer.ts:111-120,173-215"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PARTIAL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "FC2",
+  "conversation": "conv-C",
+  "question": "ขึ้นรถที่ไหน",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "FAQ pickup point matches AP row 391f3b0a exactly.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "KNOWLEDGE",
+  "flowExpected": "KNOWLEDGE",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "FC3",
+  "conversation": "conv-C",
+  "question": "แล้วรอบถัดไปล่ะ",
+  "consistencyVerdict": "FAIL",
+  "consistencyReason": "\"แล้วรอบถัดไปล่ะ\": plan resolved BKK->RYG from history, search FOUND slot 06:30 (MATCHED), but reply says \"ยังไม่พบเส้นทางที่ตรงกับคำถามนี้ ... กรุงเทพฯ → ระยอง\". Contradicts own evidence. Cause: askFields non-empty -> isScheduleLookup=false -> LLM returned directlyAnswered=false placeholder -> treated as INSUFFICIENT -> unmatchedProductAnswer. Context was NOT lost.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 1,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "CONTRADICTS_EVIDENCE",
+    "severity": "high",
+    "detail": "Evidence SLOT 29d9e713 (RYG Sat 21 06:30, 11 seats) existed; reply said route not found",
+    "code": "slots/slot-answer.ts:237; rag/product-answer.service.ts:194,232-253; rag/product-answer.policy.ts:566-568"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "FAIL",
+  "agreeWithAgent1": true,
+  "agreeNote": "agree FAIL verdict; disagree on root cause (agent1: context CLEAR)"
+ },
+ {
+  "id": "P10",
+  "conversation": "s-P10",
+  "question": "วันเสาร์นี้ กรุงเทพไปหัวหินกี่โมงบ้าง",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "Sat 21 HHN 08:00,12:00,16:00 correct, 250 correct; 12:00 FULL (13/13) not flagged.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 3,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "FULL_ROUND_NOT_FLAGGED",
+    "severity": "medium",
+    "detail": "BKK-HHN-STD Sat 21 12:00 is FULL (capacity=reserved) per DB slot 4c3f5407; compact timetable lists it as a normal departure with no \"เต็ม\" mark",
+    "code": "slots/slot-answer.ts:111-120,173-215"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PARTIAL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P06",
+  "conversation": "s-P06",
+  "question": "รอบสุดท้ายคืนนี้ไปหัวหิน",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "No HHN round after 18:00 on Fri 20 (DB: 09:00,13:00,17:30); offers 17:30 (left 12), 13:00, 09:00. Correct.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 3,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P13",
+  "conversation": "s-P13",
+  "question": "รถไปขอนแก่นคืนนี้มีไหม",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "KKC Fri 20 22:00, price 480-520 (variant range, approximate); capacity NULL so no seat claim. Correct.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 1,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P15",
+  "conversation": "s-P15",
+  "question": "ไปเกาะช้างพรุ่งนี้มีรอบไหม",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Sat 21 06:00, 750 correct; DB 12 seats (not stated).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 1,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P16",
+  "conversation": "s-P16",
+  "question": "ไปเกาะช้างวันจันทร์",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "Mon 23 round is CANCELLED -> \"no round\" correct, but the only alternative shown is Sat 21 06:00 while Sun 22 06:00 (OPEN, 4 left) is nearer. Alternative picked by \"earliest in horizon\", not nearest.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 1,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "SUBOPTIMAL_ALTERNATIVE",
+    "severity": "low",
+    "detail": "DB: BKK-KCH-TRN Sun 22 06:00 OPEN left 4 (and Sat 28 06:00 left 17); reply offers Sat 21",
+    "code": "slots/slot-search.ts:378-395"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": false,
+  "agreeNote": "agent1 PASS (noted the issue); I rate PARTIAL"
+ },
+ {
+  "id": "P18",
+  "conversation": "s-P18",
+  "question": "เชียงใหม่ไปกรุงเทพวันเสาร์ 3 ทุ่ม",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Sat 21 CNX-BKK STD 21:00, 650 correct (29 seats).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 1,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P19",
+  "conversation": "s-P19",
+  "question": "กรุงเทพไปเชียงใหม่ VIP วันจันทร์",
+  "consistencyVerdict": "FAIL",
+  "consistencyReason": "PLAN returned empty text (all 900 tokens reasoning) -> fallback+handoff. DB: Mon 23 VIP 21:00 CANCELLED; Sun 22 VIP 21:00 left 14 should be offered.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "UNNECESSARY_FALLBACK_PLAN_TRUNCATED",
+    "severity": "high",
+    "detail": "PLAN call finishReason=length at 900 output tokens (reasoning tokens consumed budget); bot said \"ขอให้เจ้าหน้าที่ช่วยตรวจสอบ\" + handoff although DB has: Mon 23 VIP CANCELLED; Sun 22 21:00 VIP left 14",
+    "code": "rag/product-retrieval.service.ts:297-298"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "FAIL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P21",
+  "conversation": "s-P21",
+  "question": "กรุงเทพไปเชียงใหม่พรุ่งนี้ 4 ทุ่มที่ว่างไหม",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Sat 21 22:00 STD FULL stated; alternatives 21:00 VIP(18), 20:30 STD(15), Sun 22 20:30(31) all match DB.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 4,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P22",
+  "conversation": "s-P22",
+  "question": "VIP กรุงเทพเชียงใหม่คืนนี้เหลือกี่ที่",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "VIP Fri 20 21:00 990, 2 seats left matches DB (24-22).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 1,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P24",
+  "conversation": "s-P24",
+  "question": "กรุงเทพ พัทยา วันที่ 28 พ.ย. ราคา",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Sat 28 BKK->PTY 07,10,14,18,21 price 350 match DB.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 5,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P26",
+  "conversation": "s-P26",
+  "question": "กรุงเทพไประยองราคาเท่าไหร่",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "280 baht matches variant price.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P27",
+  "conversation": "s-P27",
+  "question": "พัทยาไปกรุงเทพราคาเท่าไร",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "316-350 for PTY->BKK matches slot prices.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P28",
+  "conversation": "s-P28",
+  "question": "กรุงเทพไปขอนแก่นราคา",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "480-520 approximate matches variant range.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P30",
+  "conversation": "s-P30",
+  "question": "กรุงเทพไปภูเก็ต",
+  "consistencyVerdict": "FAIL",
+  "consistencyReason": "PLAN truncated -> fallback+handoff. No product route to ภูเก็ต, but active microKnowledge \"ตารางเดินรถหลัก กรุงเทพมหานคร - ภูเก็ต\" exists, so legacy KB could answer; fallback skips it.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "UNNECESSARY_FALLBACK_PLAN_TRUNCATED",
+    "severity": "high",
+    "detail": "PLAN call finishReason=length at 900 output tokens (reasoning tokens consumed budget); bot said \"ขอให้เจ้าหน้าที่ช่วยตรวจสอบ\" + handoff although DB has: no product; MK Phuket timetable row exists (active)",
+    "code": "rag/product-retrieval.service.ts:297-298"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "FAIL",
+  "agreeWithAgent1": true,
+  "agreeNote": "agree FAIL; expectation also questionable"
+ },
+ {
+  "id": "P33",
+  "conversation": "s-P33",
+  "question": "ไปเกาะช้างเป็นรถประจำทางไหม",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "KCH is_regular_bus=false: reply says status \"ไม่มี\". Correct, slightly awkward wording.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P34",
+  "conversation": "s-P34",
+  "question": "กรุงเทพไประยองเป็นรถประจำทางหรือเปล่า",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "RYG is_regular_bus=true: \"มี\". Correct.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P08",
+  "conversation": "s-P08",
+  "question": "กรุงเทพไประยองพรุ่งนี้ 06:30 ไป 3 คนพอไหม",
+  "consistencyVerdict": "FAIL",
+  "consistencyReason": "PLAN truncated -> generic fallback+handoff. DB: BKK-RYG Sat 21 06:30 has 11 seats (enough for 3).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "UNNECESSARY_FALLBACK_PLAN_TRUNCATED",
+    "severity": "high",
+    "detail": "PLAN call finishReason=length at 900 output tokens (reasoning tokens consumed budget); bot said \"ขอให้เจ้าหน้าที่ช่วยตรวจสอบ\" + handoff although DB has: BKK-RYG-STD Sat 21 06:30 left 11",
+    "code": "rag/product-retrieval.service.ts:297-298"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "FAIL",
+  "agreeWithAgent1": true,
+  "agreeNote": "agree FAIL"
+ },
+ {
+  "id": "P47",
+  "conversation": "s-P47",
+  "question": "5 ธ.ค. กรุงเทพไปพัทยามีกี่รอบ",
+  "consistencyVerdict": "FAIL",
+  "consistencyReason": "PLAN truncated. DB: BKK-PTY Sat 5 Dec has 5 OPEN rounds (07,10,14,18,21) 350.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "UNNECESSARY_FALLBACK_PLAN_TRUNCATED",
+    "severity": "high",
+    "detail": "PLAN call finishReason=length at 900 output tokens (reasoning tokens consumed budget); bot said \"ขอให้เจ้าหน้าที่ช่วยตรวจสอบ\" + handoff although DB has: BKK-PTY Sat 5 Dec 07:00,10:00,14:00,18:00,21:00",
+    "code": "rag/product-retrieval.service.ts:297-298"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "FAIL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P50",
+  "conversation": "s-P50",
+  "question": "ตอนนี้มีรถไปพัทยาไหม",
+  "consistencyVerdict": "FAIL",
+  "consistencyReason": "PLAN truncated. DB: no BKK->PTY round on Fri 20; next is Sat 21 07:00.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "UNNECESSARY_FALLBACK_PLAN_TRUNCATED",
+    "severity": "high",
+    "detail": "PLAN call finishReason=length at 900 output tokens (reasoning tokens consumed budget); bot said \"ขอให้เจ้าหน้าที่ช่วยตรวจสอบ\" + handoff although DB has: BKK-PTY Sat 21 07:00 next round",
+    "code": "rag/product-retrieval.service.ts:297-298"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "FAIL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "FB1",
+  "conversation": "conv-B",
+  "question": "พัทยาไปกรุงเทพ",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "PTY->BKK price range, asks date.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "FB2",
+  "conversation": "conv-B",
+  "question": "พรุ่งนี้",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Sat 21 PTY->BKK 07,14,17:30,20 (10:00 cancelled excluded) correct.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 4,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "FB3",
+  "conversation": "conv-B",
+  "question": "บ่ายๆ",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Afternoon window 12-16 -> 14:00 only; correct.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 1,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "FD1",
+  "conversation": "conv-D",
+  "question": "กรุงเทพไปหัวหินพรุ่งนี้",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "Sat 21 HHN 08:00,12:00,16:00; 12:00 FULL not flagged.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 3,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "FULL_ROUND_NOT_FLAGGED",
+    "severity": "medium",
+    "detail": "BKK-HHN-STD Sat 21 12:00 is FULL (capacity=reserved) per DB slot 4c3f5407; compact timetable lists it as a normal departure with no \"เต็ม\" mark",
+    "code": "slots/slot-answer.ts:111-120,173-215"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PARTIAL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "FD2",
+  "conversation": "conv-D",
+  "question": "เปลี่ยนเป็นไประยองแทน",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "Destination changed to RYG, keeps Sat 21; 09:00 FULL not flagged.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 3,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "FULL_ROUND_NOT_FLAGGED",
+    "severity": "medium",
+    "detail": "BKK-RYG-STD Sat 21 09:00 is FULL (capacity=reserved) per DB slot a170b57c; compact timetable lists it as a normal departure with no \"เต็ม\" mark",
+    "code": "slots/slot-answer.ts:111-120,173-215"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PARTIAL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D03",
+  "conversation": "s-D03",
+  "question": "ชำระเงินยังไง",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Equals AP 0c6aac65.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "KNOWLEDGE",
+  "flowExpected": "KNOWLEDGE",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D05",
+  "conversation": "s-D05",
+  "question": "เอาสัตว์เลี้ยงขึ้นรถได้ไหม",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "No pet KB -> fallback+handoff correct.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "FALLBACK",
+  "flowExpected": "FALLBACK",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D06",
+  "conversation": "s-D06",
+  "question": "สัมภาระเอาขึ้นรถได้กี่กิโล",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "20 kg + 1 carry-on equals AP 222918b1.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "KNOWLEDGE",
+  "flowExpected": "KNOWLEDGE",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D07",
+  "conversation": "s-D07",
+  "question": "ติดต่อแอดมิน",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Template ack + handoff.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "FALLBACK",
+  "flowExpected": "FALLBACK",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D09",
+  "conversation": "s-D09",
+  "question": "ขอบคุณค่ะ",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Thanks reply.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "GENERAL",
+  "flowExpected": "GENERAL",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D10",
+  "conversation": "s-D10",
+  "question": "วันนี้อากาศเป็นไง",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Polite refusal on weather; not product.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "GENERAL",
+  "flowExpected": "GENERAL",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D11",
+  "conversation": "s-D11",
+  "question": "แนะนำร้านอาหารพัทยาหน่อย",
+  "consistencyVerdict": "FAIL",
+  "consistencyReason": "Restaurant question: planner said GENERAL but code clamps to PRODUCT because probe matched พัทยา; reply \"ยังไม่พบเส้นทางที่ตรงกับคำถามนี้ ... กรุงเทพฯ → พัทยา / พัทยา → กรุงเทพฯ\" is off-topic (LLM had written a polite refusal that was discarded).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "OFF_TOPIC_PRODUCT_ROUTING",
+    "severity": "medium",
+    "detail": "planner mode GENERAL overridden to PRODUCT",
+    "code": "rag/product-retrieval.service.ts:379-381"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "GENERAL",
+  "flowAgree": false,
+  "agent1Verdict": "FAIL",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D14",
+  "conversation": "s-D14",
+  "question": "บริษัทตั้งอยู่ที่ไหน",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "HQ address equals AP a14808f9.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "KNOWLEDGE",
+  "flowExpected": "KNOWLEDGE",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "D15",
+  "conversation": "s-D15",
+  "question": "ทำไมรถเมื่อวานมาช้า",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Complaint -> fallback+handoff as expected.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "FALLBACK",
+  "flowExpected": "FALLBACK",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P35",
+  "conversation": "s-P35",
+  "question": "พัทยาาาาไปกทม",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Typo handled: PTY->BKK 316-350.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P36",
+  "conversation": "s-P36",
+  "question": "บางกอกไปเชียงใหม่",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "Right route and prices but safe template dumps description and two unlabeled \"ราคา\" bullet lines (650 / 990-1090); verbose; no class labels.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "UNLABELED_VARIANTS",
+    "severity": "low",
+    "detail": "prices not tied to Standard/VIP",
+    "code": "rag/product-answer.policy.ts:945-956"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": false,
+  "agreeNote": "agent1 PASS; PARTIAL (minor)"
+ },
+ {
+  "id": "P37",
+  "conversation": "s-P37",
+  "question": "bkk to cnx tonight",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Fri 20 BKK->CNX 20:30,21:00,22:00 correct. Price shown as range 650-990 without saying 21:00 is the VIP round (2 seats left).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 3,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": "class mix hidden in compact layout (low)"
+ },
+ {
+  "id": "P38",
+  "conversation": "s-P38",
+  "question": "Bangkok to Pattaya tomorrow morning",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Sat 21 morning 07:00,10:00 price 350 correct.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 2,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P39",
+  "conversation": "s-P39",
+  "question": "Pattaya to Bangkok price",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "PTY->BKK 316-350 correct.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P40",
+  "conversation": "s-P40",
+  "question": "ขอรอบรถค่ะ",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Asks for route; no invented data.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P41",
+  "conversation": "s-P41",
+  "question": "รอบรถ",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "Asks route and lists 5 choices out of 8 products without \"etc.\" (list truncated by MAX 5).",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": "low: partial list"
+ },
+ {
+  "id": "P42",
+  "conversation": "s-P42",
+  "question": "เชียงใหม่",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "Reply states the only route related to เชียงใหม่ is กรุงเทพฯ→เชียงใหม่. DB has ACTIVE เชียงใหม่→กรุงเทพฯ with slots. Cause: bare alias \"เชียงใหม่\" exists only on BKK-CNX product (seed data) so probe resolved one product.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "FALSE_COMPLETENESS",
+    "severity": "medium",
+    "detail": "\"เส้นทางที่เกี่ยวกับเชียงใหม่ที่มีในระบบคือ กรุงเทพฯ → เชียงใหม่\" while products table has เชียงใหม่ → กรุงเทพฯ ACTIVE",
+    "code": "seed data aliases + rag/product-retrieval.service.ts:602-640 probe"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PARTIAL",
+  "agreeWithAgent1": true,
+  "agreeNote": "agree PARTIAL"
+ },
+ {
+  "id": "P43",
+  "conversation": "s-P43",
+  "question": "ระยอง",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "RYG 280 correct.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P44",
+  "conversation": "s-P44",
+  "question": "ตีหนึ่งมีรถไหม",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "No round invented for 01:00; asks route.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ },
+ {
+  "id": "P45",
+  "conversation": "s-P45",
+  "question": "สิ้นเดือนไปเชียงใหม่มีรถไหม",
+  "consistencyVerdict": "PARTIAL",
+  "consistencyReason": "Mon 30 Nov has no round (correct) but alternative is Fri 20 Nov 20:30 (10 days earlier) while Sat 28 Nov 20:30 STD(38) and 21:00 VIP(23) exist and are nearer.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 1,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [
+   {
+    "type": "SUBOPTIMAL_ALTERNATIVE",
+    "severity": "medium",
+    "detail": "\"later\" fallback takes the first slot in the horizon, not the nearest",
+    "code": "slots/slot-search.ts:378-395"
+   }
+  ],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": false,
+  "agreeNote": "agent1 PASS; PARTIAL (expectation says offer 28 Nov)"
+ },
+ {
+  "id": "P46",
+  "conversation": "s-P46",
+  "question": "25 ธ.ค. กรุงเทพไปพัทยา",
+  "consistencyVerdict": "PASS",
+  "consistencyReason": "25 Dec beyond 30-day horizon (Nov 20 + 30 = Dec 20); DB has no slot after Dec 20. Correct.",
+  "evidenceInDb": true,
+  "evidenceChecked": {
+   "slotRowsChecked": 0,
+   "mismatches": [],
+   "note": "slot id/startsAt/endsAt/status/seatsLeft/FULL state/price/sku compared to live productSlots (DB untouched since seed 2026-11-19T21:39Z); non-slot evidence variant ids/names/meta origin-destination and KB AP/MK ids checked"
+  },
+  "distortions": [],
+  "flowObserved": "PRODUCT",
+  "flowExpected": "PRODUCT",
+  "flowAgree": true,
+  "agent1Verdict": "PASS",
+  "agreeWithAgent1": true,
+  "agreeNote": ""
+ }
+]

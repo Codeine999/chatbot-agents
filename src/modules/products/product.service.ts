@@ -439,6 +439,7 @@ function catalogView(product: CatalogRecord) {
     variants: product.variants.map((variant) => ({
       ...variant,
       price: variant.price?.toFixed(2) ?? null,
+      maxPrice: variant.maxPrice?.toFixed(2) ?? null,
       meta: variantAttributes(variant),
       compareAtPrice: variant.compareAtPrice?.toFixed(2) ?? null,
       ...productDiscount(variant),

@@ -1,10 +1,13 @@
 import type { BusinessPreset } from '../types/attribute-definition.types';
 import { ECOMMERCE_PROMPT } from '../prompts/ecommerce.prompt';
 import { brandField, tagsField, colorField } from './shared-fields';
+import { ECOMMERCE_CAPABILITIES, ECOMMERCE_LEXICON } from './ecommerce.lexicon';
 
 export const ECOMMERCE_PRESET: BusinessPreset = {
   label: 'อีคอมเมิร์ซทั่วไป',
   prompt: ECOMMERCE_PROMPT,
+  capabilities: ECOMMERCE_CAPABILITIES,
+  lexicon: ECOMMERCE_LEXICON,
   fields: [
     brandField,
     tagsField,

@@ -1,0 +1,172 @@
+{
+  "cases": 80,
+  "run": 71,
+  "notRun": [
+    "P48",
+    "P49",
+    "P25",
+    "P51",
+    "D16",
+    "D17",
+    "D18",
+    "D19",
+    "D20"
+  ],
+  "groups": {
+    "product": {
+      "run": 44,
+      "manualPass": 32,
+      "partial": 4,
+      "fail": 8,
+      "autoPass": 37,
+      "flowOk": 44
+    },
+    "decoy": {
+      "run": 15,
+      "manualPass": 12,
+      "partial": 0,
+      "fail": 3,
+      "autoPass": 12,
+      "flowOk": 12
+    },
+    "followup": {
+      "run": 12,
+      "manualPass": 8,
+      "partial": 3,
+      "fail": 1,
+      "autoPass": 12,
+      "flowOk": 12
+    }
+  },
+  "total": {
+    "run": 71,
+    "manualPass": 52,
+    "partial": 7,
+    "fail": 12,
+    "autoPass": 61,
+    "flowOk": 68
+  },
+  "rates": {
+    "manualStrict": "73.2%",
+    "manualWithPartial": "83.1%",
+    "autoPass": "85.9%",
+    "flowOk": "95.8%"
+  },
+  "latencyMs": {
+    "p50": 5914,
+    "p90": 10686,
+    "max": 28953,
+    "p50WithLlm": 6171,
+    "p90WithLlm": 12365
+  },
+  "planFails": [
+    "P12",
+    "P20",
+    "P23",
+    "P19",
+    "P30",
+    "P08",
+    "P47",
+    "P50"
+  ],
+  "decoyOpenedTurn": [
+    "D01",
+    "D04",
+    "D12",
+    "D13",
+    "D05",
+    "D06",
+    "D09",
+    "D10",
+    "D11",
+    "D14",
+    "D15"
+  ],
+  "decoyProductAnswer": [
+    "D12",
+    "D13",
+    "D11"
+  ],
+  "productHandoff": [
+    "P12",
+    "P20",
+    "P23",
+    "P19",
+    "P30",
+    "P08",
+    "P47",
+    "P50"
+  ],
+  "llmAvg": {
+    "PRODUCT": {
+      "n": 58,
+      "avg": 1.4
+    },
+    "KNOWLEDGE": {
+      "n": 6,
+      "avg": 1
+    },
+    "FALLBACK": {
+      "n": 4,
+      "avg": 1.5
+    },
+    "GENERAL": {
+      "n": 3,
+      "avg": 1.67
+    }
+  },
+  "answerModes": {
+    "PRODUCT_LLM_TEMPLATE": 10,
+    "PRODUCT_SAFE_TEMPLATE": 9,
+    "PRODUCT_SCHEDULE_TEMPLATE": 22,
+    "FALLBACK": 13,
+    "PRODUCT_NO_MATCH": 1,
+    "GROUNDED": 3,
+    "DIRECT_PRESET": 3,
+    "GENERAL": 3,
+    "PRODUCT_MISSING_INPUT": 4,
+    "PRODUCT_UNMATCHED_SUGGESTIONS": 2,
+    "TEMPLATE": 1
+  },
+  "budget": {
+    "cap": 100,
+    "baseline": {
+      "chat": 540,
+      "embed": 232,
+      "raw": {
+        "reservation": {
+          "chat": 540,
+          "embed": 232
+        },
+        "events": {
+          "chat": 240,
+          "embed": 194
+        }
+      },
+      "at": "2026-11-19T21:44:02.500Z"
+    },
+    "final": {
+      "chat": 638,
+      "embed": 244,
+      "usedChat": 98,
+      "usedEmbed": 12,
+      "raw": {
+        "reservation": {
+          "chat": 638,
+          "embed": 244
+        },
+        "events": {
+          "chat": 338,
+          "embed": 206
+        }
+      },
+      "at": "2026-11-19T21:54:04.736Z"
+    }
+  },
+  "stopped": {
+    "at": "P48",
+    "used": 98,
+    "worst": 3,
+    "reason": "LLM budget guard"
+  }
+}

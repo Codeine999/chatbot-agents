@@ -6,15 +6,20 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { z } from 'zod';
+import { DEFAULT_AI_MAX_OUTPUT_TOKENS } from '../../../ai-provider/utils/ai-provider.constants';
 import { CommerceFeatureService } from '../../commerce/commerce-feature.service';
 import { CommerceScopeService } from '../../commerce/commerce-scope.service';
 import { CommerceTurnService } from './commerce-turn.service';
 import { buildProductPlannerPrompt } from './utils/prompt/product-prompt';
+import { isStandalonePolicyQuestion } from './utils/policy-question';
 import { ProductSearchService } from '../search/product-search.service';
-import { groundStockFilter } from '../search/product-plan-policy';
 import {
+  groundAskFields,
+  groundStockFilter,
+} from '../search/product-plan-policy';
+import {
+  plannerSchemaFor,
   productPlanSchema,
-  productPlannerSchema,
   type ProductPlan,
   type ProductSearchResult,
 } from '../search/product-search.types';
@@ -34,7 +39,19 @@ import { rethrowInsufficientCredit } from '../../usage/credit-point/insufficient
 import { Prisma, type CommerceTurn } from '../../../generated/prisma/client';
 import type { CommerceScope } from '../../commerce/types/commerce-scope';
 import { DecisionTraceService } from '../../decision-log/decision-trace.service';
+import type { CatalogContext } from '../search/product-search.service';
+import { catalogLexicon } from '../search/catalog-fields';
+import type { BusinessLexicon } from '../attributes/types/attribute-definition.types';
+import { matchesSignals, matchesWholeMessage } from '../business/lexicon-match';
+import { ProductClock } from '../time/product-clock';
+import { commerceOwner } from './commerce-owner';
+import { plannerTimeContext, todayIn } from '../time/product-calendar';
+import {
+  parseQuantity,
+  parseThaiDateTime,
+} from '../../../shared/text/thai-datetime';
 
+type DateSource = 'PARSER' | 'MODEL' | 'PARSER_OVERRIDE' | 'NONE';
 type KnowledgeRead = (
   query: string,
   embedding?: EmbeddingResult,
@@ -46,19 +63,17 @@ type StoredInput = {
   recentMessages: ChatContextMessage[];
   embeddingModel: string;
 };
-const policySignal =
-  /(ส่งฟรี|ค่าส่ง|จัดส่ง|คืนสินค้า|รับประกัน|วิธีสมัคร|นโยบาย|shipping|return policy)/iu;
-const productSignal =
-  /(ราคา|สินค้า|รุ่น|สี|ไซ[ซส]|ขนาด|สต็อก|มีของ|ซื้อ|อยากได้|แนะนำ|เสื้อ|รองเท้า|stock|product|sku)/iu;
-/** Whole-message catalog opener; named products and list requests keep normal search. */
-export function isBroadProductInquiry(message: string): boolean {
-  return /^(?:ขอ|อยาก|ต้องการ)?(?:สอบถาม|ถาม|สนใจ)(?:เกี่ยวกับ|เรื่อง)?สินค้า(?:หน่อย)?(?:ครับ|ค่ะ|คะ|คับ)?[?？!]*$/u.test(
-    message.replace(/\s+/gu, ''),
-  );
+/**
+ * Whole-message catalog opener; named products and list requests keep normal
+ * search. The patterns belong to the business lexicon (default ECOMMERCE).
+ */
+export function isBroadProductInquiry(
+  message: string,
+  lexicon: BusinessLexicon = catalogLexicon(null),
+): boolean {
+  return matchesWholeMessage(lexicon.broadInquiry, message);
 }
 
-const referenceSignal =
-  /(ตัวนี้|ตัวนั้น|เมื่อกี้|อันนี้|อันนั้น|ตัวแรก|ตัวที่|สีดำ|สีขาว|แล้ว.*(?:ราคา|สี|ไซ))/u;
 // Legacy outcomes the router already handles safely without a product planner.
 const SETTLED_KNOWLEDGE: ReadonlySet<RetrievalFallbackReason> = new Set([
   'CONFLICTING_CANDIDATES',
@@ -76,7 +91,11 @@ export class ProductRetrievalService {
     private readonly products: ProductSearchService,
     private readonly embeddings: EmbeddingService,
     @Optional() private readonly decisionTrace?: DecisionTraceService,
-  ) {}
+    @Optional() clock?: ProductClock,
+  ) {
+    this.clock = clock ?? new ProductClock();
+  }
+  private readonly clock: ProductClock;
 
   /**
    * Returns a Product workflow, a planner-classified knowledge result, or
@@ -90,21 +109,13 @@ export class ProductRetrievalService {
     knowledge: KnowledgeRead,
     legacy: LegacyRead = () => knowledge(message),
   ): Promise<KnowledgeRetrievalResult | undefined> {
-    if (
-      !this.features.productRagEnabled ||
-      !context.userId ||
-      !context.turnId ||
-      !context.lineMemberId ||
-      !context.conversationId
-    )
+    // Every channel with a durable conversation may use product RAG; a turn
+    // without one (the back-office preview) has nothing to attach a turn to.
+    const owner = commerceOwner(context);
+    if (!this.features.productRagEnabled || !owner || !context.turnId)
       return undefined;
-    // Whole-message policy questions keep the legacy cache/DIRECT route and never pay for a Product planner.
-    if (
-      /^(?:ส่งฟรีไหม|ค่าส่งเท่าไร|ค่าส่งเท่าไหร่|จัดส่งกี่วัน|คืนสินค้าได้ไหม|มีรับประกันไหม)(?:ครับ|ค่ะ|คะ|คับ)?[?？]*$/u.test(
-        message.replace(/\s+/gu, ''),
-      )
-    )
-      return undefined;
+    const turnId = context.turnId;
+    const connectionKey = this.features.connectionKeyFor(owner);
 
     let scope: CommerceScope;
     try {
@@ -120,6 +131,12 @@ export class ProductRetrievalService {
       throw error;
     }
 
+    // The wording that tells a policy question from a catalog one belongs to
+    // the store's business preset, so it is read once per message, after scope.
+    const catalog = await this.products.catalogContext(scope);
+    const { lexicon } = catalog;
+    if (isStandalonePolicyQuestion(message, lexicon)) return undefined;
+
     const history = (context.recentMessages ?? [])
       .slice(-6)
       .filter((m) => m.source !== 'REGISTRATION')
@@ -127,11 +144,7 @@ export class ProductRetrievalService {
 
     let turn: CommerceTurn | null;
     try {
-      turn = await this.turns.find(
-        scope,
-        this.features.lineConnectionKey,
-        context,
-      );
+      turn = await this.turns.find(scope, connectionKey, owner, turnId);
 
       if (!turn) {
         const routed = await this.routeWithoutPlanner(
@@ -139,20 +152,16 @@ export class ProductRetrievalService {
           message,
           history,
           legacy,
+          catalog,
         );
         if (routed !== 'PLAN') return routed;
       }
 
-      turn ??= await this.turns.open(
-        scope,
-        this.features.lineConnectionKey,
-        context,
-        {
-          message: redactPii(message),
-          recentMessages: history,
-          embeddingModel: this.embeddings.model,
-        },
-      );
+      turn ??= await this.turns.open(scope, connectionKey, owner, turnId, {
+        message: redactPii(message),
+        recentMessages: history,
+        embeddingModel: this.embeddings.model,
+      });
     } catch (error) {
       if (!(error instanceof ForbiddenException)) throw error;
       this.logger.warn(`Product RAG skipped: ${error.message}`);
@@ -176,19 +185,23 @@ export class ProductRetrievalService {
       let plan: ProductPlan;
       let failed = false;
       let plannedBusinessType: string | null | undefined;
+      let dateSource: DateSource | undefined;
+      const slots = catalog.capabilities.inventory === 'SLOT_CAPACITY';
 
       if (lease.turn.plan) {
         const stored = lease.turn.plan as unknown as {
           plan: ProductPlan;
           failed: boolean;
           businessType?: string | null;
+          dateSource?: DateSource;
         };
 
         plan = productPlanSchema.parse(stored.plan);
         failed = stored.failed;
         plannedBusinessType = stored.businessType;
+        dateSource = stored.dateSource;
       } else {
-        if (isBroadProductInquiry(input.message)) {
+        if (isBroadProductInquiry(input.message, lexicon)) {
           plan = productPlanSchema.parse({
             mode: 'PRODUCT',
             query: input.message,
@@ -196,7 +209,11 @@ export class ProductRetrievalService {
           });
         } else {
           const probe = await this.products.probe(scope, input.message);
-          const storeFields = await this.products.plannerCatalog(scope);
+          const storeFields = await this.products.plannerCatalog(
+            scope,
+            'th',
+            catalog,
+          );
           plannedBusinessType = storeFields.businessType;
           const references =
             [...input.recentMessages]
@@ -219,28 +236,29 @@ export class ProductRetrievalService {
                 input.message.toLowerCase().startsWith(`${sku.toLowerCase()} `),
             );
 
+          const said = (list: readonly string[]) =>
+            matchesSignals(lexicon, list, input.message);
+          const policyWorded = said(lexicon.policySignals);
           const asks: ProductPlan['asks'] = [];
-          if (/ราคา|เท่าไร|เท่าไหร่|price/iu.test(input.message))
-            asks.push('PRICE');
+          if (said(lexicon.askSignals.PRICE)) asks.push('PRICE');
 
-          if (/มีของ|สต็อก|พร้อมส่ง|หมด|เหลือ|stock/iu.test(input.message))
-            asks.push('STOCK');
+          if (said(lexicon.askSignals.STOCK)) asks.push('STOCK');
 
-          if (policySignal.test(input.message)) asks.push('POLICY');
+          if (policyWorded) asks.push('POLICY');
 
           if (exactSku) {
             plan = productPlanSchema.parse({
-              mode: policySignal.test(input.message) ? 'BOTH' : 'PRODUCT',
+              mode: policyWorded ? 'BOTH' : 'PRODUCT',
               query: input.message,
               policyQuery: input.message,
               productIds: [probe[0].id],
               asks,
             });
           } else if (
-            policySignal.test(input.message) &&
-            !productSignal.test(input.message) &&
+            policyWorded &&
+            !said(lexicon.signals) &&
             !probe.length &&
-            !referenceSignal.test(input.message)
+            !said(lexicon.referenceSignals)
           ) {
             plan = productPlanSchema.parse({
               mode: 'KNOWLEDGE',
@@ -261,22 +279,33 @@ export class ProductRetrievalService {
                   presentedProductIds: lastRefs,
                   storeOptions: storeFields.options,
                   storeCategories: storeFields.categories,
+                  storeAskFields: storeFields.askable,
+                  ...(slots
+                    ? {
+                        timeContext: plannerTimeContext(
+                          this.clock.now(),
+                          this.clock.timeZone,
+                        ),
+                      }
+                    : {}),
                 }),
                 messages: toAiProviderMessages(
                   input.recentMessages,
                   input.message,
                 ),
-                responseJsonSchema: z.toJSONSchema(productPlannerSchema),
+                responseJsonSchema: z.toJSONSchema(plannerSchemaFor(slots)),
                 temperature: 0.1,
-                maxOutputTokens: 900,
+                maxOutputTokens: DEFAULT_AI_MAX_OUTPUT_TOKENS,
                 reasoningEffort: 'low',
               },
               context,
             );
             try {
               if (!planning) throw new Error('Planner unavailable');
-              plan = productPlannerSchema.parse(
-                JSON.parse(stripJsonCodeFence(planning.text.trim())),
+              plan = productPlanSchema.parse(
+                plannerSchemaFor(slots).parse(
+                  JSON.parse(stripJsonCodeFence(planning.text.trim())),
+                ),
               );
               const allowedIds = new Set([
                 ...probe.map((p) => p.id),
@@ -284,6 +313,12 @@ export class ProductRetrievalService {
               ]);
               if (plan.productIds.some((id) => !allowedIds.has(id)))
                 throw new Error('Unverified planner product ID');
+              // Slots may only be ones the customer was already shown.
+              const shownSlots = new Set(
+                scopedReferences.flatMap((r) => (r.slotId ? [r.slotId] : [])),
+              );
+              if (plan.slotIds?.some((id) => !shownSlots.has(id)))
+                throw new Error('Unverified planner slot ID');
               const allowedVariants = new Set([
                 ...probe.flatMap((p) => p.variantIds),
                 ...scopedReferences.flatMap((r) =>
@@ -332,6 +367,8 @@ export class ProductRetrievalService {
                       value: String(filter.value),
                     });
               }
+              // Only fields the store lets the model see; a wrong key is dropped, not the plan.
+              plan = groundAskFields(plan, storeFields.askable);
               if (
                 plan.minPrice &&
                 plan.maxPrice &&
@@ -342,9 +379,7 @@ export class ProductRetrievalService {
                 throw new Error('Invalid price range');
               // Explicit catalog references cannot be downgraded to ungrounded general chat by the model.
               if (probe.length && plan.mode === 'GENERAL')
-                plan.mode = policySignal.test(input.message)
-                  ? 'BOTH'
-                  : 'PRODUCT';
+                plan.mode = policyWorded ? 'BOTH' : 'PRODUCT';
               if (!plan.query.trim() && !plan.filters.length)
                 plan.query = input.message;
             } catch {
@@ -357,11 +392,17 @@ export class ProductRetrievalService {
             }
           }
         }
+        if (slots && !failed) {
+          const resolved = this.resolveWhen(plan, input.message);
+          plan = resolved.plan;
+          dateSource = resolved.source;
+        }
         plan = groundStockFilter(plan, input.message);
         await this.turns.save(lease, 'plan', {
           plan,
           failed,
           businessType: plannedBusinessType,
+          ...(dateSource ? { dateSource } : {}),
         });
       }
       let result: ProductSearchResult = {
@@ -371,7 +412,7 @@ export class ProductRetrievalService {
       };
       let knowledgeResult: KnowledgeRetrievalResult | undefined;
       let embedding: EmbeddingResult | undefined;
-      if (!failed && isBroadProductInquiry(input.message)) {
+      if (!failed && isBroadProductInquiry(input.message, lexicon)) {
         result = { status: 'MISSING_INPUT', evidence: [], choices: [] };
       } else if (!failed && (plan.mode === 'PRODUCT' || plan.mode === 'BOTH')) {
         try {
@@ -385,6 +426,8 @@ export class ProductRetrievalService {
           if (
             this.features.productSemanticEnabled &&
             !plan.productIds.length &&
+            // A filters-only plan has nothing to embed (an empty text throws).
+            plan.query.trim().length > 0 &&
             (['NO_MATCH', 'NO_RELIABLE_CANDIDATE'].includes(result.status) ||
               plan.operation === 'RECOMMEND')
           ) {
@@ -422,6 +465,16 @@ export class ProductRetrievalService {
         ),
         category: plan.category,
         ambiguous: plan.ambiguous,
+        ...(slots
+          ? {
+              dateSource: dateSource ?? 'NONE',
+              when: plan.when
+                ? `${plan.when.date ?? '-'} ${plan.when.after ?? ''}-${plan.when.before ?? ''}`
+                : null,
+              quantity: plan.quantity ?? null,
+              slotOutcome: result.slotOutcome ?? null,
+            }
+          : {}),
         plannerFailed: failed,
         semantic: Boolean(embedding),
         status: result.status,
@@ -494,6 +547,54 @@ export class ProductRetrievalService {
   }
 
   /**
+   * The customer's own day/time words, read by code, win over the model's
+   * reading; the model fills only what the words do not say.
+   */
+  private resolveWhen(
+    plan: ProductPlan,
+    message: string,
+  ): { plan: ProductPlan; source: DateSource } {
+    const parsed = parseThaiDateTime(
+      message,
+      todayIn(this.clock.now(), this.clock.timeZone),
+    );
+    const model = plan.when ?? null;
+    const read = parsed.date || parsed.after || parsed.before;
+    const times = parsed.after || parsed.before;
+    let when = model;
+    let source: DateSource = model ? 'MODEL' : 'NONE';
+    if (read) {
+      const next = {
+        date: parsed.date ?? model?.date ?? null,
+        after: times ? parsed.after : (model?.after ?? null),
+        before: times ? parsed.before : (model?.before ?? null),
+      };
+      const differs =
+        model !== null &&
+        ((parsed.date !== null &&
+          model.date !== null &&
+          parsed.date !== model.date) ||
+          (Boolean(times) &&
+            Boolean(model.after || model.before) &&
+            (parsed.after !== model.after || parsed.before !== model.before)));
+      source = differs ? 'PARSER_OVERRIDE' : 'PARSER';
+      when = next;
+    }
+    // An inverted time window cannot be searched; widen to the whole day.
+    if (when?.after && when.before && when.after >= when.before)
+      when = { ...when, after: null, before: null };
+    if (when && !when.date && !when.after && !when.before) when = null;
+    const quantity = parseQuantity(message) ?? plan.quantity ?? null;
+    const asks = [...plan.asks];
+    if (when && !asks.includes('SCHEDULE') && asks.length < 5)
+      asks.push('SCHEDULE');
+    return {
+      plan: { ...plan, when, quantity, slotIds: plan.slotIds ?? [], asks },
+      source,
+    };
+  }
+
+  /**
    * Routes a new event without spending a planner call when the message has no
    * catalog signal: a confident FAQ hit (or a legacy safety outcome) stays on
    * the legacy route, and a policy-worded question is KNOWLEDGE. Otherwise the
@@ -504,17 +605,24 @@ export class ProductRetrievalService {
     message: string,
     history: readonly ChatContextMessage[],
     legacy: LegacyRead,
+    catalog: CatalogContext,
   ): Promise<KnowledgeRetrievalResult | undefined | 'PLAN'> {
+    const { lexicon } = catalog;
     const hasRefs = history.some(
       (m) =>
         m.role === 'assistant' &&
         m.catalogRefs?.some((r) => r.companyId === scope.companyId),
     );
     if (
-      productSignal.test(message) ||
-      (hasRefs && referenceSignal.test(message)) ||
+      matchesSignals(lexicon, lexicon.signals, message) ||
+      (hasRefs && matchesSignals(lexicon, lexicon.referenceSignals, message)) ||
       (await this.products.probe(scope, redactPii(message))).length ||
-      (await this.products.mentionsCatalog(scope, redactPii(message)))
+      (await this.products.mentionsCatalog(
+        scope,
+        redactPii(message),
+        'th',
+        catalog,
+      ))
     )
       return 'PLAN';
     const base = await legacy();
@@ -524,7 +632,7 @@ export class ProductRetrievalService {
         SETTLED_KNOWLEDGE.has(base.fallbackReason))
     )
       return undefined;
-    if (policySignal.test(message))
+    if (matchesSignals(lexicon, lexicon.policySignals, message))
       return { ...base, plannerIntent: 'KNOWLEDGE' };
     return 'PLAN';
   }

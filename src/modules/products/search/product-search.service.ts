@@ -13,7 +13,7 @@ import {
 } from '../../commerce/types/commerce-scope';
 import type { EmbeddingResult } from '../../../infra/embedding/embedding-adapter.interface';
 import { ProductVectorRepository } from './product-vector.repository';
-import { loadCatalogFields, loadCatalogContext } from './catalog-fields';
+import { loadCatalogContext } from './catalog-fields';
 import {
   fieldOperators,
   matchesBusinessFields,
@@ -35,7 +35,20 @@ import {
 } from './product-document';
 import { productContentTerms } from './product-terms';
 import { hasCatalogConstraints } from './product-plan-policy';
-import { productDiscount } from '../product-pricing';
+import {
+  comparePrices,
+  effectivePrice,
+  envelopePrice,
+  fitsBudget,
+  productDiscount,
+  type PriceEnvelope,
+} from '../product-pricing';
+import { ProductClock } from '../time/product-clock';
+import {
+  searchSlots,
+  slotPriceEnvelopes,
+  wantsSlots,
+} from '../slots/slot-search';
 
 const include = {
   company: { select: { productBusinessType: true } },
@@ -46,6 +59,7 @@ const include = {
   },
 };
 type ProductRecord = Prisma.ProductGetPayload<{ include: typeof include }>;
+export type CatalogContext = Awaited<ReturnType<typeof loadCatalogContext>>;
 
 /** Values of the store's searchable product-level fields (e.g. brand), as text. */
 function searchableValues(keys: readonly string[]): Prisma.Sql {
@@ -73,7 +87,13 @@ function identityHits(
 
 const searchableProductKeys = (definitions: readonly AttributeDefinition[]) =>
   definitions
-    .filter((d) => !d.variantOption && d.status === 'ACTIVE' && d.searchable)
+    .filter(
+      (d) =>
+        d.scope !== 'SLOT' &&
+        !d.variantOption &&
+        d.status === 'ACTIVE' &&
+        d.searchable,
+    )
     .map((d) => d.key);
 /** Field labels and extracted option values describe a variant, not which product. */
 const nonSubjectWords = (
@@ -95,16 +115,24 @@ function mentionsSku(query: string, sku: string): boolean {
 @Injectable()
 export class ProductSearchService {
   private readonly vectorMin: number;
+  private readonly clock: ProductClock;
   constructor(
     private readonly prisma: PrismaService,
     private readonly vectors: ProductVectorRepository,
     @Optional() config?: ConfigService,
+    @Optional() clock?: ProductClock,
   ) {
+    this.clock = clock ?? new ProductClock(config);
     this.vectorMin = z.coerce
       .number()
       .min(0)
       .max(1)
       .parse(config?.get('PRODUCT_VECTOR_MIN_SIMILARITY') ?? 0.65);
+  }
+
+  /** Business type, fields, lexicon and capabilities of the company (one company read). */
+  catalogContext(scopeInput: CommerceScope): Promise<CatalogContext> {
+    return loadCatalogContext(this.prisma, productCompanyScope(scopeInput));
   }
 
   async probe(
@@ -152,12 +180,16 @@ export class ProductSearchService {
     scopeInput: CommerceScope,
     message: string,
     language = 'th',
+    catalogInput?: CatalogContext,
   ): Promise<boolean> {
     const scope = productCompanyScope(scopeInput);
-    const definitions = await loadCatalogFields(this.prisma, scope);
+    const catalog =
+      catalogInput ?? (await loadCatalogContext(this.prisma, scope));
+    const definitions = catalog.fields;
     const terms = productContentTerms(
       message,
       definitions.map((d) => d.label),
+      catalog.lexicon.questionWords,
     );
     if (!terms.length) return false;
     const rows = await this.prisma.$queryRaw<{ hit: boolean }[]>`
@@ -173,9 +205,14 @@ export class ProductSearchService {
    * What the planner may extract: the store's customer-choice fields with
    * sample real values (so "256" can map to "256GB"), and its categories.
    */
-  async plannerCatalog(scopeInput: CommerceScope, language = 'th') {
+  async plannerCatalog(
+    scopeInput: CommerceScope,
+    language = 'th',
+    catalogInput?: CatalogContext,
+  ) {
     const scope = productCompanyScope(scopeInput);
-    const catalog = await loadCatalogContext(this.prisma, scope);
+    const catalog =
+      catalogInput ?? (await loadCatalogContext(this.prisma, scope));
     const definitions = catalog.fields.filter(
       (d) =>
         d.scope === 'VARIANT' &&
@@ -223,6 +260,16 @@ export class ProductSearchService {
           values: values.find((v) => v.key === d.key)?.values ?? d.options,
         })),
       categories: categories.flatMap((c) => (c.category ? [c.category] : [])),
+      // Details the customer may ask about; what reaches the answer model.
+      askable: catalog.fields
+        .filter(
+          (d) =>
+            d.scope === 'VARIANT' &&
+            d.status === 'ACTIVE' &&
+            d.aiVisible &&
+            !d.variantOption,
+        )
+        .map((d) => ({ key: d.key, label: d.label })),
     };
   }
 
@@ -258,13 +305,95 @@ export class ProductSearchService {
     );
   }
 
+  /**
+   * Variant search, then (slot businesses only) the dated slots of what it
+   * found. Only a business whose stock lives on variants honours inStockOnly.
+   */
   private async read(
     db: Prisma.TransactionClient,
     scopeInput: CommerceScope,
     plan: ProductPlan,
     embedding: EmbeddingResult | undefined,
     language: string,
-    catalog: Awaited<ReturnType<typeof loadCatalogContext>>,
+    catalog: CatalogContext,
+  ): Promise<ProductSearchResult> {
+    const { capabilities } = catalog;
+    const effective =
+      capabilities.inventory === 'VARIANT_STOCK' || !plan.inStockOnly
+        ? plan
+        : { ...plan, inStockOnly: false };
+    const result = await this.readVariants(
+      db,
+      scopeInput,
+      effective,
+      embedding,
+      language,
+      catalog,
+    );
+    if (
+      !wantsSlots(plan, capabilities) ||
+      (result.status !== 'FOUND' && !plan.slotIds?.length)
+    )
+      return result;
+    const scope = productCompanyScope(scopeInput);
+    const relaxed: ProductPlan = {
+      ...plan,
+      query: '',
+      options: [],
+      filters: [],
+      variantIds: [],
+      minPrice: null,
+      maxPrice: null,
+      inStockOnly: false,
+      operation: 'DETAIL',
+    };
+    const variantsOf = async (where: Prisma.ProductVariantWhereInput) => {
+      const products = await db.product.findMany({
+        where: {
+          companyId: scope.companyId,
+          status: 'ACTIVE',
+          language,
+          variants: { some: where },
+        },
+        include,
+      });
+      return products.flatMap((product) =>
+        this.evidence(product, relaxed, catalog.fields),
+      );
+    };
+    return searchSlots({
+      db,
+      companyId: scope.companyId,
+      plan,
+      capabilities,
+      result,
+      now: this.clock.now(),
+      timeZone: this.clock.timeZone,
+      variantEvidence: async (variantIds) =>
+        (await variantsOf({ id: { in: variantIds }, active: true })).filter(
+          (e) => variantIds.includes(e.variantId),
+        ),
+      siblingVariantIds: async (productIds) =>
+        (
+          await db.productVariant.findMany({
+            where: {
+              companyId: scope.companyId,
+              productId: { in: productIds },
+              active: true,
+            },
+            select: { id: true },
+          })
+        ).map((v) => v.id),
+    });
+  }
+
+  private async readVariants(
+    db: Prisma.TransactionClient,
+    scopeInput: CommerceScope,
+    plan: ProductPlan,
+    embedding: EmbeddingResult | undefined,
+    language: string,
+    catalog: CatalogContext,
   ): Promise<ProductSearchResult> {
     const scope = productCompanyScope(scopeInput);
     const definitions = catalog.fields;
@@ -273,6 +402,7 @@ export class ProductSearchService {
     const terms = productContentTerms(
       plan.query,
       nonSubjectWords(plan, definitions),
+      catalog.lexicon.questionWords,
     );
     let ids = plan.productIds;
     let reliable = ids.length > 0;
@@ -383,8 +513,19 @@ export class ProductSearchService {
         records.push(...page);
         break;
       }
+      const pageEnvelopes =
+        catalog.capabilities.inventory === 'SLOT_CAPACITY'
+          ? await slotPriceEnvelopes({
+              db,
+              companyId: scope.companyId,
+              variantIds: page.flatMap((p) => p.variants.map((v) => v.id)),
+              capabilities: catalog.capabilities,
+              now: this.clock.now(),
+              timeZone: this.clock.timeZone,
+            })
+          : undefined;
       for (const product of page) {
-        const facts = this.evidence(product, plan, definitions);
+        const facts = this.evidence(product, plan, definitions, pageEnvelopes);
         if (!facts.length) continue;
         total +=
           plan.operation === 'COUNT' && plan.countUnit === 'PRODUCTS'
@@ -450,12 +591,25 @@ export class ProductSearchService {
       }))
       .filter((r) => reliable || r.score > 0 || r.hits > 0)
       .sort((a, b) => b.score - a.score || a.p.id.localeCompare(b.p.id));
+    // A slot business prices its rounds: a route's price (and whether it fits
+    // a budget) is the range over its upcoming rounds, one aggregate read.
+    const envelopes =
+      catalog.capabilities.inventory === 'SLOT_CAPACITY'
+        ? await slotPriceEnvelopes({
+            db,
+            companyId: scope.companyId,
+            variantIds: ranked.flatMap((r) => r.p.variants.map((v) => v.id)),
+            capabilities: catalog.capabilities,
+            now: this.clock.now(),
+            timeZone: this.clock.timeZone,
+          })
+        : undefined;
     if (!reliable && plan.operation === 'DETAIL' && ranked.length > 1) {
       // Variant constraints settle ambiguity first ("เสื้อเชิ้ตผ้าลินิน" has
       // one linen shirt); if none satisfies them, keep all so the identified
       // product can still report VARIANT_UNAVAILABLE below.
       const satisfying = ranked.filter(
-        (r) => this.evidence(r.p, plan, definitions).length > 0,
+        (r) => this.evidence(r.p, plan, definitions, envelopes).length > 0,
       );
       if (satisfying.length) ranked = satisfying;
       // The product whose name/alias/category covers strictly more of the
@@ -490,7 +644,7 @@ export class ProductSearchService {
       };
     const selected = ranked.slice(0, plan.operation === 'DETAIL' ? 1 : 5);
     for (const row of selected)
-      evidence.push(...this.evidence(row.p, plan, definitions));
+      evidence.push(...this.evidence(row.p, plan, definitions, envelopes));
     if (
       plan.operation === 'COMPARE' &&
       new Set(evidence.map((e) => e.variantId)).size < 2
@@ -507,7 +661,8 @@ export class ProductSearchService {
       if (
         product &&
         plan.options.length &&
-        this.evidence(product, { ...plan, options: [] }, definitions).length
+        this.evidence(product, { ...plan, options: [] }, definitions, envelopes)
+          .length
       )
         return {
           status: 'VARIANT_UNAVAILABLE',
@@ -580,10 +735,16 @@ export class ProductSearchService {
         };
   }
 
+  /**
+   * @param envelopes slot businesses: each variant's price over its upcoming
+   *   rounds, which replaces the variant's own price when the question names
+   *   no round (a variant without open rounds keeps its own price).
+   */
   private evidence(
     product: ProductRecord,
     plan: ProductPlan,
     definitions: readonly AttributeDefinition[],
+    envelopes?: ReadonlyMap<string, PriceEnvelope>,
   ): ProductEvidence[] {
     // Every requested option must hold on the same variant row; an option the
     // store does not define matches nothing rather than being ignored.
@@ -612,15 +773,12 @@ export class ProductSearchService {
           !mentionedSkus.some((v) => v.id === variant.id)
         )
           return [];
-        const price = variant.price;
-        if (plan.operation === 'CHEAPEST' && !price) return [];
-        if ((plan.minPrice || plan.maxPrice) && !price) return [];
-        if (
-          price &&
-          ((plan.minPrice && price.lt(new Prisma.Decimal(plan.minPrice))) ||
-            (plan.maxPrice && price.gt(new Prisma.Decimal(plan.maxPrice))))
-        )
-          return [];
+        const envelope = envelopes?.get(variant.id);
+        const priced = envelope
+          ? envelopePrice(envelope)
+          : effectivePrice(variant);
+        if (plan.operation === 'CHEAPEST' && priced.price === null) return [];
+        if (!fitsBudget(priced, plan.minPrice, plan.maxPrice)) return [];
         const stock = !variant.trackStock
           ? 'NOT_TRACKED'
           : !variant.inventory
@@ -654,8 +812,13 @@ export class ProductSearchService {
               variantAttributes(variant),
               'aiVisible',
             ),
-            price: price?.toFixed(2) ?? null,
-            ...productDiscount(variant),
+            price: priced.price,
+            maxPrice: priced.maxPrice,
+            ...(priced.priceNote ? { priceNote: priced.priceNote } : {}),
+            // A discount belongs to the variant's own exact price only.
+            ...(envelope
+              ? { effectiveCompareAtPrice: null, discountAmount: null }
+              : productDiscount(variant)),
             currency: 'THB' as const,
             stock,
             onHand:
@@ -671,7 +834,9 @@ export class ProductSearchService {
                 ? variant.inventory.onHand - variant.inventory.reserved
                 : null,
             purchasable:
-              price !== null && stock !== 'UNKNOWN' && stock !== 'OUT_OF_STOCK',
+              priced.price !== null &&
+              stock !== 'UNKNOWN' &&
+              stock !== 'OUT_OF_STOCK',
             fetchedAt: new Date().toISOString(),
             sourceRevision: product.revision,
           },
@@ -686,8 +851,9 @@ export class ProductSearchService {
           .filter((e) => e.price !== null)
           .sort(
             (a, b) =>
-              new Prisma.Decimal(a.price!).comparedTo(
-                new Prisma.Decimal(b.price!),
+              comparePrices(
+                { price: a.price, maxPrice: a.maxPrice ?? null },
+                { price: b.price, maxPrice: b.maxPrice ?? null },
               ) || a.sku.localeCompare(b.sku),
           );
   }

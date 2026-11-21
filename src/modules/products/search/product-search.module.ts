@@ -7,6 +7,7 @@ import { ProductVectorRepository } from './product-vector.repository';
 import { ProductIndexService } from './product-index.service';
 import { ProductIndexController } from './product-index.controller';
 import { ProductsModule } from '../products.module';
+import { ProductClock } from '../time/product-clock';
 
 @Module({
   imports: [
@@ -20,7 +21,8 @@ import { ProductsModule } from '../products.module';
     ProductSearchService,
     ProductVectorRepository,
     ProductIndexService,
+    ProductClock,
   ],
-  exports: [ProductSearchService],
+  exports: [ProductSearchService, ProductClock],
 })
 export class ProductSearchModule {}

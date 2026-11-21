@@ -175,6 +175,13 @@ export class LoadContextService {
   }
 
   private catalogRefs(value: unknown): CatalogRef[] | undefined {
+    if (
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Object.keys(value).length === 0
+    )
+      return [];
     const parsed = z
       .array(
         z
@@ -182,6 +189,7 @@ export class LoadContextService {
             companyId: z.string().uuid(),
             productId: z.string().uuid(),
             variantId: z.string().uuid().optional(),
+            slotId: z.string().uuid().optional(),
           })
           .strict(),
       )

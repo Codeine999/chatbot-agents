@@ -21,6 +21,7 @@ import {
   unmatchedProductAnswer,
 } from './product-answer.policy';
 import type { ProductWorkflow } from '../search/product-search.types';
+import { isScheduleLookup, scheduleAnswer } from '../slots/slot-answer';
 import { DecisionTraceService } from '../../decision-log/decision-trace.service';
 
 // No policy evidence was found for the policy half of a product question.
@@ -122,6 +123,21 @@ export class ProductAnswerService {
           // NO_MATCH / MISSING_INPUT / VARIANT_UNAVAILABLE...: the customer got no product answer.
           mode = `PRODUCT_${product.result.status}`;
           reason = `PRODUCT_${product.result.status}`;
+        } else if (isScheduleLookup(product)) {
+          // Times, seats and prices are rows of the database: no model call.
+          answer = {
+            text:
+              scheduleAnswer(product) +
+              (policyMissing ? `\n${POLICY_UNVERIFIED_NOTE}` : ''),
+            isFallback: false,
+            catalogRefs: product.result.evidence.slice(0, 12).map((e) => ({
+              companyId: product.scope.companyId,
+              productId: e.productId,
+              variantId: e.variantId,
+              ...(e.slot ? { slotId: e.slot.slotId } : {}),
+            })),
+          };
+          mode = 'PRODUCT_SCHEDULE_TEMPLATE';
         } else {
           const general = product.plan.mode === 'GENERAL';
           const rules = general
@@ -254,6 +270,7 @@ export class ProductAnswerService {
                         companyId: product.scope.companyId,
                         productId: e.productId,
                         variantId: e.variantId,
+                        ...(e.slot ? { slotId: e.slot.slotId } : {}),
                       })),
                 }
               : {}),

@@ -13,6 +13,24 @@ import {
   productPriceRange,
   proseStatesOptionValue,
 } from './product-answer.grounding';
+import { catalogCapabilities, catalogLexicon } from '../search/catalog-fields';
+import { scheduleAnswer, slotAsks } from '../slots/slot-answer';
+import {
+  availabilityLabel,
+  formatArrival,
+  formatClock,
+  formatLocalDate,
+  formatQueryTime,
+  formatSlotDate,
+  formatSlotTime,
+} from '../slots/slot-format';
+import { matchesSignals, proseMakesClaim } from '../business/lexicon-match';
+import {
+  DEFAULT_PRICE_WORDING,
+  formatPrice,
+  type PriceWording,
+} from '../product-pricing';
+import type { BusinessLexicon } from '../attributes/types/attribute-definition.types';
 
 export const productAnswerSchema = z
   .object({
@@ -23,13 +41,25 @@ export const productAnswerSchema = z
   })
   .strict();
 
-const stockLabels = {
-  IN_STOCK: 'มีสินค้าคงเหลือ ณ เวลาตรวจสอบ',
-  OUT_OF_STOCK: 'สินค้าหมด ณ เวลาตรวจสอบ',
-  NOT_TRACKED:
-    'ร้านไม่ได้เปิดระบบติดตามสต็อก กรุณาสอบถามเจ้าหน้าที่เพื่อยืนยัน',
-  UNKNOWN: 'ยังตรวจสอบสต็อกไม่ได้',
-};
+/** Wording of the workflow's business; turns saved before presets had one keep ECOMMERCE. */
+const lexiconOf = (workflow: ProductWorkflow): BusinessLexicon =>
+  catalogLexicon(workflow.result.businessType);
+const priceWording = (lexicon: BusinessLexicon): PriceWording =>
+  lexicon.price ?? DEFAULT_PRICE_WORDING;
+/** A price whose text carries a range/estimate note (never stated as final). */
+const hasPriceNote = (e: ProductEvidence) =>
+  e.maxPrice != null || e.priceNote !== undefined;
+
+const stockStates = {
+  IN_STOCK: 'AVAILABLE',
+  OUT_OF_STOCK: 'FULL',
+  NOT_TRACKED: 'NOT_TRACKED',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+const stockLabel = (
+  lexicon: BusinessLexicon,
+  stock: ProductEvidence['stock'],
+) => lexicon.availability[stockStates[stock]];
 
 export type ProductFieldPolicy = Readonly<{
   price: boolean;
@@ -58,15 +88,41 @@ export function productFieldPolicy(plan: ProductPlan): ProductFieldPolicy {
       plan.operation === 'CHEAPEST' ||
       plan.operation === 'LIST' ||
       plan.minPrice !== null ||
-      plan.maxPrice !== null,
-    stock: overview || weighs || asks.has('STOCK') || plan.inStockOnly,
+      plan.maxPrice !== null ||
+      asks.has('SCHEDULE'),
+    stock:
+      overview ||
+      weighs ||
+      asks.has('STOCK') ||
+      plan.inStockOnly ||
+      (plan.quantity ?? null) !== null,
     description: detailOverview || weighs || asks.has('DESCRIPTION'),
     attributes:
       detailOverview ||
       weighs ||
       asks.has('ATTRIBUTES') ||
-      asks.has('DESCRIPTION'),
+      asks.has('DESCRIPTION') ||
+      askedFields(plan).length > 0,
   };
+}
+
+/** Detail keys the customer asked about; empty = the question is not narrowed to fields. */
+export const askedFields = (plan: ProductPlan): readonly string[] =>
+  plan.askFields ?? [];
+
+/**
+ * The details of one variant that may reach the model or a token. A question
+ * narrowed to fields gets exactly those; otherwise every customer-visible
+ * detail when details are asked at all.
+ */
+function shownDetails(
+  plan: ProductPlan,
+  policy: ProductFieldPolicy,
+  details: readonly AttributeFact[],
+): AttributeFact[] {
+  const keys = askedFields(plan);
+  if (keys.length) return details.filter((d) => keys.includes(d.key));
+  return policy.attributes ? [...details] : [];
 }
 
 /** Select the quantity before generation; the model receives one stock quantity. */
@@ -139,25 +195,35 @@ export function productFactTokens(
   policies: readonly KnowledgeItem[],
 ) {
   const policy = productFieldPolicy(workflow.plan);
+  const lexicon = lexiconOf(workflow);
+  const capabilities = catalogCapabilities(workflow.result.businessType);
+  const bySlot = capabilities.inventory === 'SLOT_CAPACITY';
+  const slotPolicy = slotAsks(workflow.plan);
+  const zone = workflow.result.timeZone;
   const tokens: Record<string, { value: string; ref: string }> = {};
   workflow.result.evidence.forEach((e, i) => {
     const key = `e${i + 1}`;
+    const details = shownDetails(workflow.plan, policy, e.details);
     const facts: Record<string, string> = {
       name: e.name,
       sku: e.sku,
       productSku: productSku(e),
       ...(!e.productSku ? { code: productSku(e) } : {}),
       description: e.description,
-      attributes: joinFacts(e.details) || 'ไม่ได้ระบุคุณสมบัติ',
-      price: e.price !== null ? `${e.price} บาท` : 'ยังไม่ได้ระบุราคา',
-      priceRange: productPriceRange(workflow.result.evidence, e.productId),
+      attributes: joinFacts(details) || 'ไม่ได้ระบุคุณสมบัติ',
+      price: formatPrice(e, priceWording(lexicon)),
+      priceRange: productPriceRange(
+        workflow.result.evidence,
+        e.productId,
+        priceWording(lexicon),
+      ),
       ...(e.effectiveCompareAtPrice
         ? { originalPrice: `${e.effectiveCompareAtPrice} บาท` }
         : {}),
       ...(e.discountAmount
         ? { discountAmount: `${e.discountAmount} บาท` }
         : {}),
-      stockStatus: stockLabels[e.stock],
+      stockStatus: stockLabel(lexicon, e.stock),
       ...(selectedStockQuantity(workflow.plan, e).value != null
         ? {
             stockQuantity: String(
@@ -172,7 +238,7 @@ export function productFactTokens(
         ? { availableStock: String(e.availableStock) }
         : {}),
     };
-    for (const detail of e.details) facts[`attr.${detail.key}`] = detail.value;
+    for (const detail of details) facts[`attr.${detail.key}`] = detail.value;
     for (const option of e.options) {
       facts[`opt.${option.key}`] = option.value;
       facts[`opts.${option.key}`] = optionValues(
@@ -181,10 +247,75 @@ export function productFactTokens(
         option.key,
       ).join(', ');
     }
+    // Seats live on slots, not on the variant: variant stock wording would
+    // claim "unknown seats" about a slot that is full.
+    if (bySlot)
+      for (const field of [
+        'stockStatus',
+        'stockQuantity',
+        'onHand',
+        'availableStock',
+      ])
+        delete facts[field];
     for (const [field, value] of Object.entries(facts))
       if (allowedField(field, policy))
         tokens[`${key}.${field}`] = { value, ref: e.ref };
+    const slot = e.slot;
+    if (slot && bySlot) {
+      const slotFacts: Record<string, string> = {};
+      if (slotPolicy.schedule) {
+        slotFacts.date = formatSlotDate(slot.startsAt, zone);
+        slotFacts.time = formatSlotTime(slot.startsAt, zone);
+        if (slot.endsAt)
+          slotFacts.arrive = formatArrival(slot.startsAt, slot.endsAt, zone);
+      }
+      if (slotPolicy.availability) {
+        slotFacts.availability = availabilityLabel(
+          lexicon,
+          capabilities.showQuantity,
+          slot,
+          workflow.result.query?.quantity ?? null,
+        );
+        // A seat number is only trustworthy for a slot whose seats are known.
+        if (
+          capabilities.showQuantity &&
+          slot.seatsLeft !== null &&
+          slot.state !== 'UNKNOWN' &&
+          slot.state !== 'CLOSED'
+        )
+          slotFacts.seatsLeft = String(slot.seatsLeft);
+      }
+      for (const [field, value] of Object.entries(slotFacts))
+        tokens[`${key}.${field}`] = { value, ref: e.ref };
+    }
   });
+  const asked = workflow.result.query;
+  if (asked && bySlot) {
+    if (asked.date)
+      tokens['query.date'] = {
+        value: formatLocalDate(asked.date),
+        ref: 'QUERY:WHEN',
+      };
+    const time = formatQueryTime(asked.after, asked.before);
+    if (time) tokens['query.time'] = { value: time, ref: 'QUERY:WHEN' };
+    if (asked.quantity !== null)
+      tokens['query.quantity'] = {
+        value: String(asked.quantity),
+        ref: 'QUERY:WHEN',
+      };
+  }
+  const summary = workflow.result.slotSummary;
+  if (summary && bySlot) {
+    tokens['slots.count'] = { value: String(summary.count), ref: 'QUERY:WHEN' };
+    tokens['slots.first'] = {
+      value: formatClock(summary.first),
+      ref: 'QUERY:WHEN',
+    };
+    tokens['slots.last'] = {
+      value: formatClock(summary.last),
+      ref: 'QUERY:WHEN',
+    };
+  }
   policies.forEach((e, i) => {
     tokens[`p${i + 1}.answer`] = {
       value: e.answer ?? '',
@@ -211,6 +342,11 @@ export function productPromptEvidence(
   policies: readonly KnowledgeItem[],
 ) {
   const policy = productFieldPolicy(workflow.plan);
+  const lexicon = lexiconOf(workflow);
+  const capabilities = catalogCapabilities(workflow.result.businessType);
+  const bySlot = capabilities.inventory === 'SLOT_CAPACITY';
+  const slotPolicy = slotAsks(workflow.plan);
+  const zone = workflow.result.timeZone;
   const fullSnapshot = workflow.result.businessType !== undefined;
   const fact = (prefix: string) => (f: AttributeFact) => ({
     token: `${prefix}.${f.key}`,
@@ -226,12 +362,18 @@ export function productPromptEvidence(
       aliases?: string[];
       description?: string;
       details?: ReturnType<ReturnType<typeof fact>>[];
+      /** Labels of other customer-visible details the customer can still ask for. */
+      moreInfoAvailable?: string[];
       variants: Record<string, unknown>[];
     }
   >();
   const optionKeys = new Set<string>();
   const detailKeys = new Set<string>();
+  // Customer-visible details that exist but were not sent: named so the
+  // answer can offer them, never described.
+  const moreInfo = new Map<string, Map<string, string>>();
   workflow.result.evidence.forEach((e, i) => {
+    const details = shownDetails(workflow.plan, policy, e.details);
     let product = products.get(e.productId);
     if (!product) {
       product = {
@@ -239,28 +381,35 @@ export function productPromptEvidence(
         ...(!fullSnapshot ? { sku: productSku(e) } : {}),
         category: e.category,
         aliases: e.aliases,
-        ...((fullSnapshot || policy.description) && e.description
+        ...(policy.description && e.description
           ? { description: e.description }
           : {}),
-        ...(!fullSnapshot && policy.attributes && e.details.length
-          ? { details: e.details.map(fact('attr')) }
+        ...(!fullSnapshot && policy.attributes && details.length
+          ? { details: details.map(fact('attr')) }
           : {}),
         variants: [],
       };
       products.set(e.productId, product);
-      if (policy.attributes) for (const d of e.details) detailKeys.add(d.key);
     }
-    if (policy.attributes) for (const d of e.details) detailKeys.add(d.key);
+    for (const d of details) detailKeys.add(d.key);
+    if (fullSnapshot) {
+      const sent = new Set(details.map((d) => d.key));
+      const more = moreInfo.get(e.productId) ?? new Map<string, string>();
+      for (const d of e.details) if (!sent.has(d.key)) more.set(d.key, d.label);
+      moreInfo.set(e.productId, more);
+    }
     for (const o of e.options) optionKeys.add(o.key);
     product.variants.push({
       key: `e${i + 1}`,
       ref: e.ref,
       sku: e.sku,
       options: e.options.map(fact('opt')),
-      ...(fullSnapshot ? { details: e.details.map(fact('attr')) } : {}),
-      ...(fullSnapshot || policy.price
+      ...(fullSnapshot && details.length
+        ? { details: details.map(fact('attr')) }
+        : {}),
+      ...(policy.price
         ? {
-            price: e.price !== null ? `${e.price} บาท` : 'ยังไม่ได้ระบุราคา',
+            price: formatPrice(e, priceWording(lexicon)),
             ...(e.effectiveCompareAtPrice
               ? { originalPrice: `${e.effectiveCompareAtPrice} บาท` }
               : {}),
@@ -269,31 +418,73 @@ export function productPromptEvidence(
               : {}),
           }
         : {}),
-      ...(fullSnapshot || policy.stock
+      ...(e.slot && bySlot
         ? {
-            stockStatus: stockLabels[e.stock],
-            ...(fullSnapshot
-              ? {
-                  onHand: e.onHand,
-                  reserved: e.reserved,
-                  availableStock: e.availableStock,
-                  fetchedAt: e.fetchedAt,
-                }
-              : {}),
+            slot: {
+              role: e.slot.role,
+              ...(slotPolicy.schedule
+                ? {
+                    date: formatSlotDate(e.slot.startsAt, zone),
+                    time: formatSlotTime(e.slot.startsAt, zone),
+                    ...(e.slot.endsAt
+                      ? {
+                          arrive: formatArrival(
+                            e.slot.startsAt,
+                            e.slot.endsAt,
+                            zone,
+                          ),
+                        }
+                      : {}),
+                  }
+                : {}),
+              ...(slotPolicy.availability
+                ? {
+                    availability: availabilityLabel(
+                      lexicon,
+                      capabilities.showQuantity,
+                      e.slot,
+                      workflow.result.query?.quantity ?? null,
+                    ),
+                    ...(capabilities.showQuantity &&
+                    e.slot.seatsLeft !== null &&
+                    e.slot.state !== 'UNKNOWN' &&
+                    e.slot.state !== 'CLOSED'
+                      ? { seatsLeft: e.slot.seatsLeft }
+                      : {}),
+                  }
+                : {}),
+            },
+          }
+        : {}),
+      // Stock only when asked; the internal counters (onHand, reserved,
+      // fetchedAt) never reach the model, only the one chosen quantity.
+      ...(!bySlot && policy.stock
+        ? {
+            stockStatus: stockLabel(lexicon, e.stock),
             stockQuantity: selectedStockQuantity(workflow.plan, e).value,
             stockQuantityLabel: selectedStockQuantity(workflow.plan, e).label,
           }
         : {}),
     });
   });
+  for (const [productId, more] of moreInfo)
+    if (more.size)
+      products.get(productId)!.moreInfoAvailable = [...more.values()];
   const fields = ['name', 'sku'];
   for (const key of optionKeys) fields.push(`opt.${key}`, `opts.${key}`);
   if (policy.price)
     fields.push('price', 'priceRange', 'originalPrice', 'discountAmount');
-  if (policy.stock) fields.push('stockStatus', 'stockQuantity');
+  if (policy.stock && !bySlot) fields.push('stockStatus', 'stockQuantity');
+  if (bySlot && workflow.result.evidence.some((e) => e.slot)) {
+    if (slotPolicy.schedule) fields.push('date', 'time', 'arrive');
+    if (slotPolicy.availability) {
+      fields.push('availability');
+      if (capabilities.showQuantity) fields.push('seatsLeft');
+    }
+  }
   if (policy.description) fields.push('description');
   if (policy.attributes) {
-    fields.push('attributes');
+    if (!askedFields(workflow.plan).length) fields.push('attributes');
     for (const key of detailKeys) fields.push(`attr.${key}`);
   }
   return {
@@ -312,6 +503,47 @@ export function productPromptEvidence(
       ? { catalogCount: { ref: 'CATALOG:COUNT', total: workflow.result.total } }
       : {}),
     partialList: workflow.result.truncated === true,
+    ...(bySlot && workflow.result.slotOutcome
+      ? {
+          slotOutcome: workflow.result.slotOutcome,
+          customerAsked: {
+            ...(workflow.result.query?.date
+              ? {
+                  date: formatLocalDate(workflow.result.query.date),
+                  dateToken: 'query.date',
+                }
+              : {}),
+            ...(formatQueryTime(
+              workflow.result.query?.after ?? null,
+              workflow.result.query?.before ?? null,
+            )
+              ? {
+                  time: formatQueryTime(
+                    workflow.result.query?.after ?? null,
+                    workflow.result.query?.before ?? null,
+                  ),
+                  timeToken: 'query.time',
+                }
+              : {}),
+            ...(workflow.result.query?.quantity != null
+              ? {
+                  quantity: workflow.result.query.quantity,
+                  quantityToken: 'query.quantity',
+                }
+              : {}),
+          },
+          ...(workflow.result.slotSummary
+            ? {
+                slotSummary: {
+                  count: workflow.result.slotSummary.count,
+                  first: formatClock(workflow.result.slotSummary.first),
+                  last: formatClock(workflow.result.slotSummary.last),
+                  tokens: ['slots.count', 'slots.first', 'slots.last'],
+                },
+              }
+            : {}),
+        }
+      : {}),
   };
 }
 
@@ -344,10 +576,14 @@ export function unmatchedProductAnswer(workflow: ProductWorkflow): {
   const products = new Map<string, string>();
   for (const e of workflow.result.evidence)
     if (products.size < 5) products.set(e.productId, e.name);
+  const { clarify } = lexiconOf(workflow);
   return {
-    text: `ยังไม่พบสินค้าที่ตรงกับคำถามนี้ค่ะ${
+    text: `${clarify.unmatched}${
       products.size
-        ? `\nสินค้าที่ใกล้เคียง: ${[...products.values()].join(' / ')} สนใจตัวไหนแจ้งได้เลยค่ะ`
+        ? clarify.unmatchedNear.replace(
+            '{names}',
+            [...products.values()].join(' / '),
+          )
         : ''
     }`,
     catalogRefs: [...products.keys()].map((productId) => ({
@@ -355,6 +591,47 @@ export function unmatchedProductAnswer(workflow: ProductWorkflow): {
       productId,
     })),
   };
+}
+
+/**
+ * Coverage rules of a timetable answer: every named round shows its time, a
+ * "nothing fits" outcome states the asked round's availability and offers at
+ * least one alternative round.
+ */
+function slotRulesHold(
+  used: readonly string[],
+  workflow: ProductWorkflow,
+): boolean {
+  const evidence = workflow.result.evidence;
+  const asks = slotAsks(workflow.plan);
+  const rowOf = (key: string) => {
+    const match = /^e(\d+)\.(.+)$/.exec(key);
+    return match
+      ? { row: evidence[Number(match[1]) - 1], field: match[2], n: match[1] }
+      : undefined;
+  };
+  const parsed = used.map(rowOf).filter((x) => x?.row?.slot);
+  if (asks.schedule) {
+    if (!parsed.some((x) => x!.field === 'time')) return false;
+    for (const x of parsed) if (!used.includes(`e${x!.n}.time`)) return false;
+  }
+  // Every round shown carries its own availability when it was asked.
+  if (asks.availability)
+    for (const x of parsed) {
+      if (
+        !used.includes(`e${x!.n}.availability`) &&
+        !used.includes(`e${x!.n}.seatsLeft`)
+      )
+        return false;
+    }
+  if (workflow.result.slotOutcome === 'NONE_FITS') {
+    const askedRow = parsed.some(
+      (x) => x!.field === 'availability' && x!.row.slot!.role === 'REQUESTED',
+    );
+    const offered = parsed.some((x) => x!.row.slot!.role === 'ALTERNATIVE');
+    if (!askedRow || !offered) return false;
+  }
+  return true;
 }
 
 /** Business numbers/stock claims are rendered from allowlisted DB evidence, never model prose. */
@@ -384,6 +661,9 @@ export function renderProductAnswer(
     ...workflow.result.evidence.map((e) => e.ref),
     ...policies.map((e) => `${e.source}:${e.id}`),
     ...(workflow.result.total !== undefined ? ['CATALOG:COUNT'] : []),
+    ...(workflow.result.query || workflow.result.slotSummary
+      ? ['QUERY:WHEN']
+      : []),
   ]);
   if (!evidenceIds.length || evidenceIds.some((id) => !refs.has(id)))
     return undefined;
@@ -401,9 +681,25 @@ export function renderProductAnswer(
       '',
     )
     .replace(/\{\{[^{}]+\}\}/g, '');
+  if (/[{}\d๐-๙]/u.test(plain) || proseMakesClaim(lexiconOf(workflow), plain))
+    return undefined;
+  // An estimated or per-round price must never be called final in prose.
+  const evidenceRows = workflow.result.evidence;
+  const showsNotedPrice = used.some((key) => {
+    const match = /^e(\d+)\.(price|priceRange)$/.exec(key);
+    const row = match && evidenceRows[Number(match[1]) - 1];
+    if (!match || !row) return false;
+    return match[2] === 'price'
+      ? hasPriceNote(row)
+      : evidenceRows.some(
+          (e) => e.productId === row.productId && hasPriceNote(e),
+        );
+  });
   if (
-    /[{}\d๐-๙]/u.test(plain) ||
-    /(?:ราคา\s*(?:คือ|อยู่ที่|เพียง)|\d|บาท|มีของ|มีสินค้า|พร้อมส่ง|สินค้าหมด|หมดสต็อก|เหลือ\s|ส่งฟรี|free shipping|in stock|out of stock)/iu.test(
+    showsNotedPrice &&
+    matchesSignals(
+      lexiconOf(workflow),
+      priceWording(lexiconOf(workflow)).certainWords,
       plain,
     )
   )
@@ -420,12 +716,18 @@ export function renderProductAnswer(
     !used.some((k) => k.endsWith('.price') || k.endsWith('.priceRange'))
   )
     return undefined;
+  const slotEvidence = workflow.result.evidence.filter((e) => e.slot);
+  // A slot business states seats through availability/seatsLeft, per slot.
+  const stockTokens = slotEvidence.length
+    ? /\.(?:availability|seatsLeft)$/
+    : /\.(?:stockStatus|stockQuantity|onHand|availableStock)$/;
   if (
     workflow.plan.asks.includes('STOCK') &&
     workflow.result.evidence.length &&
-    !used.some((k) =>
-      /\.(?:stockStatus|stockQuantity|onHand|availableStock)$/.test(k),
-    )
+    (slotEvidence.length ||
+      catalogCapabilities(workflow.result.businessType).inventory !==
+        'SLOT_CAPACITY') &&
+    !used.some((k) => stockTokens.test(k))
   )
     return undefined;
   // Every displayed variant must cover the requested mutable facts, especially comparisons.
@@ -437,14 +739,21 @@ export function renderProductAnswer(
       !used.includes(`${prefix}priceRange`)
     )
       return undefined;
+    const named = workflow.result.evidence[Number(prefix.slice(1, -1)) - 1];
     if (
       workflow.plan.asks.includes('STOCK') &&
-      !['stockStatus', 'stockQuantity', 'onHand', 'availableStock'].some(
-        (field) => used.includes(`${prefix}${field}`),
-      )
+      !(
+        named?.slot
+          ? ['availability', 'seatsLeft']
+          : ['stockStatus', 'stockQuantity', 'onHand', 'availableStock']
+      ).some((field) => used.includes(`${prefix}${field}`)) &&
+      (named?.slot ||
+        catalogCapabilities(workflow.result.businessType).inventory !==
+          'SLOT_CAPACITY')
     )
       return undefined;
   }
+  if (slotEvidence.length && !slotRulesHold(used, workflow)) return undefined;
   // Prices of every variant and the asked details must be shown, never one picked.
   if (!coversAskedFacts(used, workflow)) return undefined;
   // Options ("สีขาว") written as prose would claim a variant the evidence may not be.
@@ -519,6 +828,7 @@ export function presentedProductRefs(
       companyId: workflow.scope.companyId,
       productId: e.productId,
       variantId: e.variantId,
+      ...(e.slot ? { slotId: e.slot.slotId } : {}),
     }));
 }
 
@@ -527,18 +837,21 @@ function mutableFacts(
   e: ProductEvidence,
   plan: ProductPlan,
   policy: ProductFieldPolicy,
+  lexicon: BusinessLexicon,
+  bySlot = false,
 ): string[] {
   const quantity = selectedStockQuantity(plan, e);
   return [
     !policy.price
       ? ''
       : e.price !== null
-        ? `ราคา ${e.price} บาท`
+        ? `ราคา ${formatPrice(e, priceWording(lexicon))}`
         : 'ยังไม่ได้ระบุราคา',
-    policy.stock
+    // Seats of a dated business live on its rounds, never on the route.
+    policy.stock && !bySlot
       ? quantity.value != null
-        ? `${stockLabels[e.stock]} · ${quantity.label} ${quantity.value} ชิ้น`
-        : stockLabels[e.stock]
+        ? `${stockLabel(lexicon, e.stock)} · ${quantity.label} ${quantity.value} ${lexicon.unit}`
+        : stockLabel(lexicon, e.stock)
       : '',
   ].filter(Boolean);
 }
@@ -552,16 +865,20 @@ function detailedProductLines(
   shown: readonly ProductEvidence[],
   plan: ProductPlan,
   policy: ProductFieldPolicy,
+  lexicon: BusinessLexicon,
+  bySlot: boolean,
 ): string {
   const products = new Map<string, ProductEvidence[]>();
   for (const e of shown)
     products.set(e.productId, [...(products.get(e.productId) ?? []), e]);
+  const detailsOf = (v: ProductEvidence) =>
+    shownDetails(plan, policy, v.details);
   return [...products.values()]
     .flatMap((variants) => {
       const [first] = variants;
-      const shared = first.details.filter((d) =>
+      const shared = detailsOf(first).filter((d) =>
         variants.every((v) =>
-          v.details.some((x) => x.key === d.key && x.value === d.value),
+          detailsOf(v).some((x) => x.key === d.key && x.value === d.value),
         ),
       );
       const header = [
@@ -569,7 +886,7 @@ function detailedProductLines(
         policy.description ? first.description : '',
         policy.attributes
           ? joinFacts(shared) ||
-            (variants.every((v) => !v.details.length)
+            (variants.every((v) => !detailsOf(v).length)
               ? 'ไม่ได้ระบุคุณสมบัติ'
               : '')
           : '',
@@ -579,9 +896,9 @@ function detailedProductLines(
       const lines = variants.flatMap((v) => {
         const extra = [
           policy.attributes
-            ? joinFacts(v.details.filter((d) => !isShared(d)))
+            ? joinFacts(detailsOf(v).filter((d) => !isShared(d)))
             : '',
-          ...mutableFacts(v, plan, policy),
+          ...mutableFacts(v, plan, policy, lexicon, bySlot),
         ].filter(Boolean);
         return extra.length
           ? [`- ${[...v.options.map((o) => o.value), ...extra].join(' · ')}`]
@@ -597,6 +914,7 @@ export function safeProductAnswer(
   policies: readonly KnowledgeItem[],
 ): string {
   const result = workflow.result;
+  const lexicon = lexiconOf(workflow);
   if (result.status === 'VARIANT_UNAVAILABLE') {
     const label = (key: string) =>
       result.options?.find((o) => o.key === key)?.label ?? key;
@@ -606,29 +924,33 @@ export function safeProductAnswer(
     const options = (result.options ?? [])
       .map((o) => `${o.label}ที่มี: ${o.values.join(', ')}`)
       .join(' · ');
-    return `${result.choices[0]?.name ?? 'สินค้านี้'} ยังไม่มี${wanted ? ` ${wanted}` : 'ตัวเลือกที่ถาม'}ค่ะ${options ? `\n${options}` : ''}`;
+    return `${result.choices[0]?.name ?? `${lexicon.itemNoun}นี้`} ยังไม่มี${wanted ? ` ${wanted}` : 'ตัวเลือกที่ถาม'}ค่ะ${options ? `\n${options}` : ''}`;
   }
   if (result.status === 'MISSING_INPUT')
     return result.choices.length
-      ? `หมายถึงสินค้ารุ่นไหนคะ: ${result.choices.map((c) => c.name).join(' / ')} หรือระบุสีและขนาดที่ต้องการได้ค่ะ`
-      : 'สนใจสินค้าประเภทไหนหรือรุ่นไหนคะ?';
-  if (result.status === 'UNAVAILABLE')
-    return 'ขณะนี้ยังตรวจสอบข้อมูลสินค้าไม่ได้ กรุณาสอบถามเจ้าหน้าที่ค่ะ';
-  if (result.status !== 'FOUND')
-    return 'ยังไม่พบข้อมูลสินค้าที่ตรงกับคำถาม กรุณาระบุชื่อรุ่นหรือ SKU เพิ่มเติมค่ะ';
+      ? lexicon.clarify.which.replace(
+          '{choices}',
+          result.choices.map((c) => c.name).join(' / '),
+        )
+      : lexicon.clarify.none;
+  if (result.status === 'UNAVAILABLE') return lexicon.clarify.unavailable;
+  if (result.status !== 'FOUND') return lexicon.clarify.notFound;
+  if (result.slotOutcome !== undefined) return scheduleAnswer(workflow);
   if (workflow.plan.operation === 'COUNT')
     return `พบ ${result.total ?? 0} รายการที่ตรงกับเงื่อนไขค่ะ`;
   const policy = productFieldPolicy(workflow.plan);
+  const bySlot =
+    catalogCapabilities(result.businessType).inventory === 'SLOT_CAPACITY';
   const shown = result.evidence.slice(0, 5);
   const text =
     policy.attributes || policy.description
-      ? detailedProductLines(shown, workflow.plan, policy)
+      ? detailedProductLines(shown, workflow.plan, policy, lexicon, bySlot)
       : shown
           .map((e) =>
             [
               e.name,
               ...e.options.map((o) => o.value),
-              ...mutableFacts(e, workflow.plan, policy),
+              ...mutableFacts(e, workflow.plan, policy, lexicon, bySlot),
             ].join(' · '),
           )
           .join('\n');

@@ -4,7 +4,11 @@ import {
   productCompanyScope,
   type CommerceScope,
 } from '../../commerce/types/commerce-scope';
-import type { AttributeDefinition } from '../attributes/types/attribute-definition.types';
+import type {
+  AttributeDefinition,
+  BusinessCapabilities,
+  BusinessLexicon,
+} from '../attributes/types/attribute-definition.types';
 import { attributeDefinitionSchema } from '../attributes/dto/attribute-definition.dto';
 import { BUSINESS_PRESETS } from '../attributes/presets';
 
@@ -39,6 +43,42 @@ export function businessPromptRules(
     : undefined;
 }
 
+/**
+ * Wording of a business; an unknown or unset type keeps ECOMMERCE, which is
+ * what every store used before presets carried a lexicon.
+ */
+export function catalogLexicon(
+  type: string | null | undefined,
+): BusinessLexicon {
+  return (
+    (type ? BUSINESS_PRESETS[type]?.lexicon : undefined) ??
+    BUSINESS_PRESETS.ECOMMERCE.lexicon!
+  );
+}
+
+export function catalogCapabilities(
+  type: string | null | undefined,
+): BusinessCapabilities {
+  return (
+    (type ? BUSINESS_PRESETS[type]?.capabilities : undefined) ??
+    BUSINESS_PRESETS.ECOMMERCE.capabilities!
+  );
+}
+
+/**
+ * The preset's extra answer rules, inserted before the shared candidate rule.
+ * A store without a known business keeps the ECOMMERCE rules it always had.
+ */
+export function businessAnswerTail(
+  type: string | null | undefined,
+): string | undefined {
+  return (
+    type && isBusinessType(type)
+      ? BUSINESS_PRESETS[type]
+      : BUSINESS_PRESETS.ECOMMERCE
+  ).prompt.answerTail;
+}
+
 /** Code presets are the only field metadata; unknown stored JSON stays private. */
 export function catalogFields(
   type: string | null,
@@ -47,7 +87,8 @@ export function catalogFields(
   return (BUSINESS_PRESETS[type ?? '']?.fields ?? [])
     .map((field) => ({
       ...attributeDefinitionSchema.parse(field),
-      scope: 'VARIANT' as const,
+      // A preset field is a variant field unless it says SLOT (a dated occurrence's value).
+      scope: field.scope === 'SLOT' ? ('SLOT' as const) : ('VARIANT' as const),
       categories: [...categories],
       status: 'ACTIVE' as const,
     }))
@@ -73,5 +114,7 @@ export async function loadCatalogContext(
   return {
     businessType,
     fields: catalogFields(businessType, company?.productPresetCategories ?? []),
+    lexicon: catalogLexicon(businessType),
+    capabilities: catalogCapabilities(businessType),
   };
 }

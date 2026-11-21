@@ -45,6 +45,23 @@ export class CommerceFeatureService {
       );
   }
 
+  /**
+   * Partition of commerce turns per channel: the LINE key is configurable, a
+   * channel* room (App, Facebook) uses `standalone-<channel>`. The key is part
+   * of a turn's unique identity next to the event id.
+   */
+  connectionKeyFor(
+    owner:
+      | { kind: 'LINE' }
+      | { kind: 'CHANNEL'; channel: string }
+      | { kind: 'PREVIEW' },
+  ): string {
+    if (owner.kind === 'LINE') return this.lineConnectionKey;
+    return owner.kind === 'PREVIEW'
+      ? 'standalone-preview'
+      : `standalone-${owner.channel.toLowerCase()}`;
+  }
+
   assertCatalogEnabled(): void {
     if (!this.catalogEnabled) {
       throw new ForbiddenException('Product catalog is disabled');

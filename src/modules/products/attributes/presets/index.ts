@@ -1,4 +1,6 @@
 import { ECOMMERCE_PRESET } from './ecommerce.preset';
+import { TRANSPORT_PRESET } from './transport.preset';
+import { EDUCATION_PRESET } from './education.preset';
 import type { BusinessPreset } from '../types/attribute-definition.types';
 
 /**
@@ -8,4 +10,6 @@ import type { BusinessPreset } from '../types/attribute-definition.types';
  */
 export const BUSINESS_PRESETS: Readonly<Record<string, BusinessPreset>> = {
   ECOMMERCE: ECOMMERCE_PRESET,
+  TRANSPORT: TRANSPORT_PRESET,
+  EDUCATION: EDUCATION_PRESET,
 };

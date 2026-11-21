@@ -5,11 +5,14 @@ import {
   Param,
   Post,
   Req,
+  SetMetadata,
   UnauthorizedException,
 } from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { AdminGuard } from '../../../shared/guards/admin-guard.decorator';
+import type { AdminRole } from '../../../shared/guards/admin-auth.types';
+import { ADMIN_ROLES_KEY } from '../../../shared/guards/admin-roles.guard';
 import type { AdminRequest } from '../../admin/admin-jwt-auth.guard';
 import { CommerceScopeService } from '../../commerce/commerce-scope.service';
 import { CommerceFeatureService } from '../../commerce/commerce-feature.service';
@@ -26,6 +29,16 @@ class ReindexProductDto extends createZodDto(
     .strict(),
 ) {}
 
+class ReindexAllProductsDto extends createZodDto(
+  z
+    .object({
+      requestId: z.string().uuid(),
+      /** Also re-embed products whose index is already up to date (costs credit). */
+      force: z.boolean().default(false),
+    })
+    .strict(),
+) {}
+
 @AdminGuard('owner', 'admin', 'dev')
 @Controller('api/admin/products')
 export class ProductIndexController {
@@ -38,6 +51,21 @@ export class ProductIndexController {
   @Get('index/status')
   async status(@Req() request: AdminRequest) {
     return this.index.status(await this.scope(request));
+  }
+  // Bills one embedding per queued product, so it is owner/dev only.
+  @SetMetadata(ADMIN_ROLES_KEY, ['owner', 'dev'] satisfies AdminRole[])
+  @Post('index/reindex')
+  async reindexAll(
+    @Req() request: AdminRequest,
+    @Body() body: ReindexAllProductsDto,
+  ) {
+    return this.index.reindexAll(
+      await this.scope(request),
+      request.admin!.id,
+      body.requestId,
+      body.force,
+      this.commands,
+    );
   }
   @Post(':id/reindex')
   async reindex(

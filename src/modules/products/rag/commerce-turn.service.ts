@@ -20,6 +20,11 @@ import {
   commerceDbScope,
   type CommerceScope,
 } from '../../commerce/types/commerce-scope';
+import {
+  ownerColumns,
+  turnBelongsTo,
+  type CommerceOwner,
+} from './commerce-owner';
 
 export const commerceJson = (value: unknown): Prisma.InputJsonValue =>
   JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -42,65 +47,97 @@ export class CommerceTurnService {
   async find(
     scope: CommerceScope,
     connectionKey: string,
-    context: LineAiUsageContext,
+    owner: CommerceOwner,
+    turnId: string,
   ): Promise<CommerceTurn | null> {
     const partition = commerceDbScope(scope);
-    if (!context.turnId) return null;
+
     const existing = await this.prisma.commerceTurn.findUnique({
       where: {
         companyId_connectionKey_externalEventId: {
           companyId: scope.companyId,
           connectionKey,
-          externalEventId: context.turnId,
+          externalEventId: turnId,
         },
       },
     });
     if (
       existing &&
       (existing.tenantId !== partition.tenantId ||
-        existing.lineMemberId !== context.lineMemberId ||
-        existing.conversationId !== context.conversationId)
+        !turnBelongsTo(existing, owner))
     )
       throw new ForbiddenException('Product turn ownership mismatch');
+
     return existing;
+  }
+
+  /** The conversation exists and belongs to this person, in this company. */
+  private async ownsConversation(
+    scope: CommerceScope,
+    owner: CommerceOwner,
+  ): Promise<boolean> {
+    const partition = commerceDbScope(scope);
+    // A contact that signed up as a customer must still be an active one.
+    const customerOk: Prisma.CustomerWhereInput = {
+      ...partition,
+      status: 'ACTIVE',
+    };
+    if (owner.kind === 'PREVIEW') {
+      // Only a back-office admin of this company (or a legacy company-less one
+      // in a single-company deployment) may have a preview session.
+      const admin = await this.prisma.adminMember.findFirst({
+        where: {
+          id: owner.adminMemberId,
+          OR: [{ companyId: scope.companyId }, { companyId: null }],
+        },
+        select: { id: true },
+      });
+      return Boolean(admin);
+    }
+    if (owner.kind === 'LINE') {
+      const thread = await this.prisma.lineConversation.findFirst({
+        where: {
+          id: owner.conversationId,
+          lineMemberId: owner.lineMemberId,
+          lineMember: {
+            lineUserId: owner.userId,
+            OR: [{ customerId: null }, { customer: customerOk }],
+          },
+        },
+        select: { id: true },
+      });
+      return Boolean(thread);
+    }
+    const room = await this.prisma.channelConversation.findFirst({
+      where: {
+        id: owner.conversationId,
+        companyId: scope.companyId,
+        channel: owner.channel,
+        contactId: owner.contactId,
+        contact: {
+          companyId: scope.companyId,
+          OR: [{ customerId: null }, { customer: customerOk }],
+        },
+      },
+      select: { id: true },
+    });
+    return Boolean(room);
   }
 
   async open(
     scope: CommerceScope,
     connectionKey: string,
-    context: LineAiUsageContext,
+    owner: CommerceOwner,
+    turnId: string,
     input: unknown,
   ) {
     const partition = commerceDbScope(scope);
-    if (
-      !context.turnId ||
-      !context.lineMemberId ||
-      !context.conversationId ||
-      !context.userId
-    )
-      throw new ForbiddenException(
-        'Product turns require a verified channel event',
-      );
-    const thread = await this.prisma.lineConversation.findFirst({
-      where: {
-        id: context.conversationId,
-        lineMemberId: context.lineMemberId,
-        lineMember: {
-          lineUserId: context.userId,
-          OR: [
-            { customerId: null },
-            { customer: { ...partition, status: 'ACTIVE' } },
-          ],
-        },
-      },
-      select: { id: true },
-    });
-    if (!thread)
+    if (!(await this.ownsConversation(scope, owner)))
       throw new ForbiddenException('Product conversation ownership mismatch');
     const key = {
       companyId: scope.companyId,
       connectionKey,
-      externalEventId: context.turnId,
+      externalEventId: turnId,
     };
     const existing = await this.prisma.commerceTurn.findUnique({
       where: { companyId_connectionKey_externalEventId: key },
@@ -108,8 +145,7 @@ export class CommerceTurnService {
     if (existing) {
       if (
         existing.tenantId !== partition.tenantId ||
-        existing.lineMemberId !== context.lineMemberId ||
-        existing.conversationId !== context.conversationId
+        !turnBelongsTo(existing, owner)
       )
         throw new ForbiddenException('Product turn ownership mismatch');
       return existing;
@@ -121,17 +157,12 @@ export class CommerceTurnService {
       create: {
         ...partition,
         ...key,
-        lineMemberId: context.lineMemberId,
-        conversationId: context.conversationId,
+        ...ownerColumns(owner),
         ...selection,
         input: commerceJson(input),
       },
     });
-    if (
-      turn.lineMemberId !== context.lineMemberId ||
-      turn.conversationId !== context.conversationId ||
-      turn.tenantId !== partition.tenantId
-    )
+    if (turn.tenantId !== partition.tenantId || !turnBelongsTo(turn, owner))
       throw new ForbiddenException('Product turn ownership mismatch');
     return turn;
   }
@@ -242,8 +273,13 @@ export class CommerceTurnService {
         operation.request as unknown as AiGenerateRequest,
         {
           ...context,
-          lineMemberId: lease.turn.lineMemberId,
-          conversationId: lease.turn.conversationId,
+          // Usage rows carry whichever conversation id the turn has; neither
+          // column is a foreign key, so a channel room id is recorded as is.
+          lineMemberId: lease.turn.lineMemberId ?? undefined,
+          conversationId:
+            lease.turn.conversationId ??
+            lease.turn.channelConversationId ??
+            undefined,
           turnId: lease.turn.externalEventId,
         },
         {

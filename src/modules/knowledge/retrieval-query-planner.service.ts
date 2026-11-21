@@ -1,22 +1,23 @@
 import { normalizeText, redactPii } from '../../utils/text.utils';
 import type { ChatContextMessage } from '../../shared/contracts/chat.types';
 import { CLARIFY_MESSAGE } from '../../shared/knowledge/knowledge-routing.constants';
+import {
+  AMBIGUOUS_CONTEXT,
+  FOLLOW_UP,
+  PRIVATE_CONTEXT,
+  SOCIAL_MESSAGE,
+} from './utils/follow-up-patterns';
+import { catalogLexicon } from '../products/search/catalog-fields';
 
 const MAX_HISTORY_MESSAGES = 6;
 const MAX_CONTEXT_CHARACTERS = 160;
 
-const FOLLOW_UP =
-  /อันนี้|อันนั้น|ตัวนี้|ตัวนั้น|เมื่อกี้|อันเดิม|เหมือนเดิม|เหมือนก่อน|โรงแรมนี้|โปรโมชันนี้|โปรโมชั่นนี้|โปรนี้|สินค้านี้|บริการนี้|\b(?:it|this one|that one|same one)\b/iu;
-const AMBIGUOUS_CONTEXT = /(?:กับ|หรือ|ระหว่าง|เทียบ|เปรียบเทียบ)/u;
-const PRIVATE_CONTEXT =
-  /@|\[REDACTED_|(?:ชื่อ|นามสกุล|ที่อยู่|เลขบัญชี|บัญชีธนาคาร|รหัสผ่าน|password|passcode)/iu;
-const SOCIAL_MESSAGE =
-  /^(?:(?:สวัสดี|หวัดดี|ขอบคุณ|โอเค)(?:ครับ|ค่ะ|คะ)?|ครับ|ค่ะ|คะ|hi|hello|thanks|ok|okay)[!. ]*$/iu;
-
-// to tell rag to know about production that user wanna know price
+// for combine data to complete question by load history and make
+// question with history to complete question
 export function resolveRetrievalQuery(
   input: string,
   history: readonly ChatContextMessage[],
+  entityMarkers: readonly string[] = catalogLexicon(null).entityMarkers,
 ): { query: string; missingReference: boolean } {
   const recent = history.slice(-MAX_HISTORY_MESSAGES);
   const lastUser = [...recent]
@@ -53,21 +54,42 @@ export function resolveRetrievalQuery(
 
   if (!FOLLOW_UP.test(input)) return { query: input, missingReference: false };
 
-  const mentions = (text: string) =>
-    [...text.matchAll(/(?:รุ่น|model)\s+([\p{L}\p{M}\p{N}_-]+)/giu)].map(
-      (match) => normalizeText(match[1]),
-    );
-  const explicit = new Set(mentions(input));
+  // "<marker> <name>" pairs for this business, e.g. "รุ่น A" or "เส้นทาง กรุงเทพ".
+  const markerPattern =
+    entityMarkers.length > 0
+      ? new RegExp(
+          `(${entityMarkers.map(escapeRegExp).join('|')})\\s+([\\p{L}\\p{M}\\p{N}_-]+)`,
+          'giu',
+        )
+      : undefined;
+  const mentions = (text: string): { marker: string; name: string }[] =>
+    markerPattern
+      ? [...text.matchAll(markerPattern)].map((match) => ({
+          marker: normalizeText(match[1]),
+          name: normalizeText(match[2]),
+        }))
+      : [];
+
+  const explicit = new Set(mentions(input).map((item) => item.name));
   if (explicit.size === 1) return { query: input, missingReference: false };
   if (explicit.size > 1) return { query: input, missingReference: true };
 
-  const entities = new Set(
-    recent.flatMap((message) => mentions(message.text.slice(0, 1000))),
+  // name -> the marker it was written with, so the rebuilt query keeps the
+  // business's own wording ("รุ่น a", "เส้นทาง กรุงเทพ").
+  const entities = new Map(
+    recent.flatMap((message) =>
+      mentions(message.text.slice(0, 1000)).map(
+        (item) => [item.name, item.marker] as const,
+      ),
+    ),
   );
   if (entities.size > 1) return { query: input, missingReference: true };
   if (entities.size === 1) {
-    const [entity] = entities;
-    return { query: `รุ่น ${entity}\n${input}`, missingReference: false };
+    const [[name, marker]] = entities;
+    return {
+      query: `${marker} ${name}\n${input}`,
+      missingReference: false,
+    };
   }
 
   if (
@@ -78,6 +100,10 @@ export function resolveRetrievalQuery(
     return { query: input, missingReference: true };
   }
   return { query: `${lastUser.text}\n${input}`, missingReference: false };
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
 function safeContext(text: string): boolean {

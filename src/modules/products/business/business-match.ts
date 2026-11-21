@@ -23,6 +23,7 @@ export function validateBusinessFilters(
     const field = fields.find(
       (candidate) =>
         candidate.key === filter.key &&
+        candidate.scope !== 'SLOT' &&
         candidate.status === 'ACTIVE' &&
         candidate.searchable,
     );
@@ -53,6 +54,7 @@ export function matchesBusinessFields(
     fields.find(
       (field) =>
         field.key === key &&
+        field.scope !== 'SLOT' &&
         field.status === 'ACTIVE' &&
         appliesToCategory(field, category),
     );
@@ -92,12 +94,17 @@ export function matchesBusinessFields(
     }
     if (field.type === 'BOOLEAN') return value === filter.value;
     const requested = String(filter.value);
+    const matcher = optionMatcher(field);
+    // A tag matches when it equals the asked value or contains it after
+    // normalizing ("กันน้ำ" is in the tag "กันน้ำ IPX4"), never the reverse.
+    const tagMatches = (item: unknown) => {
+      if (typeof item !== 'string') return false;
+      const stored = matcher.key(item);
+      const asked = matcher.key(requested);
+      return stored === asked || (asked.length > 0 && stored.includes(asked));
+    };
     const matched = Array.isArray(value)
-      ? value.some(
-          (item) =>
-            typeof item === 'string' &&
-            optionMatcher(field).matches(item, requested),
-        )
+      ? value.some(tagMatches)
       : filter.operator === 'CONTAINS' && typeof value === 'string'
         ? value.toLocaleLowerCase().includes(requested.toLocaleLowerCase())
         : optionMatcher(field).matches(value, requested);

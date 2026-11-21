@@ -6,7 +6,7 @@
  *   npm run test:product-audit
  *   PRODUCT_AUDIT_FILTER='^(A|J0[1-3])' npm run test:product-audit
  *
- * Runs only through test/scripts/run-product-ecom-audit.mjs, which creates a
+ * Runs only through test/scripts/run-product-audit.mjs, which creates a
  * disposable PostgreSQL + Redis, applies every migration and seeds the store
  * through the real services (see product-ecom.fixture.ts). Without that
  * runner the suite is skipped, so the offline audit command stays free.
@@ -1832,7 +1832,7 @@ live(`live product e-commerce audit (${RUN})`, () => {
       process.env.DATABASE_URL !== DB_URL
     )
       throw new Error(
-        'Run through test/scripts/run-product-ecom-audit.mjs (disposable database required)',
+        'Run through test/scripts/run-product-audit.mjs (disposable database required)',
       );
     mkdirSync(OUT, { recursive: true });
 

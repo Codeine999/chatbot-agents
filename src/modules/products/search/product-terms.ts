@@ -145,14 +145,18 @@ const QUESTION_TERMS = new Set([
 export function productContentTerms(
   query: string,
   exclude: readonly (string | null | undefined)[] = [],
+  /** The business lexicon's own question words, on top of the shared list. */
+  questionWords: readonly string[] = [],
 ): string[] {
   const excluded = new Set(
     exclude.flatMap((value) => (value ? thaiTerms(value) : [])),
   );
+  const extra = new Set(questionWords.flatMap((word) => thaiTerms(word)));
   return [...new Set(thaiTerms(query))]
     .filter(
       (term) =>
         !QUESTION_TERMS.has(term) &&
+        !extra.has(term) &&
         !FUNCTION_WORDS.has(term) &&
         !excluded.has(term) &&
         !/^\d+$/u.test(term),

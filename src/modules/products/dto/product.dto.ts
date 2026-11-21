@@ -24,6 +24,8 @@ const variantFields = z
   .object({
     sku,
     price: productMoneySchema.nullable().default(null),
+    /** Set = the price is an estimate within price..maxPrice. */
+    maxPrice: productMoneySchema.nullable().default(null),
     meta: variantAttributesSchema.default({}),
     trackStock: z.boolean().default(true),
     currency: z.literal('THB').default('THB'),
@@ -57,6 +59,8 @@ const variantPatchFields = z
   .object({
     sku,
     price: productMoneySchema.nullable(),
+    // null = the price is final again.
+    maxPrice: productMoneySchema.nullable(),
     // Merged into the stored values; null clears a field.
     meta: attributePatchValuesSchema,
     trackStock: z.boolean(),

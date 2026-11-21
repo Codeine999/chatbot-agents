@@ -1,6 +1,7 @@
 import { Prisma } from '../../../generated/prisma/client';
 import { normalizeText } from '../../../utils/text.utils';
 import { catalogFields } from '../search/catalog-fields';
+import { formatPrice, type PriceWording } from '../product-pricing';
 import type {
   ProductEvidence,
   ProductWorkflow,
@@ -28,21 +29,49 @@ function containsPhrase(
   return false;
 }
 
-/** "690.00 บาท" or "690.00–720.00 บาท" across one product's displayed variants. */
+/**
+ * "690.00 บาท" or "690.00–720.00 บาท" across one product's displayed variants
+ * or rounds; an estimate anywhere, or rounds that differ, adds its note.
+ */
 export function productPriceRange(
   evidence: readonly ProductEvidence[],
   productId: string,
+  wording?: PriceWording,
 ): string {
-  const prices = evidence
-    .filter((e) => e.productId === productId && e.price !== null)
-    .map((e) => new Prisma.Decimal(e.price!))
-    .sort((a, b) => a.comparedTo(b));
-  if (!prices.length) return 'ยังไม่ได้ระบุราคา';
-  const [low, high] = [prices[0], prices[prices.length - 1]];
-  return low.eq(high)
-    ? `${low.toFixed(2)} บาท`
-    : `${low.toFixed(2)}–${high.toFixed(2)} บาท`;
+  const rows = evidence.filter(
+    (e) => e.productId === productId && e.price !== null,
+  );
+  if (!rows.length) return 'ยังไม่ได้ระบุราคา';
+  const lows = rows.map((e) => new Prisma.Decimal(e.price!));
+  const highs = rows.map((e) => new Prisma.Decimal(e.maxPrice ?? e.price!));
+  const low = Prisma.Decimal.min(...lows);
+  const high = Prisma.Decimal.max(...highs);
+  const estimate = rows.some(
+    (e) => e.priceNote === 'ESTIMATE' || e.priceNote === 'BY_SLOT_ESTIMATE',
+  );
+  const bySlot =
+    rows.some(
+      (e) => e.priceNote === 'BY_SLOT' || e.priceNote === 'BY_SLOT_ESTIMATE',
+    ) ||
+    (rows.some((e) => e.slot) && !low.eq(high));
+  return formatPrice(
+    {
+      price: low.toFixed(2),
+      maxPrice: low.eq(high) ? null : high.toFixed(2),
+      priceNote: bySlot
+        ? estimate
+          ? 'BY_SLOT_ESTIMATE'
+          : 'BY_SLOT'
+        : estimate
+          ? 'ESTIMATE'
+          : undefined,
+    },
+    wording,
+  );
 }
+
+/** One displayed price, range included: 316 exact and 316-416 are different facts. */
+const priceKey = (e: ProductEvidence) => `${e.price}|${e.maxPrice ?? ''}`;
 
 /**
  * Every product the answer names must carry the facts that were asked:
@@ -68,7 +97,7 @@ export function coversAskedFacts(
     if (field === 'price' && item.price !== null) {
       if (!shownPrices.has(item.productId))
         shownPrices.set(item.productId, new Set());
-      shownPrices.get(item.productId)!.add(item.price);
+      shownPrices.get(item.productId)!.add(priceKey(item));
     }
   }
   const asksDetails =
@@ -92,12 +121,23 @@ export function coversAskedFacts(
           (e) =>
             e.productId === productId &&
             e.price !== null &&
-            !shown.has(e.price),
+            !shown.has(priceKey(e)),
         )
       )
         return false;
     }
     if (asksDetails && ![...productFields].some(isDetail)) return false;
+    // A question narrowed to fields must show each of them (the ones this
+    // product has a value for), not some other detail.
+    for (const key of plan.askFields ?? [])
+      if (
+        evidence.some(
+          (e) =>
+            e.productId === productId && e.details.some((d) => d.key === key),
+        ) &&
+        !productFields.has(`attr.${key}`)
+      )
+        return false;
   }
   return true;
 }

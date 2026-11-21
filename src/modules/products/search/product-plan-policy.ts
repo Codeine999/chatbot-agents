@@ -36,3 +36,19 @@ export function groundStockFilter(
         : 'AVAILABLE',
   };
 }
+
+/**
+ * askFields may only name fields the store lets the model see. A key that is
+ * not (invented, hidden, repeated) is dropped on its own; the plan stays.
+ */
+export function groundAskFields(
+  plan: ProductPlan,
+  askable: readonly { key: string }[],
+): ProductPlan {
+  if (!plan.askFields) return plan;
+  const allowed = new Set(askable.map((f) => f.key));
+  return {
+    ...plan,
+    askFields: [...new Set(plan.askFields.filter((key) => allowed.has(key)))],
+  };
+}

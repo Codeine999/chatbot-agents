@@ -1,0 +1,210 @@
+{
+  "createdAt": "2026-11-19T21:39:03.129Z",
+  "products": [
+    {
+      "key": "PTY-BKK",
+      "productId": "15a43429-a25d-4e1f-9b32-dc221fbd653b",
+      "name": "พัทยา → กรุงเทพฯ",
+      "variants": [
+        {
+          "sku": "PTY-BKK-STD",
+          "variantId": "83072fb6-2bd6-4f54-a0ae-1cb3b5ede6da",
+          "price": "316.00",
+          "slotRows": 12,
+          "bulkResult": [
+            "variantId",
+            "created",
+            "updated"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "BKK-CNX",
+      "productId": "53a3258f-c6a1-4016-89e7-a26960e38b38",
+      "name": "กรุงเทพฯ → เชียงใหม่",
+      "variants": [
+        {
+          "sku": "BKK-CNX-STD",
+          "variantId": "9cccc19b-f171-4da3-894b-9df47c329961",
+          "price": "650.00",
+          "slotRows": 7,
+          "bulkResult": [
+            "variantId",
+            "created",
+            "updated"
+          ]
+        },
+        {
+          "sku": "BKK-CNX-VIP",
+          "variantId": "910b49d6-bcc2-4dc9-86d5-76dae991f787",
+          "price": "990.00",
+          "slotRows": 5,
+          "bulkResult": [
+            "variantId",
+            "created",
+            "updated"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "CNX-BKK",
+      "productId": "2dc3307c-aba0-49c2-b6cc-6b020d2ae539",
+      "name": "เชียงใหม่ → กรุงเทพฯ",
+      "variants": [
+        {
+          "sku": "CNX-BKK-STD",
+          "variantId": "1c61bd02-c13c-495d-964c-59dce9a04737",
+          "price": "650.00",
+          "slotRows": 5,
+          "bulkResult": [
+            "variantId",
+            "created",
+            "updated"
+          ]
+        },
+        {
+          "sku": "CNX-BKK-VIP",
+          "variantId": "f37f6248-a1a0-4b00-ad16-6bf4a4390286",
+          "price": "990.00",
+          "slotRows": 2,
+          "bulkResult": [
+            "variantId",
+            "created",
+            "updated"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "BKK-RYG",
+      "productId": "9ed2da6a-fe74-41d9-8b5b-3baee90f635c",
+      "name": "กรุงเทพฯ → ระยอง",
+      "variants": [
+        {
+          "sku": "BKK-RYG-STD",
+          "variantId": "07b67e70-1b44-4ae6-922e-a86e360fb318",
+          "price": "280.00",
+          "slotRows": 7,
+          "bulkResult": [
+            "variantId",
+            "created",
+            "updated"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "BKK-HHN",
+      "productId": "3ec0697c-66ba-4f91-82e6-cc0cb5f0c0bf",
+      "name": "กรุงเทพฯ → หัวหิน",
+      "variants": [
+        {
+          "sku": "BKK-HHN-STD",
+          "variantId": "aaad5e06-17de-4009-9f70-eb849821c617",
+          "price": "250.00",
+          "slotRows": 7,
+          "bulkResult": [
+            "variantId",
+            "created",
+            "updated"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "BKK-KKC",
+      "productId": "41f27b8e-a391-46b0-b38e-729cf43ba854",
+      "name": "กรุงเทพฯ → ขอนแก่น",
+      "variants": [
+        {
+          "sku": "BKK-KKC-STD",
+          "variantId": "76e3da8c-0a53-4852-ab4e-1af1ea00f5c7",
+          "price": "480.00",
+          "slotRows": 5,
+          "bulkResult": [
+            "variantId",
+            "created",
+            "updated"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "BKK-KCH",
+      "productId": "0fdaeac3-0f79-4f95-b97b-02c177804578",
+      "name": "กรุงเทพฯ → เกาะช้าง",
+      "variants": [
+        {
+          "sku": "BKK-KCH-TRN",
+          "variantId": "16c72c04-fb2c-4eb2-8efa-877761468027",
+          "price": "750.00",
+          "slotRows": 4,
+          "bulkResult": [
+            "variantId",
+            "created",
+            "updated"
+          ]
+        }
+      ]
+    }
+  ],
+  "slots": 54,
+  "knowledge": [
+    {
+      "title": "[TEST] จุดขึ้นรถ",
+      "id": "391f3b0a-35d1-4525-bf17-3f4796872918"
+    },
+    {
+      "title": "[TEST] ช่องทางชำระเงิน",
+      "id": "0c6aac65-430a-4792-ac44-d71623e47e0f"
+    },
+    {
+      "title": "[TEST] สัมภาระ",
+      "id": "222918b1-7a27-4b9a-9ae4-51238b4376cd"
+    }
+  ],
+  "note": "All via admin API",
+  "budget": {
+    "cap": 100,
+    "baseline": {
+      "chat": 540,
+      "embed": 232,
+      "raw": {
+        "reservation": {
+          "chat": 540,
+          "embed": 232
+        },
+        "events": {
+          "chat": 240,
+          "embed": 194
+        }
+      },
+      "at": "2026-11-19T21:44:02.500Z"
+    },
+    "final": {
+      "chat": 638,
+      "embed": 244,
+      "usedChat": 98,
+      "usedEmbed": 12,
+      "raw": {
+        "reservation": {
+          "chat": 638,
+          "embed": 244
+        },
+        "events": {
+          "chat": 338,
+          "embed": 206
+        }
+      },
+      "at": "2026-11-19T21:54:04.736Z"
+    },
+    "stopped": {
+      "at": "P48",
+      "used": 98,
+      "worst": 3,
+      "reason": "LLM budget guard"
+    }
+  }
+}

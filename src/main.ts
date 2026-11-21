@@ -75,25 +75,24 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
 
+  const dashboardOrigins = [
+    'http://localhost:5173',
+    'http://45.144.164.231',
+    'https://keela-agent.online',
+  ];
+  const isDashboardOrigin = (origin: string | undefined) => {
+    const isVercelPreview =
+      origin?.startsWith('https://chatbot-dashboard-r6ac-') &&
+      origin.endsWith('-codeines-projects-0adf5d1d.vercel.app');
+    return !origin || dashboardOrigins.includes(origin) || isVercelPreview;
+  };
+  // A page served by this app itself (Swagger UI at /docs) sends its own
+  // Origin on POST/PATCH. That is same-origin, so CORS has nothing to block.
+  const isSameOrigin = (request: FastifyRequest, origin: string | undefined) =>
+    origin !== undefined &&
+    origin === `${request.protocol}://${request.headers.host}`;
+
   const dashboardCors: FastifyCorsOptions = {
-    origin: (origin, callback) => {
-      const allowedOrigins = [
-        'http://localhost:5173',
-        'http://45.144.164.231',
-        'https://keela-agent.online',
-      ];
-
-      const isVercelPreview =
-        origin?.startsWith('https://chatbot-dashboard-r6ac-') &&
-        origin.endsWith('-codeines-projects-0adf5d1d.vercel.app');
-
-      if (!origin || allowedOrigins.includes(origin) || isVercelPreview) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error(`Not allowed by CORS: ${origin}`), false);
-    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
@@ -113,11 +112,18 @@ async function bootstrap() {
     credentials: false,
   };
   app.enableCors({
-    delegator: (request: FastifyRequest, callback) =>
-      callback(
-        null,
-        request.url.startsWith(APP_API_PREFIX) ? appCors : dashboardCors,
-      ),
+    delegator: (request: FastifyRequest, callback) => {
+      if (request.url.startsWith(APP_API_PREFIX))
+        return callback(null, appCors);
+      callback(null, {
+        ...dashboardCors,
+        origin: (origin, done) => {
+          if (isDashboardOrigin(origin) || isSameOrigin(request, origin))
+            return done(null, true);
+          done(new Error(`Not allowed by CORS: ${origin}`), false);
+        },
+      });
+    },
   });
 
   app.useGlobalPipes(new ZodValidationPipe());

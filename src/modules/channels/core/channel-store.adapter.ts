@@ -71,7 +71,8 @@ export class ChannelStoreAdapter implements ChannelAdapter<
       kind: 'text',
       contextUserText: event.text,
       // Only these fields reach the core: platform metadata and display names
-      // stay out of every prompt. No lineMemberId, so product RAG is skipped.
+      // stay out of every prompt. Product RAG finds the channel from the
+      // prefixed userId and the room from conversationId (no LINE member).
       request: {
         userId: channelUserId(event.channel, event.contactId),
         conversationId: thread.conversationId,
