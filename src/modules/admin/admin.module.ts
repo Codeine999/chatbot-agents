@@ -29,6 +29,7 @@ import { AdminUserViewModule } from './userview/admin-userview.module';
 import { MessagingModule } from '../conversation/message/messaging.module';
 import { AdminChatPipelineController } from './pipeline/admin-chat-pipeline.controller';
 import { KnowledgeAnswerModule } from './dev/answer/knowledge-answer.module';
+import { PresenceModule } from './presence/presence.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { KnowledgeAnswerModule } from './dev/answer/knowledge-answer.module';
     AdminUserViewModule,
     KnowledgeAnswerModule,
     MessagingModule,
+    PresenceModule,
   ],
   controllers: [
     AdminController,

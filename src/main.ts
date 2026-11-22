@@ -31,11 +31,7 @@ async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({
-      // Multipart files are limited to 5MB below; leave room for form fields
-      // and MIME boundaries so Fastify does not reject them at its 1MB default.
       bodyLimit: ADMIN_PROFILE_IMAGE_MAX_BYTES + 1024 * 1024,
-      // Number of proxies in front of the app (production: nginx = 1). Never
-      // `true`: that would trust a client-supplied X-Forwarded-For.
       trustProxy: Number(process.env.TRUST_PROXY_HOPS ?? 0),
     }),
     { logger: new AppLogger({ timestamp: true }) },
@@ -111,6 +107,7 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: false,
   };
+
   app.enableCors({
     delegator: (request: FastifyRequest, callback) => {
       if (request.url.startsWith(APP_API_PREFIX))

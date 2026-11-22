@@ -30,7 +30,8 @@
     "seed:credit-rate": "nest build && node dist/src/scripts/seed-credit-exchange-rate.js",
     "seed:ai-pricing": "nest build && node dist/src/scripts/seed-ai-pricing.js",
     "seed:setup": "nest build && node dist/src/scripts/seed-credit-exchange-rate.js && node dist/src/scripts/seed-ai-pricing.js",
-    "seed:demo-catalog": "nest build && node dist/src/scripts/seed-demo-catalog.js"
+    "seed:demo-catalog": "nest build && node dist/src/scripts/seed-demo-catalog.js",
+    "seed:mock-line-rooms": "nest build && node dist/src/scripts/seed-mock-line-rooms.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1139.0",

@@ -8,14 +8,11 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { AdminJwtService } from '../auth/admin-jwt.service';
+import type { AuthenticatedAdmin } from '../../../shared/guards/admin-auth.types';
+import { ADMIN_SOCKET_GATEWAY_OPTIONS } from '../admin-socket.options';
 import type { AdminNotification } from './types/notification.type';
 
-@WebSocketGateway({
-  namespace: 'admin',
-  cors: {
-    origin: '*',
-  },
-})
+@WebSocketGateway(ADMIN_SOCKET_GATEWAY_OPTIONS)
 export class NotificationGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
@@ -72,6 +69,7 @@ export class NotificationGateway
         return;
       }
 
+      (client.data as { admin?: AuthenticatedAdmin }).admin = admin;
       next();
     } catch {
       next(new Error('unauthorized'));
