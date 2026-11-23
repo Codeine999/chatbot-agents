@@ -1,7 +1,7 @@
 /** Legacy admin diagnostic bands only; customer routing never uses cosine DIRECT. */
 export const DIRECT_IMMEDIALY = 0.95;
 export const MIN_CONTEXT_SCORE = 0.6;
-export const MAX_RAG_CONTEXTS = 3;
+export const MAX_RAG_CONTEXTS = 4;
 
 /** Internal retrieval limits and score conversion live here to avoid drift. */
 export const MAX_RETRIEVAL_CANDIDATES = 20;

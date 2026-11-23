@@ -29,6 +29,7 @@ import { filterByPlace } from '../../shared/knowledge/knowledge-places';
 import { MicroKnowledgeService } from './micro-knowledge.service';
 import { SemanticSearchService } from './semantic-search.service';
 import { resolveRetrievalQuery } from './retrieval-query-planner.service';
+import { FOLLOW_UP } from './utils/follow-up-patterns';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CommerceScopeService } from '../commerce/commerce-scope.service';
 import {
@@ -56,6 +57,7 @@ import {
 
 /** Enough rows to explain the winner without burying the flow. */
 const MAX_LOGGED_CANDIDATES = 5;
+const ENTITY_MARKERS_TTL_MS = 5 * 60_000;
 
 type RetrievalContext = LineAiUsageContext &
   Readonly<{
@@ -73,6 +75,10 @@ export class KnowledgeRetrievalService {
   private readonly lexicalNoiseFloor: number;
   private readonly lexicalMinCoverage: number;
   private readonly ragMinVectorSimilarity: number;
+  private cachedEntityMarkers: {
+    value: readonly string[];
+    expiresAt: number;
+  } | null = null;
 
   constructor(
     private readonly patterns: AnswerPatternService,
@@ -164,16 +170,26 @@ export class KnowledgeRetrievalService {
 
   /**
    * Business wording that marks an item name ("รุ่น", "เส้นทาง", "หลักสูตร").
-   * A deployment without a readable company falls back to ECOMMERCE, as the
-   * catalog does everywhere else.
+   * Cached briefly in memory and only loaded on follow-up messages so normal
+   * turns and DIRECT cache hits stay zero-DB. A deployment without a readable
+   * company falls back to ECOMMERCE, as the catalog does everywhere else.
    */
   private async entityMarkers(): Promise<readonly string[]> {
+    const now = Date.now();
+    if (this.cachedEntityMarkers && now < this.cachedEntityMarkers.expiresAt) {
+      return this.cachedEntityMarkers.value;
+    }
     const fallback = catalogLexicon(null).entityMarkers;
     if (!this.scopes || !this.prisma) return fallback;
     try {
       const scope = await this.scopes.forLineDeployment();
       const catalog = await loadCatalogContext(this.prisma, scope);
-      return catalog.lexicon.entityMarkers;
+      const markers = catalog.lexicon.entityMarkers;
+      this.cachedEntityMarkers = {
+        value: markers,
+        expiresAt: now + ENTITY_MARKERS_TTL_MS,
+      };
+      return markers;
     } catch (error) {
       this.logger.warn(
         `business wording unavailable, using default: ${
@@ -188,10 +204,11 @@ export class KnowledgeRetrievalService {
     message: string,
     context: RetrievalContext = {},
   ): Promise<KnowledgeRetrievalResult> {
+    const redacted = redactPii(message);
     const resolved = resolveRetrievalQuery(
-      redactPii(message),
+      redacted,
       context.recentMessages ?? [],
-      await this.entityMarkers(),
+      FOLLOW_UP.test(redacted) ? await this.entityMarkers() : undefined,
     );
 
     if (resolved.missingReference) {
@@ -209,7 +226,7 @@ export class KnowledgeRetrievalService {
       // PII redaction alone also changes the text; only history rewrites count.
       this.decisionTrace?.note('retrieval', {
         query,
-        rewritten: query !== redactPii(message).trim(),
+        rewritten: query !== redacted.trim(),
       });
       this.logger.debug(
         logBlock('Retrieval', [
@@ -387,7 +404,7 @@ export class KnowledgeRetrievalService {
       item.metadata?.tenantId === this.scope.tenantId &&
       item.metadata?.language === this.scope.language &&
       Boolean(item.answer?.trim()) &&
-      // isUsableKnowledge(item) &&
+      isUsableKnowledge(item) &&
       Number.isFinite(item.score)
     );
   }
