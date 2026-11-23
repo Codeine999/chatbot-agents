@@ -14,6 +14,18 @@ const decide = (
   extra: Partial<PhaticContext> = {},
 ) => decidePhatic(kind, { meta, handoffPending: false, now: NOW, ...extra });
 
+const KINDS = [
+  'PARTICLE_ONLY',
+  'ACK',
+  'THANKS',
+  'CLOSING',
+  'PING',
+  'LAUGH',
+] as const;
+
+const GENERAL = { reply: 'GENERAL' };
+const SILENT = { reply: 'SILENT' };
+
 describe('decidePhatic', () => {
   describe('row 0: the assistant asked and is waiting', () => {
     it('steps aside while the question is recent', () => {
@@ -29,20 +41,16 @@ describe('decidePhatic', () => {
       expect(
         decide(
           'THANKS',
-          {
-            lastAct: 'ASKED',
-            lastActAt: ago(10),
-            handoffNoticeAt: ago(10),
-          },
+          { lastAct: 'ASKED', lastActAt: ago(10), handoffNoticeAt: ago(10) },
           { handoffPending: true },
         ),
       ).toBeNull();
     });
 
-    it('lets an old question go', () => {
-      expect(
-        decide('ACK', { lastAct: 'ASKED', lastActAt: ago(1801) }),
-      ).toMatchObject({ reply: 'ACK' });
+    it('lets an old question go to general chat', () => {
+      expect(decide('ACK', { lastAct: 'ASKED', lastActAt: ago(1801) })).toEqual(
+        GENERAL,
+      );
     });
   });
 
@@ -54,7 +62,7 @@ describe('decidePhatic', () => {
           lastActAt: ago(300),
           lastAdminAt: ago(60),
         }),
-      ).toEqual({ reply: 'SILENT' });
+      ).toEqual(SILENT);
     });
 
     it('does not apply when the assistant spoke after the admin', () => {
@@ -64,13 +72,11 @@ describe('decidePhatic', () => {
           lastActAt: ago(30),
           lastAdminAt: ago(60),
         }),
-      ).toMatchObject({ reply: 'ACK' });
+      ).toEqual(GENERAL);
     });
 
     it('does not apply once the admin window has passed', () => {
-      expect(decide('ACK', { lastAdminAt: ago(1801) })).toMatchObject({
-        reply: 'ACK',
-      });
+      expect(decide('ACK', { lastAdminAt: ago(1801) })).toEqual(GENERAL);
     });
 
     it('is overridden by an open question from the assistant', () => {
@@ -85,17 +91,29 @@ describe('decidePhatic', () => {
   });
 
   describe('row 2: an acknowledgement was just answered', () => {
-    it.each([
-      'PARTICLE_ONLY',
-      'ACK',
-      'THANKS',
-      'CLOSING',
-      'PING',
-      'LAUGH',
-    ] as const)('%s stays silent', (kind) => {
-      expect(decide(kind, { lastAct: 'ACKED', lastActAt: ago(5) })).toEqual({
-        reply: 'SILENT',
-      });
+    it.each(KINDS)('%s stays silent', (kind) => {
+      expect(decide(kind, { lastAct: 'ACKED', lastActAt: ago(5) })).toEqual(
+        SILENT,
+      );
+    });
+
+    it('stays silent up to the recent window, boundary included', () => {
+      expect(decide('ACK', { lastAct: 'ACKED', lastActAt: ago(1800) })).toEqual(
+        SILENT,
+      );
+    });
+
+    it('answers again once the window has passed: TurnMeta lives a day', () => {
+      expect(
+        decide('PARTICLE_ONLY', { lastAct: 'ACKED', lastActAt: ago(1801) }),
+      ).toEqual(GENERAL);
+      expect(
+        decide('PING', { lastAct: 'ACKED', lastActAt: ago(5 * 3600) }),
+      ).toEqual(GENERAL);
+    });
+
+    it('does not trust an acknowledgement with no time', () => {
+      expect(decide('ACK', { lastAct: 'ACKED' })).toEqual(GENERAL);
     });
   });
 
@@ -114,78 +132,69 @@ describe('decidePhatic', () => {
       ] as const;
 
     it('tells the customer staff were notified, after the cooldown', () => {
-      const [meta, extra] = waiting(6 * 3600);
-
-      expect(decide('PARTICLE_ONLY', meta, extra)).toEqual({
+      expect(decide('PARTICLE_ONLY', ...waiting(6 * 3600))).toEqual({
         reply: 'HANDOFF_WAITING',
-        act: 'HANDOFF_NOTICE',
       });
     });
 
     it('stays silent inside the cooldown, boundary included', () => {
-      const [meta, extra] = waiting(900, 'HANDOFF_NOTICE');
-
-      expect(decide('ACK', meta, extra)).toEqual({ reply: 'SILENT' });
-      expect(decide('PING', ...waiting(901, 'HANDOFF_NOTICE'))).toMatchObject({
+      expect(decide('ACK', ...waiting(900, 'HANDOFF_NOTICE'))).toEqual(SILENT);
+      expect(decide('PING', ...waiting(901, 'HANDOFF_NOTICE'))).toEqual({
         reply: 'HANDOFF_WAITING',
       });
     });
 
-    it('thanks and goodbyes get the thanks reply, not a nudge', () => {
-      expect(decide('THANKS', ...waiting(30, 'HANDOFF_NOTICE'))).toEqual({
-        reply: 'THANKS',
-        act: 'ACKED',
+    it.each(KINDS)('%s is handled by code while waiting', (kind) => {
+      expect(decide(kind, ...waiting(30, 'HANDOFF_NOTICE'))).toEqual(SILENT);
+      expect(decide(kind, ...waiting(7200))).toEqual({
+        reply: 'HANDOFF_WAITING',
       });
-      expect(decide('CLOSING', ...waiting(7200))).toEqual({
-        reply: 'THANKS',
-        act: 'ACKED',
-      });
+    });
+
+    it('a photo sent to staff counts: only the notice time is known', () => {
+      expect(
+        decide(
+          'PING',
+          {
+            lastAct: 'ANSWERED',
+            lastActAt: ago(3600),
+            handoffNoticeAt: ago(60),
+          },
+          { handoffPending: true },
+        ),
+      ).toEqual(SILENT);
     });
 
     it('does not apply to a room that is no longer waiting', () => {
       const [meta] = waiting(3600);
 
-      expect(decide('ACK', meta, { handoffPending: false })).toMatchObject({
-        reply: 'ACK',
-      });
+      expect(decide('ACK', meta, { handoffPending: false })).toEqual(GENERAL);
     });
 
     it('does not vouch for staff when the notice is too old or unknown', () => {
-      expect(decide('ACK', ...waiting(86401))).toMatchObject({ reply: 'ACK' });
+      expect(decide('ACK', ...waiting(86401))).toEqual(GENERAL);
       expect(
         decide('ACK', { lastAct: 'ANSWERED' }, { handoffPending: true }),
-      ).toMatchObject({ reply: 'ACK' });
+      ).toEqual(GENERAL);
     });
 
     it('a notice exactly at the maximum age still counts', () => {
-      expect(decide('ACK', ...waiting(86400))).toMatchObject({
+      expect(decide('ACK', ...waiting(86400))).toEqual({
         reply: 'HANDOFF_WAITING',
       });
     });
   });
 
-  describe('row 4: everything else', () => {
-    it.each(['PARTICLE_ONLY', 'ACK', 'PING', 'LAUGH'] as const)(
-      '%s gets the acknowledgement',
-      (kind) => {
-        expect(
-          decide(kind, { lastAct: 'ANSWERED', lastActAt: ago(20) }),
-        ).toEqual({
-          reply: 'ACK',
-          act: 'ACKED',
-        });
-      },
-    );
+  describe('row 4: everything else goes to general chat', () => {
+    it.each(KINDS)('%s after an answer', (kind) => {
+      expect(decide(kind, { lastAct: 'ANSWERED', lastActAt: ago(20) })).toEqual(
+        GENERAL,
+      );
+    });
 
-    it.each(['THANKS', 'CLOSING'] as const)(
-      '%s gets the thanks reply',
-      (kind) => {
-        expect(decide(kind)).toEqual({ reply: 'THANKS', act: 'ACKED' });
-      },
-    );
-
-    it('answers an empty room (first message after a long gap) without a greeting reply', () => {
-      expect(decide('PARTICLE_ONLY')).toEqual({ reply: 'ACK', act: 'ACKED' });
+    it('an empty room (a first "ครับ" or "ฮัลโหล")', () => {
+      expect(decide('PARTICLE_ONLY')).toEqual(GENERAL);
+      expect(decide('PING')).toEqual(GENERAL);
     });
   });
 
@@ -202,38 +211,44 @@ describe('decidePhatic', () => {
         },
         { handoffPending: true, limits },
       ),
-    ).toMatchObject({ reply: 'HANDOFF_WAITING' });
+    ).toEqual({ reply: 'HANDOFF_WAITING' });
+    expect(
+      decide(
+        'ACK',
+        { lastAct: 'ACKED', lastActAt: ago(120) },
+        { limits: { ...DEFAULT_PHATIC_LIMITS, recentWindowSec: 60 } },
+      ),
+    ).toEqual(GENERAL);
   });
 
   describe('the real conversation of 2026-11-23', () => {
     it('"ครัค่ะ" is told staff were notified, then "ครับ" gets nothing', () => {
       const handoffAt = ago(6 * 3600 + 11 * 60);
       // 11:38 handoff, 11:38 timetable answer, 17:49 "ครัค่ะ"
-      const first = decide(
-        'PARTICLE_ONLY',
-        {
-          lastAct: 'ANSWERED',
-          lastActAt: handoffAt + 1000,
-          handoffNoticeAt: handoffAt,
-        },
-        { handoffPending: true },
-      );
-      expect(first).toEqual({
-        reply: 'HANDOFF_WAITING',
-        act: 'HANDOFF_NOTICE',
-      });
+      expect(
+        decide(
+          'PARTICLE_ONLY',
+          {
+            lastAct: 'ANSWERED',
+            lastActAt: handoffAt + 1000,
+            handoffNoticeAt: handoffAt,
+          },
+          { handoffPending: true },
+        ),
+      ).toEqual({ reply: 'HANDOFF_WAITING' });
 
       // The reply was sent now; "ครับ" arrives a moment later.
-      const second = decide(
-        'PARTICLE_ONLY',
-        {
-          lastAct: 'HANDOFF_NOTICE',
-          lastActAt: ago(2),
-          handoffNoticeAt: ago(2),
-        },
-        { handoffPending: true },
-      );
-      expect(second).toEqual({ reply: 'SILENT' });
+      expect(
+        decide(
+          'PARTICLE_ONLY',
+          {
+            lastAct: 'HANDOFF_NOTICE',
+            lastActAt: ago(2),
+            handoffNoticeAt: ago(2),
+          },
+          { handoffPending: true },
+        ),
+      ).toEqual(SILENT);
     });
   });
 });

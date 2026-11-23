@@ -35,6 +35,7 @@ import { LineHandoffHandler } from '../../channels/line/handoff/line-handoff.han
 import { ReplyTemplateService } from '../../../shared/templates/answer-template.service';
 import { StickerIntentService } from '../intent/sticker-intent.service';
 import { TurnMetaStore } from '../state/turn-meta.store';
+import type { DecisionTraceService } from '../../decision-log/decision-trace.service';
 import type { ChatResponse } from '../../../shared/contracts/chat.types';
 
 export type VectorRow = {
@@ -67,6 +68,8 @@ export type HarnessOptions = {
   generations?: string[];
   aiSetting?: Record<string, unknown> | null;
   budgetAllows?: boolean;
+  /** Receives what a turn reports; absent means no trace, as in most audits. */
+  decisionTrace?: DecisionTraceService;
 };
 
 export const pattern = (
@@ -346,7 +349,7 @@ export function buildHarness(options: HarnessOptions = {}) {
     new StickerIntentService(),
     menuCache,
     config,
-    undefined,
+    options.decisionTrace,
     turnMeta,
   );
 

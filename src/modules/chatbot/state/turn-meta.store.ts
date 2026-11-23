@@ -91,6 +91,27 @@ export class TurnMetaStore {
     }
   }
 
+  /**
+   * Staff were requested without a reply being sent (a photo goes straight to
+   * an admin), so no delivery will record it. Only the notice time is set:
+   * the assistant did not say anything, so its last act stays as it was.
+   */
+  async markHandoffNotice(conversationId: string): Promise<void> {
+    if (!this.enabled || !conversationId) return;
+
+    const key = this.key(conversationId);
+    try {
+      await this.run(
+        this.redis
+          .multi()
+          .hset(key, { handoffNoticeAt: String(Date.now()) })
+          .expire(key, this.ttlSec),
+      );
+    } catch (error) {
+      this.warn('markHandoffNotice', conversationId, error);
+    }
+  }
+
   /** An admin message was accepted by the platform. */
   async markAdmin(conversationId: string): Promise<void> {
     if (!this.enabled || !conversationId) return;

@@ -1,7 +1,4 @@
-import type {
-  AssistantAct,
-  SmallTalkReply,
-} from '../../../../shared/contracts/chat.types';
+import type { SmallTalkReply } from '../../../../shared/contracts/chat.types';
 import type { TurnMeta } from '../../state/turn-meta.store';
 import type { PhaticKind } from './phatic';
 
@@ -24,11 +21,7 @@ export const DEFAULT_PHATIC_LIMITS: PhaticLimits = {
   handoffWaitingMaxAgeSec: 86400,
 };
 
-export type SmallTalkDecision = Readonly<{
-  reply: SmallTalkReply;
-  /** What to remember about this reply; none when nothing is sent. */
-  act?: AssistantAct;
-}>;
+export type SmallTalkDecision = Readonly<{ reply: SmallTalkReply }>;
 
 export type PhaticContext = Readonly<{
   meta: TurnMeta;
@@ -41,45 +34,27 @@ export type PhaticContext = Readonly<{
 
 const SILENT: SmallTalkDecision = { reply: 'SILENT' };
 
-/** What a sent reply counts as in TurnMeta. Silence sends nothing, so nothing is kept. */
-export function actOfSmallTalk(
-  reply: SmallTalkReply,
-): AssistantAct | undefined {
-  switch (reply) {
-    case 'ACK':
-    case 'THANKS':
-      return 'ACKED';
-    case 'HANDOFF_WAITING':
-      return 'HANDOFF_NOTICE';
-    case 'SILENT':
-      return undefined;
-  }
-}
-
 /**
  * What to do with a bare acknowledgement, given what happened before it.
  * Null means "not mine": the message answers something and takes the normal
  * route. The first row that applies wins.
  *
- * A reply here is never a greeting and never carries content; staying silent
- * is only ever chosen for a message that had none.
+ * Code decides only where it is surer than a model: an admin's conversation,
+ * a room waiting for staff, and a repeat of an acknowledgement. Everything
+ * else goes to general chat, which reads the history (one call).
  */
 export function decidePhatic(
-  kind: PhaticKind,
+  _kind: PhaticKind,
   context: PhaticContext,
 ): SmallTalkDecision | null {
   const { meta, handoffPending, now } = context;
   const limits = context.limits ?? DEFAULT_PHATIC_LIMITS;
   const ageSec = (at: number) => (now - at) / 1000;
+  const recent = (at: number | undefined) =>
+    at !== undefined && ageSec(at) <= limits.recentWindowSec;
 
   // 0. The assistant asked and is waiting: this is the answer, not small talk.
-  if (
-    meta.lastAct === 'ASKED' &&
-    meta.lastActAt !== undefined &&
-    ageSec(meta.lastActAt) <= limits.recentWindowSec
-  ) {
-    return null;
-  }
+  if (meta.lastAct === 'ASKED' && recent(meta.lastActAt)) return null;
 
   // 1. An admin spoke last and recently: the message is for them.
   if (
@@ -90,10 +65,9 @@ export function decidePhatic(
     return SILENT;
   }
 
-  // 2. Never answer an acknowledgement of an acknowledgement.
-  if (meta.lastAct === 'ACKED') return SILENT;
-
-  const closing = kind === 'THANKS' || kind === 'CLOSING';
+  // 2. Never answer an acknowledgement of an acknowledgement, but only while
+  //    it is recent: TurnMeta lives a day and a customer may come back.
+  if (meta.lastAct === 'ACKED' && recent(meta.lastActAt)) return SILENT;
 
   // 3. Waiting for staff: say so once per cooldown, never invent progress.
   if (
@@ -101,17 +75,11 @@ export function decidePhatic(
     meta.handoffNoticeAt !== undefined &&
     ageSec(meta.handoffNoticeAt) <= limits.handoffWaitingMaxAgeSec
   ) {
-    if (closing) return reply('THANKS');
-    if (ageSec(meta.handoffNoticeAt) <= limits.handoffPingCooldownSec) {
-      return SILENT;
-    }
-    return reply('HANDOFF_WAITING');
+    return ageSec(meta.handoffNoticeAt) <= limits.handoffPingCooldownSec
+      ? SILENT
+      : { reply: 'HANDOFF_WAITING' };
   }
 
-  // 4. Just answered, long idle, or a waiting room too old to vouch for.
-  return reply(closing ? 'THANKS' : 'ACK');
-}
-
-function reply(kind: Exclude<SmallTalkReply, 'SILENT'>): SmallTalkDecision {
-  return { reply: kind, act: actOfSmallTalk(kind) };
+  // 4. Anything else: general chat answers it in context.
+  return { reply: 'GENERAL' };
 }

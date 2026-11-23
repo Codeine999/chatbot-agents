@@ -98,20 +98,9 @@ export class ReplyTemplateService {
     return 'รับทราบค่ะ เดี๋ยวแอดมินจะเข้ามาดูแลให้นะคะ';
   }
 
-  /**
-   * Replies to a bare acknowledgement. None greets, none carries a fact, and
-   * all use the particle the assistant is configured to keep.
-   */
+  /** Said to a waiting customer's nudge: no greeting, no fact, no promise of a time. */
   handoffWaiting(particle: PoliteParticle = 'ค่ะ'): string {
     return `รับทราบ${particle} ตอนนี้แจ้งเจ้าหน้าที่ไว้แล้ว จะรีบเข้ามาตอบในแชทนี้โดยเร็วที่สุดนะ${tail(particle)}`;
-  }
-
-  ack(particle: PoliteParticle = 'ค่ะ'): string {
-    return `รับทราบ${particle} หากต้องการสอบถามข้อมูลเพิ่มเติม พิมพ์รายละเอียดมาได้เลยนะ${tail(particle)}`;
-  }
-
-  thanks(particle: PoliteParticle = 'ค่ะ'): string {
-    return `ยินดี${particle} หากมีอะไรให้ช่วยเพิ่มเติม ทักมาได้เลยนะ${tail(particle)}`;
   }
 
   stickerGreeting(): string {

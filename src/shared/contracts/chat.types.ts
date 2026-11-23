@@ -109,12 +109,15 @@ export type RouteDecision = {
   fallbackReason?: RetrievalFallbackReason;
   /** Set by RICH_MENU_REPLY: the tenant-authored answer to send verbatim. */
   richMenuReply?: { key: string; label: string; replyText: string };
-  /** Set by SMALL_TALK_REPLY: which canned reply to send, or SILENT for none. */
+  /**
+   * Set by SMALL_TALK_REPLY: the waiting notice, silence, or GENERAL (one
+   * general-chat call with the history, no retrieval and no classifier).
+   */
   smallTalk?: { reply: SmallTalkReply; kind: PhaticKind };
 };
 
-/** A bare acknowledgement answered without any retrieval or model call. */
-export type SmallTalkReply = 'ACK' | 'THANKS' | 'HANDOFF_WAITING' | 'SILENT';
+/** A bare acknowledgement answered without retrieval or the classifier. */
+export type SmallTalkReply = 'HANDOFF_WAITING' | 'SILENT' | 'GENERAL';
 
 export type ChatContextRole = 'user' | 'assistant';
 

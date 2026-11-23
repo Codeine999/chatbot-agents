@@ -90,7 +90,7 @@ const THANKS = [
 
 const CLOSINGS = ['บาย', 'บ๊ายบาย', 'แค่นี้ก่อน', 'แค่นี้แหละ'] as const;
 
-/** Contain "ไหม" on purpose: matched before the question-word blocklist. */
+/** Contain "ไหม" on purpose: matched before the question-word blocklist and the "?" check. */
 const PINGS = ['ฮัลโหล', 'hello', 'ยังอยู่ไหม', 'มีใครอยู่ไหม'] as const;
 
 /**
@@ -202,7 +202,9 @@ export function detectPhatic(text: string): { kind: PhaticKind } | null {
     if (emoji.includes('🙏')) return { kind: 'THANKS' };
     return emoji.length ? { kind: 'ACK' } : null;
   }
-  if (hasQuestionMark) return null;
+  // "ยังอยู่ไหม?", "ฮัลโหล?": a nudge is still a nudge with a question mark;
+  // any other "?" makes the message a question.
+  if (hasQuestionMark) return isPingOnly(letters) ? { kind: 'PING' } : null;
 
   // 5. stretched letters are shortened, on a copy used only for matching.
   //    The message is tried as typed first: collapsing would break a real
@@ -222,6 +224,19 @@ export function detectPhatic(text: string): { kind: PhaticKind } | null {
     categories.includes(category),
   );
   return kind ? { kind: kind[1] } : null;
+}
+
+/** Only nudge phrases and particles ("ยังอยู่ไหมคะ", "ฮัลโหลครับ"). */
+function isPingOnly(letters: string): boolean {
+  const categories =
+    segment(letters, RAW_ENTRIES) ??
+    segment(collapse(letters), COLLAPSED_ENTRIES);
+  return (
+    !!categories?.includes('PING') &&
+    categories.every(
+      (category) => category === 'PING' || category === 'PARTICLE',
+    )
+  );
 }
 
 function hasQuestionWord(text: string): boolean {

@@ -16,7 +16,10 @@ import {
   KnowledgeRetrievalResult,
   StickerChatRequest,
   AiAnswerResult,
+  ChatContextMessage,
+  SmallTalkReply,
 } from '../../shared/contracts/chat.types';
+import type { LineAiUsageContext } from '../usage/billing/ai-usage.types';
 import { StickerIntentService } from './intent/sticker-intent.service';
 import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
 import { logBlock, logSafeText } from '../../utils/text.utils';
@@ -27,7 +30,6 @@ import { isCancelKeyword } from './intent/utils/cancel-keyword';
 import { DecisionTraceService } from '../decision-log/decision-trace.service';
 import { CHANNEL_KINDS } from '../../shared/channel/channel-kinds';
 import { TurnMetaStore, askedTextOf } from './state/turn-meta.store';
-import { actOfSmallTalk } from './intent/utils/phatic-policy';
 
 @Injectable()
 export class ChatbotService {
@@ -257,7 +259,10 @@ export class ChatbotService {
         );
 
       case 'SMALL_TALK_REPLY':
-        return this.smallTalkResponse(decision.smallTalk?.reply);
+        return this.smallTalkResponse(decision.smallTalk?.reply, input, {
+          ...usage,
+          recentMessages,
+        });
 
       case 'ANSWER_KNOWLEDGE': {
         const result = await this.aiChatService.answerKnowledge(input, {
@@ -345,7 +350,14 @@ export class ChatbotService {
     // only when it was not already waiting) and the bot says nothing.
     this.decisionTrace?.handoff('IMAGE');
     this.decisionTrace?.answer({ mode: 'IMAGE_HANDOFF' });
-    await this.userSessionService.requestAdmin(request.userId);
+    const requested = await this.userSessionService.requestAdmin(
+      request.userId,
+    );
+    // Nothing is sent, so no delivery records the handoff: note it here, or a
+    // "ครับ" / "ยังอยู่ไหม" after a slip would not know staff were asked.
+    if (requested !== 'NO_ROOM' && request.conversationId) {
+      await this.turnMeta?.markHandoffNotice(request.conversationId);
+    }
     return this.response('', 'SYSTEM', 'CLEAR');
   }
 
@@ -422,23 +434,54 @@ export class ChatbotService {
     };
   }
 
-  /** A bare acknowledgement: a short template, or nothing at all. */
+  /**
+   * A bare acknowledgement: silence, the waiting notice (both without a
+   * model), or one general-chat call that reads the history. No retrieval and
+   * no classifier run for it either way.
+   */
   private async smallTalkResponse(
-    reply: 'ACK' | 'THANKS' | 'HANDOFF_WAITING' | 'SILENT' = 'SILENT',
+    reply: SmallTalkReply = 'SILENT',
+    input: string,
+    context: LineAiUsageContext & {
+      userId: string;
+      recentMessages: readonly ChatContextMessage[];
+    },
   ): Promise<ChatResponse> {
     if (reply === 'SILENT') {
       this.decisionTrace?.answer({ mode: 'SMALL_TALK_SILENT' });
       return this.response('', 'RULE', 'EXCLUDE');
     }
 
-    const particle = await this.aiChatService.politeParticle();
-    const text = {
-      ACK: this.replyTemplateService.ack(particle),
-      THANKS: this.replyTemplateService.thanks(particle),
-      HANDOFF_WAITING: this.replyTemplateService.handoffWaiting(particle),
-    }[reply];
-    this.decisionTrace?.answer({ mode: 'SMALL_TALK' });
-    return this.response(text, 'RULE', 'EXCLUDE', actOfSmallTalk(reply));
+    if (reply === 'HANDOFF_WAITING') {
+      const particle = await this.aiChatService.politeParticle();
+      this.decisionTrace?.answer({ mode: 'SMALL_TALK' });
+      return this.response(
+        this.replyTemplateService.handoffWaiting(particle),
+        'RULE',
+        'EXCLUDE',
+        'HANDOFF_NOTICE',
+      );
+    }
+
+    const hasHistory = context.recentMessages.length > 0;
+    this.decisionTrace?.note('answer', {
+      phatic: true,
+      skipped: ['retrieval', 'classifier'],
+    });
+    const result = await this.aiChatService.answerGeneral(input, context);
+    const response = await this.aiResponse(
+      result,
+      'AI',
+      context.userId,
+      // In a conversation it only acknowledges, so a second "ครับ" right after
+      // is left alone; in a new room it opens the conversation.
+      hasHistory ? 'ACKED' : 'GREETED',
+    );
+    if (result.isFallback) return response;
+
+    this.decisionTrace?.answer({ mode: 'PHATIC_GENERAL' });
+    // "โอเคครับ" must not push the topic out of the three-turn context.
+    return hasHistory ? { ...response, contextPolicy: 'EXCLUDE' } : response;
   }
 
   /** The product answer is a question back to the customer, not information. */

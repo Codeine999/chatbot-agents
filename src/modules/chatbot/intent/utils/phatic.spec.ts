@@ -51,6 +51,13 @@ describe('detectPhatic', () => {
       ['มีใครอยู่ไหมครับ', 'PING'],
       ['ฮัลโหล', 'PING'],
       ['hellooo', 'PING'],
+      // a nudge with a question mark is still a nudge
+      ['ยังอยู่ไหม?', 'PING'],
+      ['ยังอยู่ไหมคะ??', 'PING'],
+      ['มีใครอยู่ไหม?', 'PING'],
+      ['ฮัลโหล?', 'PING'],
+      ['ฮัลโหลครับ ?', 'PING'],
+      ['hello?', 'PING'],
       // laughter
       ['555', 'LAUGH'],
       ['55555', 'LAUGH'],
@@ -78,6 +85,10 @@ describe('detectPhatic', () => {
       'ยังไงคะ',
       'เท่าไหร่ครับ',
       'ครับ?',
+      'โอเค?',
+      'ขอบคุณ?',
+      'ฮัลโหล ราคาเท่าไหร่?',
+      'ยังอยู่ไหม แล้วรถออกกี่โมง?',
       // answers to a question belong to the classifier
       'ใช่',
       'ใช่ค่ะ',
