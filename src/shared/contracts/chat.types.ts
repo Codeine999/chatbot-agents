@@ -1,4 +1,5 @@
 import type { ChatChannelKind } from '../channel/channel-kinds';
+import type { PhaticKind } from '../../modules/chatbot/intent/utils/phatic';
 
 /** Runtime list so a rich menu button can be validated against it. */
 export const CHAT_INTENTS = [
@@ -27,6 +28,7 @@ export type ChatAction =
   | 'CLARIFY'
   | 'CONTACT_ADMIN'
   | 'RICH_MENU_REPLY'
+  | 'SMALL_TALK_REPLY'
   | 'DEFAULT';
 
 export type IntentSource =
@@ -107,7 +109,12 @@ export type RouteDecision = {
   fallbackReason?: RetrievalFallbackReason;
   /** Set by RICH_MENU_REPLY: the tenant-authored answer to send verbatim. */
   richMenuReply?: { key: string; label: string; replyText: string };
+  /** Set by SMALL_TALK_REPLY: which canned reply to send, or SILENT for none. */
+  smallTalk?: { reply: SmallTalkReply; kind: PhaticKind };
 };
+
+/** A bare acknowledgement answered without any retrieval or model call. */
+export type SmallTalkReply = 'ACK' | 'THANKS' | 'HANDOFF_WAITING' | 'SILENT';
 
 export type ChatContextRole = 'user' | 'assistant';
 
@@ -131,11 +138,31 @@ export type { ChatChannelKind };
 
 export type ChatContextPolicy = 'INCLUDE' | 'EXCLUDE' | 'CLEAR';
 
+/** What the assistant just did, so the next short message can be read in context. */
+export type AssistantAct =
+  /** Gave business information (DIRECT / RAG / PRODUCT / partial). */
+  | 'ANSWERED'
+  /** Asked the customer something and waits: CLARIFY, product asking for input. */
+  | 'ASKED'
+  /** Greeting, menu or rich menu. */
+  | 'GREETED'
+  /** Canned acknowledgement of a bare acknowledgement. */
+  | 'ACKED'
+  /** Said staff will come: CONTACT_ADMIN, fallback with requestAdmin, waiting notice. */
+  | 'HANDOFF_NOTICE'
+  /** Could not answer and did not hand off. */
+  | 'FALLBACK'
+  /** Small talk, general answer or cancel. */
+  | 'GENERAL';
+
 export type ChatResponse = Readonly<{
   text: string;
   source: ChatResponseSource;
   contextPolicy: ChatContextPolicy;
   catalogRefs?: readonly CatalogRef[];
+  assistantAct?: AssistantAct;
+  /** Only with act ASKED: the question put to the customer (redacted, short). */
+  askedText?: string;
 }>;
 
 export type ChatRequest = LineAiUsageContext &
@@ -156,6 +183,8 @@ export type ChatRequest = LineAiUsageContext &
     preview?: boolean;
     /** Channels other than LINE cannot run flows that need a LINE identity (registration). */
     channel?: ChatChannelKind;
+    /** The room is waiting for an admin (`waiting_admin`); read from the inbound save. */
+    handoffPending?: boolean;
   }>;
 
 export type ImageChatRequest = LineAiUsageContext &

@@ -15,6 +15,11 @@ export type GateInput = Readonly<{
   input: string;
   rule: IntentResult;
   inRegister: boolean;
+  /**
+   * The verdict on a bare acknowledgement, worked out by the router from
+   * TurnMeta (I/O stays out of the gates). Null/absent: not small talk.
+   */
+  phaticDecision?: RouteDecision | null;
 }>;
 
 /**
@@ -89,6 +94,10 @@ const registerSession: Gate = ({ rule, inRegister }) => {
   });
 };
 
+/** A bare "ครับ" answers or acknowledges; it never searches. */
+const phatic: Gate = ({ phaticDecision }) =>
+  phaticDecision ? decide(phaticDecision) : null;
+
 const trustedRule: Gate = ({ rule }) =>
   isTrusted(rule) ? fromTrustedRule(fromRule(rule)) : null;
 
@@ -97,8 +106,17 @@ const trustedRule: Gate = ({ rule }) =>
  * - greeting before registerSession: "สอบถามหน่อย" mid-flow is not form input.
  * - cancel before registerSession: cancel always exits a flow.
  * - registerSession before trustedRule: inside a flow only interruptions escape.
+ * - phatic after registerSession: mid-flow "ครับ" is form input, while
+ *   "สวัสดีครับ" still reaches the greeting gate first.
+ * - phatic before trustedRule: a bare acknowledgement matches no rule anyway.
  */
-const GATES: readonly Gate[] = [greeting, cancel, registerSession, trustedRule];
+const GATES: readonly Gate[] = [
+  greeting,
+  cancel,
+  registerSession,
+  phatic,
+  trustedRule,
+];
 
 /** Deterministic routing before any search; no I/O. */
 export function gateBeforeSearch(ctx: GateInput): GateVerdict {

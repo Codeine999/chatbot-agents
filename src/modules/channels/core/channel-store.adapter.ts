@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
   CHANNEL_KINDS,
@@ -6,6 +6,7 @@ import {
   type StoredChannelKind,
 } from '../../../shared/channel/channel-kinds';
 import { LoadContextService } from '../../chatbot/context/load-context.service';
+import { TurnMetaStore } from '../../chatbot/state/turn-meta.store';
 import type { ChatResponse } from '../../../shared/contracts/chat.types';
 import type {
   ChannelAdapter,
@@ -29,6 +30,8 @@ export type ChannelInboundEvent = Readonly<{
   companyId: string;
   text: string;
   response?: ChatResponse;
+  /** The room is `waiting_admin`, read when the conversation was found. */
+  handoffPending?: boolean;
 }>;
 
 type StoredTurnContext = { userText: string; response: ChatResponse };
@@ -44,6 +47,7 @@ export class ChannelStoreAdapter implements ChannelAdapter<
     private readonly sessions: UserSessionService,
     private readonly connectors: ChannelConnectorRegistry,
     private readonly outbound: ChannelOutboundService,
+    @Optional() private readonly turnMeta?: TurnMetaStore,
   ) {}
 
   findDelivery(event: ChannelInboundEvent): Promise<DeliveryReference | null> {
@@ -54,7 +58,10 @@ export class ChannelStoreAdapter implements ChannelAdapter<
   }
 
   saveIncomingEvent(event: ChannelInboundEvent): Promise<ConversationThread> {
-    return Promise.resolve({ conversationId: event.conversationId });
+    return Promise.resolve({
+      conversationId: event.conversationId,
+      handoffPending: event.handoffPending,
+    });
   }
 
   toChatTurn(
@@ -227,6 +234,15 @@ export class ChannelStoreAdapter implements ChannelAdapter<
       response: stored.response,
       createdAt: reply.createdAt.getTime(),
     });
+
+    const { assistantAct, askedText, source } = stored.response;
+    if (assistantAct && source !== 'REGISTRATION') {
+      await this.turnMeta?.markAssistant(
+        reply.conversationId,
+        assistantAct,
+        askedText,
+      );
+    }
   }
 
   /** Billing and the decision log key a turn by this; keep it stable per message. */

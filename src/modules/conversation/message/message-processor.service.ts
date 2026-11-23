@@ -80,7 +80,7 @@ export class MessageProcessorService {
     outcome: TurnOutcome,
     claimOwner?: string,
   ): Promise<void> {
-    const response = await this.respond(turn, recentMessages);
+    const response = await this.respond(turn, recentMessages, thread);
     this.turns.replied(outcome, response);
     if (response.contextPolicy === 'CLEAR') {
       await this.context.clear(thread.conversationId);
@@ -100,12 +100,14 @@ export class MessageProcessorService {
   private respond(
     turn: ChatTurn,
     recentMessages: readonly ChatContextMessage[],
+    thread: ConversationThread,
   ): Promise<ChatResponse> {
     switch (turn.kind) {
       case 'text':
         return this.chatbot.handleTextMessage({
           ...turn.request,
           recentMessages,
+          handoffPending: thread.handoffPending,
         });
       case 'image':
         return this.chatbot.handleImageMessage({

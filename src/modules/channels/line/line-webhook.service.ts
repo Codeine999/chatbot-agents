@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   LineChatMessageType,
@@ -11,6 +12,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { MessageProcessorService } from '../../conversation/message/message-processor.service';
 import { LineChannelAdapter } from './line-channel.adapter';
 import { LoadContextService } from '../../chatbot/context/load-context.service';
+import { TurnMetaStore } from '../../chatbot/state/turn-meta.store';
 import type { LineWebhookEvent } from './dto/line';
 import type {
   GetLineMessagesQueryDto,
@@ -45,6 +47,7 @@ export class LineWebhookService {
     private readonly deliveryService: LineDeliveryService,
     private readonly sessions: UserSessionService,
     private readonly storage: FileStorageService,
+    @Optional() private readonly turnMeta?: TurnMetaStore,
   ) {}
 
   /** Keep the worker entry point stable while messaging owns turn orchestration. */
@@ -377,6 +380,7 @@ export class LineWebhookService {
       data: { status: 'open' },
     });
     await this.loadContextService.clear(conversationId);
+    await this.turnMeta?.clear(conversationId);
     return { status: 'open' };
   }
 

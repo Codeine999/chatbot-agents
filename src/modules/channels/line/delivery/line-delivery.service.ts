@@ -4,6 +4,7 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { LineDelivery, Prisma } from '../../../../generated/prisma/client';
 import { PrismaService } from '../../../../prisma/prisma.service';
@@ -15,6 +16,7 @@ import { LineService } from './line-reply.service';
 import { LineAdminService } from '../admin/line-admin.service';
 import { LineDeliveryError } from './line-delivery.error';
 import { UserSessionService } from '../../../session/user-session.service';
+import { TurnMetaStore } from '../../../chatbot/state/turn-meta.store';
 
 @Injectable()
 export class LineDeliveryService implements OnModuleInit, OnModuleDestroy {
@@ -27,6 +29,7 @@ export class LineDeliveryService implements OnModuleInit, OnModuleDestroy {
     private readonly adminLine: LineAdminService,
     private readonly context: LoadContextService,
     private readonly sessions: UserSessionService,
+    @Optional() private readonly turnMeta?: TurnMetaStore,
   ) {}
 
   onModuleInit() {
@@ -271,7 +274,18 @@ export class LineDeliveryService implements OnModuleInit, OnModuleDestroy {
       if (turn.response.contextPolicy === 'INCLUDE')
         await this.context.appendTurn(turn);
       // CLEAR is done when the response is persisted, not on delayed delivery repair.
+
+      // What the assistant just did is remembered whatever the context policy.
+      const { assistantAct, askedText, source } = turn.response;
+      if (assistantAct && source !== 'REGISTRATION') {
+        await this.turnMeta?.markAssistant(
+          row.conversationId,
+          assistantAct,
+          askedText,
+        );
+      }
     }
+    if (row.adminMemberId) await this.turnMeta?.markAdmin(row.conversationId);
     await this.prisma.lineDelivery.update({
       where: { id: row.id },
       data: { finalizedAt: new Date() },

@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '../../../../generated/prisma/client';
@@ -24,6 +25,7 @@ import {
   type ListInboxConversationsQuery,
 } from '../../../../shared/inbox/inbox-page';
 import { LoadContextService } from '../../../chatbot/context/load-context.service';
+import { TurnMetaStore } from '../../../chatbot/state/turn-meta.store';
 import { CommerceScopeService } from '../../../commerce/commerce-scope.service';
 import { UserSessionService } from '../../../session/user-session.service';
 import { ChannelConnectorRegistry } from '../channel-connector.registry';
@@ -64,6 +66,7 @@ export class ChannelInboxService {
     private readonly context: LoadContextService,
     private readonly connectors: ChannelConnectorRegistry,
     private readonly outbound: ChannelOutboundService,
+    @Optional() private readonly turnMeta?: TurnMetaStore,
   ) {}
 
   /**
@@ -314,6 +317,8 @@ export class ChannelInboxService {
         `mute after admin reply failed: ${error instanceof Error ? error.name : 'unknown'}`,
       );
     }
+    // The platform accepted the reply, so this admin is now the one talking.
+    await this.turnMeta?.markAdmin(conversationId);
     return this.historyItem(message);
   }
 
@@ -380,6 +385,7 @@ export class ChannelInboxService {
       data: { status: 'open' },
     });
     await this.context.clear(conversationId);
+    await this.turnMeta?.clear(conversationId);
     return { status: 'open' };
   }
 

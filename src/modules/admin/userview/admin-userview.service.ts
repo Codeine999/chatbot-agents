@@ -5,12 +5,14 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../../infra/redis/redis.module';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ChatbotService } from '../../chatbot/chatbot.service';
 import { LoadContextService } from '../../chatbot/context/load-context.service';
+import { TurnMetaStore } from '../../chatbot/state/turn-meta.store';
 import { UserSessionService } from '../../session/user-session.service';
 import type { ChatResponse } from '../../../shared/contracts/chat.types';
 import type { SendPreviewMessageDto } from './dto/admin-userview.dto';
@@ -58,6 +60,7 @@ export class AdminUserViewService {
     private readonly chatbot: ChatbotService,
     private readonly context: LoadContextService,
     private readonly sessions: UserSessionService,
+    @Optional() private readonly turnMeta?: TurnMetaStore,
   ) {}
 
   async createSession(adminMemberId: string) {
@@ -170,6 +173,14 @@ export class AdminUserViewService {
       recentMessages,
       preview: true,
     });
+
+    if (response.assistantAct && response.source !== 'REGISTRATION') {
+      await this.turnMeta?.markAssistant(
+        userId,
+        response.assistantAct,
+        response.askedText,
+      );
+    }
 
     if (response.contextPolicy === 'CLEAR') {
       await this.context.clear(userId);

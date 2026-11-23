@@ -94,7 +94,11 @@ export class ChannelInboundService {
       : sanitizeText(message.text).slice(0, MAX_TEXT);
     if (!text) return;
 
-    const conversationId = await this.conversation(kind, companyId, contactId);
+    const { id: conversationId, handoffPending } = await this.conversation(
+      kind,
+      companyId,
+      contactId,
+    );
     const existing = await this.prisma.channelMessage.findUnique({
       where: {
         conversationId_externalMessageId: {
@@ -171,6 +175,7 @@ export class ChannelInboundService {
           companyId,
           text,
           response: message.unsupported ? UNSUPPORTED_REPLY : undefined,
+          handoffPending,
         },
         this.store,
         messageId,
@@ -189,7 +194,7 @@ export class ChannelInboundService {
     kind: StoredChannelKind,
     companyId: string,
     contactId: string,
-  ): Promise<string> {
+  ): Promise<{ id: string; handoffPending: boolean }> {
     try {
       const row = await this.prisma.channelConversation.upsert({
         where: { contactId },
@@ -201,16 +206,16 @@ export class ChannelInboundService {
           lastMessageAt: new Date(),
         },
         update: {},
-        select: { id: true },
+        select: { id: true, status: true },
       });
-      return row.id;
+      return { id: row.id, handoffPending: row.status === 'waiting_admin' };
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
       const row = await this.prisma.channelConversation.findUniqueOrThrow({
         where: { contactId },
-        select: { id: true },
+        select: { id: true, status: true },
       });
-      return row.id;
+      return { id: row.id, handoffPending: row.status === 'waiting_admin' };
     }
   }
 }

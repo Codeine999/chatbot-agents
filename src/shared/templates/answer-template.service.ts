@@ -2,6 +2,11 @@
 
 import { Injectable } from '@nestjs/common';
 
+export type PoliteParticle = 'ค่ะ' | 'ครับ';
+
+/** "นะคะ" / "นะครับ": the sentence-final particle that follows "นะ". */
+const tail = (particle: PoliteParticle) => (particle === 'ค่ะ' ? 'คะ' : 'ครับ');
+
 @Injectable()
 export class ReplyTemplateService {
   askRegisterIntent(): string {
@@ -91,6 +96,22 @@ export class ReplyTemplateService {
 
   contactAdmin(): string {
     return 'รับทราบค่ะ เดี๋ยวแอดมินจะเข้ามาดูแลให้นะคะ';
+  }
+
+  /**
+   * Replies to a bare acknowledgement. None greets, none carries a fact, and
+   * all use the particle the assistant is configured to keep.
+   */
+  handoffWaiting(particle: PoliteParticle = 'ค่ะ'): string {
+    return `รับทราบ${particle} ตอนนี้แจ้งเจ้าหน้าที่ไว้แล้ว จะรีบเข้ามาตอบในแชทนี้โดยเร็วที่สุดนะ${tail(particle)}`;
+  }
+
+  ack(particle: PoliteParticle = 'ค่ะ'): string {
+    return `รับทราบ${particle} หากต้องการสอบถามข้อมูลเพิ่มเติม พิมพ์รายละเอียดมาได้เลยนะ${tail(particle)}`;
+  }
+
+  thanks(particle: PoliteParticle = 'ค่ะ'): string {
+    return `ยินดี${particle} หากมีอะไรให้ช่วยเพิ่มเติม ทักมาได้เลยนะ${tail(particle)}`;
   }
 
   stickerGreeting(): string {

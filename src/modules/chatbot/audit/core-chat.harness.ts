@@ -34,6 +34,8 @@ import { ChannelHandoffRegistry } from '../../session/channel-handoff.registry';
 import { LineHandoffHandler } from '../../channels/line/handoff/line-handoff.handler';
 import { ReplyTemplateService } from '../../../shared/templates/answer-template.service';
 import { StickerIntentService } from '../intent/sticker-intent.service';
+import { TurnMetaStore } from '../state/turn-meta.store';
+import type { ChatResponse } from '../../../shared/contracts/chat.types';
 
 export type VectorRow = {
   id: string;
@@ -108,11 +110,40 @@ export const vector = (overrides: Partial<VectorRow> = {}): VectorRow => ({
   ...overrides,
 });
 
-/** Minimal Redis good enough for sessions, mute and context keys. */
+/** Minimal Redis good enough for sessions, mute, context and TurnMeta keys. */
 export function fakeRedis() {
   const store = new Map<string, string>();
+  const hashes = new Map<string, Record<string, string>>();
+  const multi = () => {
+    const ops: (() => void)[] = [];
+    const chain = {
+      hset: (key: string, fields: Record<string, string>) => {
+        ops.push(() => hashes.set(key, { ...hashes.get(key), ...fields }));
+        return chain;
+      },
+      hdel: (key: string, field: string) => {
+        ops.push(() => {
+          const hash = { ...hashes.get(key) };
+          delete hash[field];
+          hashes.set(key, hash);
+        });
+        return chain;
+      },
+      expire: () => chain,
+      exec: () => {
+        ops.forEach((op) => op());
+        return Promise.resolve([[null, 1]]);
+      },
+    };
+    return chain;
+  };
   return {
     store,
+    hashes,
+    multi,
+    hgetall: jest.fn((key: string) =>
+      Promise.resolve({ ...hashes.get(key) } as Record<string, string>),
+    ),
     get: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
     getex: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
     set: jest.fn((key: string, value: string) => {
@@ -121,6 +152,7 @@ export function fakeRedis() {
     }),
     del: jest.fn((key: string) => {
       store.delete(key);
+      hashes.delete(key);
       return Promise.resolve(1);
     }),
     lrange: jest.fn(() => Promise.resolve([] as string[])),
@@ -279,6 +311,8 @@ export function buildHarness(options: HarnessOptions = {}) {
     retrieval,
     classifier,
     menuCache,
+    undefined,
+    config,
   );
   const aiChat = new AiChatService(prisma, retrieval, budget, provider, config);
 
@@ -300,6 +334,9 @@ export function buildHarness(options: HarnessOptions = {}) {
     handle: registrationHandle,
   } as unknown as RegistrationFlowService;
 
+  // On only when the test sets PHATIC_FAST_PATH_ENABLED; otherwise it is inert.
+  const turnMeta = new TurnMetaStore(redis as never, config);
+
   const chatbot = new ChatbotService(
     router,
     sessions,
@@ -309,7 +346,22 @@ export function buildHarness(options: HarnessOptions = {}) {
     new StickerIntentService(),
     menuCache,
     config,
+    undefined,
+    turnMeta,
   );
+
+  /**
+   * What delivery finalization does once a reply is accepted: remember what
+   * the assistant did. An empty reply is never delivered, so nothing is kept.
+   */
+  const deliver = async (conversationId: string, response: ChatResponse) => {
+    if (!response.text || !response.assistantAct) return;
+    await turnMeta.markAssistant(
+      conversationId,
+      response.assistantAct,
+      response.askedText,
+    );
+  };
 
   /** System instruction of the nth (default: last) generation call. */
   const systemInstruction = (index = -1): string => {
@@ -332,6 +384,8 @@ export function buildHarness(options: HarnessOptions = {}) {
   return {
     chatbot,
     router,
+    turnMeta,
+    deliver,
     retrieval,
     aiChat,
     sessions,

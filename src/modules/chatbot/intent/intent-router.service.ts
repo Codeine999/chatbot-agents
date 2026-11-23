@@ -1,4 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ConversationSession } from '../../session/user-session.service';
 import { RuleIntentService } from './rule-intent.service';
 import { AiIntentClassifierService } from './ai-intent-classifier.service';
@@ -27,6 +28,14 @@ import {
   isHandoffAnchor,
 } from './utils/route-stages';
 import { DecisionTraceService } from '../../decision-log/decision-trace.service';
+import { detectPhatic } from './utils/phatic';
+import { decidePhatic } from './utils/phatic-policy';
+import type { TurnMeta } from '../state/turn-meta.store';
+import {
+  TURN_UNDERSTANDING_OFF,
+  readTurnUnderstandingConfig,
+  type TurnUnderstandingConfig,
+} from '../state/turn-understanding.config';
 
 /** Enough of the ranking curve to see a tie; [Retrieval] holds the full list. */
 const MAX_LOGGED_SCORES = 5;
@@ -34,13 +43,20 @@ const MAX_LOGGED_SCORES = 5;
 @Injectable()
 export class IntentRouterService {
   private readonly logger = new Logger(IntentRouterService.name);
+  private readonly turnUnderstanding: TurnUnderstandingConfig;
+
   constructor(
     private readonly ruleIntentService: RuleIntentService,
     private readonly knowledgeRetrievalService: KnowledgeRetrievalService,
     private readonly aiIntentClassifierService: AiIntentClassifierService,
     private readonly richMenuReplies: RichMenuReplyCacheService,
     @Optional() private readonly decisionTrace?: DecisionTraceService,
-  ) {}
+    @Optional() config?: ConfigService,
+  ) {
+    this.turnUnderstanding = config
+      ? readTurnUnderstandingConfig(config)
+      : TURN_UNDERSTANDING_OFF;
+  }
 
   async resolve(
     params: LineAiUsageContext & {
@@ -49,6 +65,10 @@ export class IntentRouterService {
       session: ConversationSession | undefined;
       recentMessages?: readonly ChatContextMessage[];
       postbackData?: string;
+      /** What the room last did; empty when unknown or the feature is off. */
+      meta?: TurnMeta;
+      /** The room is waiting for an admin. */
+      handoffPending?: boolean;
     },
   ): Promise<RouteDecision> {
     const {
@@ -60,6 +80,8 @@ export class IntentRouterService {
       conversationId,
       turnId,
       postbackData,
+      meta,
+      handoffPending,
     } = params;
 
     this.logger.debug(
@@ -93,8 +115,13 @@ export class IntentRouterService {
 
     const inRegister =
       session?.status === 'ACTIVE' && session.flow === 'REGISTER';
-    const gate = gateBeforeSearch({ input, rule, inRegister });
-    
+    const gate = gateBeforeSearch({
+      input,
+      rule,
+      inRegister,
+      phaticDecision: this.phaticDecision(input, meta, handoffPending),
+    });
+
     this.decisionTrace?.note('rule', {
       intent: rule.intent,
       confidence: rule.confidence,
@@ -136,6 +163,45 @@ export class IntentRouterService {
     });
   }
 
+  /**
+   * A bare acknowledgement ("ครับ", "👍", "??") is answered from state with no
+   * search and no model, or left alone when it answers something. Null when
+   * the fast path is off or the message is not purely phatic.
+   */
+  private phaticDecision(
+    input: string,
+    meta: TurnMeta = {},
+    handoffPending = false,
+  ): RouteDecision | null {
+    if (!this.turnUnderstanding.phaticEnabled) return null;
+
+    const phatic = detectPhatic(input);
+    if (!phatic) return null;
+
+    const verdict = decidePhatic(phatic.kind, {
+      meta,
+      handoffPending,
+      now: Date.now(),
+      limits: this.turnUnderstanding.limits,
+    });
+    this.decisionTrace?.note('rule', {
+      phatic: phatic.kind,
+      reply: verdict?.reply ?? 'ROUTE_NORMALLY',
+      lastAct: meta.lastAct ?? null,
+      handoffPending,
+    });
+    if (!verdict) return null;
+
+    return {
+      action: 'SMALL_TALK_REPLY',
+      intent: 'UNKNOWN',
+      confidence: 1,
+      source: 'RULE',
+      reason: `phatic ${phatic.kind} -> ${verdict.reply}`,
+      smallTalk: { reply: verdict.reply, kind: phatic.kind },
+    };
+  }
+
   async resolveLowConfidence(
     params: LineAiUsageContext & {
       userId: string;
@@ -166,7 +232,7 @@ export class IntentRouterService {
         recentMessages,
       },
     );
-    
+
     this.decisionTrace?.note('classifier', {
       classification: analysis.classification,
       confidence: analysis.confidence,

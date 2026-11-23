@@ -20,7 +20,11 @@ import { LineImageArchiveService } from './media/line-image-archive.service';
 type SavedIncomingEvent = {
   conversationId: string;
   lineMemberId: string;
+  /** The conversation is `waiting_admin`; read with the row, no extra query. */
+  handoffPending: boolean;
 };
+
+const WAITING_ADMIN = 'waiting_admin';
 
 /** LINE transport and persistence boundary. Called only by the claimed queue worker. */
 @Injectable()
@@ -268,10 +272,11 @@ export class LineChannelAdapter implements ChannelAdapter<
         select: {
           conversationId: true,
           lineMemberId: true,
+          conversation: { select: { status: true } },
         },
       });
 
-      if (existing) return existing;
+      if (existing) return this.savedEvent(existing);
     }
 
     const member = await findOrCreateLineMember(
@@ -336,6 +341,7 @@ export class LineChannelAdapter implements ChannelAdapter<
         return {
           conversationId: conversation.id,
           lineMemberId: member.id,
+          handoffPending: conversation.status === WAITING_ADMIN,
         };
       });
     } catch (error) {
@@ -353,13 +359,27 @@ export class LineChannelAdapter implements ChannelAdapter<
           select: {
             conversationId: true,
             lineMemberId: true,
+            conversation: { select: { status: true } },
           },
         });
 
-        if (existing) return existing;
+        if (existing) return this.savedEvent(existing);
       }
 
       throw error;
     }
+  }
+
+  /** A redelivered event reuses the stored row; its room status rides along. */
+  private savedEvent(row: {
+    conversationId: string;
+    lineMemberId: string;
+    conversation: { status: string };
+  }): SavedIncomingEvent {
+    return {
+      conversationId: row.conversationId,
+      lineMemberId: row.lineMemberId,
+      handoffPending: row.conversation.status === WAITING_ADMIN,
+    };
   }
 }

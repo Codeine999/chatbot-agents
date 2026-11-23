@@ -41,6 +41,7 @@ import { composeAiAnswerPrompt } from '../../ai/prompt/ai-setting-prompt.compose
 import { isUsableKnowledge } from '../../knowledge/utils/knowledge-answer.policy';
 import { ProductAnswerService } from '../../products/rag/product-answer.service';
 import { isHandoffAnchor } from '../intent/utils/route-stages';
+import type { PoliteParticle } from '../../../shared/templates/answer-template.service';
 import { IMAGE_ANSWER_RULES } from './image/image-answer.rules';
 import {
   GROUNDED_JSON_SCHEMA,
@@ -165,6 +166,11 @@ export class AiChatService {
       setting.fallbackMessage,
       context,
     );
+  }
+
+  /** The particle the assistant keeps in canned replies, from the active setting. */
+  async politeParticle(): Promise<PoliteParticle> {
+    return (await this.getActiveAiSetting()).responseStyle.politeParticle;
   }
 
   /** Return the configured fallback literally; never call an AI provider. */

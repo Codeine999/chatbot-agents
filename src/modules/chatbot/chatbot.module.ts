@@ -12,6 +12,7 @@ import { UserSessionService } from '../session/user-session.service';
 import { AiModule } from './ai.module';
 import { NotificationModule } from '../admin/notification/notification.module';
 import { LoadContextService } from './context/load-context.service';
+import { TurnMetaStore } from './state/turn-meta.store';
 import { StickerIntentService } from './intent/sticker-intent.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service';
@@ -26,6 +27,7 @@ import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service'
     UserSessionService,
     ChannelHandoffRegistry,
     LoadContextService,
+    TurnMetaStore,
     StickerIntentService,
     RichMenuReplyCacheService,
     RegistrationFlowService,
@@ -39,6 +41,7 @@ import { RichMenuReplyCacheService } from './menu/rich-menu-reply-cache.service'
     UserSessionService,
     ChannelHandoffRegistry,
     LoadContextService,
+    TurnMetaStore,
   ],
 })
 export class ChatbotModule {}

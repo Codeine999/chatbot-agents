@@ -55,7 +55,8 @@ export class AppMessageService {
       throw new AppApiException(400, 'APP_VALIDATION', 'Message is too long');
     await this.abuse.assertMessage(guest, text);
 
-    const conversationId = await this.ensureConversation(guest);
+    const { id: conversationId, handoffPending } =
+      await this.ensureConversation(guest);
     const existing = await this.findByClientId(
       conversationId,
       dto.clientMessageId,
@@ -141,6 +142,7 @@ export class AppMessageService {
             contactId: guest.contactId,
             companyId: guest.companyId,
             text,
+            handoffPending,
           },
           this.adapter,
           messageId,
@@ -248,8 +250,14 @@ export class AppMessageService {
     });
   }
 
-  /** Created on the first message, not with the session, so idle guests leave no rooms. */
-  private async ensureConversation(guest: AppGuestContext): Promise<string> {
+  /**
+   * Created on the first message, not with the session, so idle guests leave no
+   * rooms. Also says whether the room is waiting for an admin, from the row
+   * read anyway.
+   */
+  private async ensureConversation(
+    guest: AppGuestContext,
+  ): Promise<{ id: string; handoffPending: boolean }> {
     try {
       const row = await this.prisma.channelConversation.upsert({
         where: { contactId: guest.contactId },
@@ -261,16 +269,16 @@ export class AppMessageService {
           lastMessageAt: new Date(),
         },
         update: {},
-        select: { id: true },
+        select: { id: true, status: true },
       });
-      return row.id;
+      return { id: row.id, handoffPending: row.status === 'waiting_admin' };
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
       const row = await this.prisma.channelConversation.findUniqueOrThrow({
         where: { contactId: guest.contactId },
-        select: { id: true },
+        select: { id: true, status: true },
       });
-      return row.id;
+      return { id: row.id, handoffPending: row.status === 'waiting_admin' };
     }
   }
 

@@ -17,7 +17,11 @@ export type ChatTurn = Readonly<{ contextUserText: string }> &
     | { kind: 'response'; response: ChatResponse }
   );
 
-export type ConversationThread = Readonly<{ conversationId: string }>;
+export type ConversationThread = Readonly<{
+  conversationId: string;
+  /** The room is `waiting_admin`; taken from the row the inbound save already read. */
+  handoffPending?: boolean;
+}>;
 export type DeliveryReference = Readonly<{ id: string }>;
 
 /**

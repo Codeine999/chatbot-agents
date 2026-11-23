@@ -6,12 +6,14 @@ import { RegistrationFlowService } from '../registration/registration-flow.servi
 import { AiChatService } from './answer/answer.service';
 import { IntentRouterService } from './intent/intent-router.service';
 import {
+  AssistantAct,
   ChatContextPolicy,
   ChatChannelKind,
   ChatRequest,
   ChatResponse,
   ChatResponseSource,
   ImageChatRequest,
+  KnowledgeRetrievalResult,
   StickerChatRequest,
   AiAnswerResult,
 } from '../../shared/contracts/chat.types';
@@ -24,6 +26,8 @@ import { InsufficientCreditException } from '../usage/credit-point/insufficient-
 import { isCancelKeyword } from './intent/utils/cancel-keyword';
 import { DecisionTraceService } from '../decision-log/decision-trace.service';
 import { CHANNEL_KINDS } from '../../shared/channel/channel-kinds';
+import { TurnMetaStore, askedTextOf } from './state/turn-meta.store';
+import { actOfSmallTalk } from './intent/utils/phatic-policy';
 
 @Injectable()
 export class ChatbotService {
@@ -40,6 +44,7 @@ export class ChatbotService {
     private readonly richMenuReplies: RichMenuReplyCacheService,
     private readonly configService: ConfigService,
     @Optional() private readonly decisionTrace?: DecisionTraceService,
+    @Optional() private readonly turnMeta?: TurnMetaStore,
   ) {
     this.aiMaxMessageLength = Number(
       this.configService.get('AI_MAX_MESSAGE_LENGTH') ?? 1000,
@@ -84,6 +89,7 @@ export class ChatbotService {
         this.replyTemplateService.defaultMessage(this.richMenuReplies.labels()),
         'SYSTEM',
         'CLEAR',
+        'GREETED',
       );
     }
 
@@ -135,12 +141,18 @@ export class ChatbotService {
       );
     }
 
+    // Preview rooms have no conversation row; their context is keyed by user.
+    const metaKey = conversationId ?? (preview ? userId : undefined);
+    const meta = metaKey ? await this.turnMeta?.load(metaKey) : undefined;
+
     const decision = await this.intentRouterService.resolve({
       ...usage,
       input,
       session,
       recentMessages,
       postbackData,
+      meta,
+      handoffPending: request.handoffPending,
     });
 
     this.logger.debug(
@@ -172,6 +184,7 @@ export class ChatbotService {
           this.replyTemplateService.cancelled(),
           'RULE',
           'CLEAR',
+          'GENERAL',
         );
 
       case 'CONTINUE_REGISTER':
@@ -231,10 +244,20 @@ export class ChatbotService {
           }),
           'AI',
           userId,
+          'GENERAL',
         );
 
       case 'CLARIFY':
-        return this.response(CLARIFY_MESSAGE, 'RULE', 'INCLUDE');
+        return this.response(
+          CLARIFY_MESSAGE,
+          'RULE',
+          'INCLUDE',
+          'ASKED',
+          CLARIFY_MESSAGE,
+        );
+
+      case 'SMALL_TALK_REPLY':
+        return this.smallTalkResponse(decision.smallTalk?.reply);
 
       case 'ANSWER_KNOWLEDGE': {
         const result = await this.aiChatService.answerKnowledge(input, {
@@ -251,12 +274,19 @@ export class ChatbotService {
               decision.source === 'EMBEDDING'),
         });
 
+        const general =
+          decision.retrieval?.product?.plan.mode === 'GENERAL' ||
+          result.general;
+
         return this.aiResponse(
           result,
-          decision.retrieval?.product?.plan.mode === 'GENERAL' || result.general
-            ? 'AI'
-            : 'KNOWLEDGE',
+          general ? 'AI' : 'KNOWLEDGE',
           userId,
+          general
+            ? 'GENERAL'
+            : this.productAsksCustomer(decision.retrieval, result)
+              ? 'ASKED'
+              : 'ANSWERED',
         );
       }
 
@@ -268,6 +298,7 @@ export class ChatbotService {
             ),
             'SYSTEM',
             'CLEAR',
+            'GREETED',
           );
         }
 
@@ -276,7 +307,12 @@ export class ChatbotService {
           await this.userSessionService.clear(userId);
         }
 
-        return this.response(decision.richMenuReply.replyText, 'RULE', 'CLEAR');
+        return this.response(
+          decision.richMenuReply.replyText,
+          'RULE',
+          'CLEAR',
+          'GREETED',
+        );
       }
 
       case 'CONTACT_ADMIN':
@@ -293,6 +329,7 @@ export class ChatbotService {
           ),
           'SYSTEM',
           'CLEAR',
+          'GREETED',
         );
     }
   }
@@ -360,12 +397,63 @@ export class ChatbotService {
     }
   }
 
+  /**
+   * `act` says what the assistant just did (see AssistantAct). It is only
+   * attached while TurnMeta is on, so with the feature off a response is
+   * byte-for-byte what it was before.
+   */
   private response(
     text: string,
     source: ChatResponseSource,
     contextPolicy: ChatContextPolicy,
+    act?: AssistantAct,
+    askedText?: string,
   ): ChatResponse {
-    return { text, source, contextPolicy };
+    if (!act || !this.turnMeta?.enabled) return { text, source, contextPolicy };
+
+    return {
+      text,
+      source,
+      contextPolicy,
+      assistantAct: act,
+      ...(act === 'ASKED' && askedText
+        ? { askedText: askedTextOf(askedText) }
+        : {}),
+    };
+  }
+
+  /** A bare acknowledgement: a short template, or nothing at all. */
+  private async smallTalkResponse(
+    reply: 'ACK' | 'THANKS' | 'HANDOFF_WAITING' | 'SILENT' = 'SILENT',
+  ): Promise<ChatResponse> {
+    if (reply === 'SILENT') {
+      this.decisionTrace?.answer({ mode: 'SMALL_TALK_SILENT' });
+      return this.response('', 'RULE', 'EXCLUDE');
+    }
+
+    const particle = await this.aiChatService.politeParticle();
+    const text = {
+      ACK: this.replyTemplateService.ack(particle),
+      THANKS: this.replyTemplateService.thanks(particle),
+      HANDOFF_WAITING: this.replyTemplateService.handoffWaiting(particle),
+    }[reply];
+    this.decisionTrace?.answer({ mode: 'SMALL_TALK' });
+    return this.response(text, 'RULE', 'EXCLUDE', actOfSmallTalk(reply));
+  }
+
+  /** The product answer is a question back to the customer, not information. */
+  private productAsksCustomer(
+    retrieval: KnowledgeRetrievalResult | undefined,
+    result: AiAnswerResult,
+  ): boolean {
+    const product = retrieval?.product;
+    return (
+      !result.isFallback &&
+      !product?.failed &&
+      product?.result.status === 'MISSING_INPUT' &&
+      product.plan.mode !== 'GENERAL' &&
+      product.plan.mode !== 'KNOWLEDGE'
+    );
   }
 
   /**
@@ -395,6 +483,7 @@ export class ChatbotService {
     result: AiAnswerResult,
     source: 'AI' | 'KNOWLEDGE',
     userId: string,
+    act: AssistantAct,
   ): Promise<ChatResponse> {
     if (result.isFallback) {
       // Every fallback branch should report why; a silent one still shows up.
@@ -412,7 +501,13 @@ export class ChatbotService {
       await this.userSessionService.requestAdmin(userId);
     }
     return {
-      ...this.response(result.text, source, 'INCLUDE'),
+      ...this.response(
+        result.text,
+        source,
+        'INCLUDE',
+        result.handoff ? 'HANDOFF_NOTICE' : act,
+        act === 'ASKED' ? result.text : undefined,
+      ),
       ...(result.catalogRefs ? { catalogRefs: result.catalogRefs } : {}),
     };
   }
@@ -436,6 +531,7 @@ export class ChatbotService {
       this.replyTemplateService.contactAdmin(),
       'RULE',
       'CLEAR',
+      'HANDOFF_NOTICE',
     );
   }
 
@@ -448,7 +544,13 @@ export class ChatbotService {
       this.decisionTrace?.note('handoff', { fallbackNotice: 'SUPPRESSED' });
       return this.response('', 'SYSTEM', 'CLEAR');
     }
-    return this.response(text, 'SYSTEM', 'CLEAR');
+    // No room to hand off to: the customer got a fallback and nobody was told.
+    return this.response(
+      text,
+      'SYSTEM',
+      'CLEAR',
+      request === 'REQUESTED' ? 'HANDOFF_NOTICE' : 'FALLBACK',
+    );
   }
 
   private canRegister(

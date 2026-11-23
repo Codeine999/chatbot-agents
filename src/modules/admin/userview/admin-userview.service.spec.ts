@@ -8,6 +8,7 @@ import type { PrismaService } from '../../../prisma/prisma.service';
 import type { ChatbotService } from '../../chatbot/chatbot.service';
 import type { LoadContextService } from '../../chatbot/context/load-context.service';
 import type { ChatResponse } from '../../../shared/contracts/chat.types';
+import type { TurnMetaStore } from '../../chatbot/state/turn-meta.store';
 import type { UserSessionService } from '../../session/user-session.service';
 import { AdminUserViewService } from './admin-userview.service';
 
@@ -64,6 +65,7 @@ function build(options: { aiEnabled?: boolean; reply?: ChatResponse } = {}) {
     clear: jest.fn(() => Promise.resolve()),
     resume: jest.fn(() => Promise.resolve()),
   };
+  const turnMeta = { markAssistant: jest.fn(() => Promise.resolve()) };
 
   const service = new AdminUserViewService(
     redis as unknown as Redis,
@@ -71,9 +73,10 @@ function build(options: { aiEnabled?: boolean; reply?: ChatResponse } = {}) {
     { handleTextMessage } as unknown as ChatbotService,
     context as unknown as LoadContextService,
     sessions as unknown as UserSessionService,
+    turnMeta as unknown as TurnMetaStore,
   );
 
-  return { service, redis, handleTextMessage, context, sessions };
+  return { service, redis, handleTextMessage, context, sessions, turnMeta };
 }
 
 const message = (text = 'ค่าส่งเท่าไหร่') => ({
@@ -108,6 +111,36 @@ describe('AdminUserViewService', () => {
     expect(context.appendTurn).toHaveBeenCalledWith(
       expect.objectContaining({ conversationId: customer, eventId: REQUEST }),
     );
+  });
+
+  it('remembers what the assistant did, keyed by the preview customer', async () => {
+    const { service, turnMeta } = build({
+      reply: {
+        text: 'ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยคะ',
+        source: 'RULE',
+        contextPolicy: 'INCLUDE',
+        assistantAct: 'ASKED',
+        askedText: 'ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยคะ',
+      },
+    });
+    const { sessionId } = await service.createSession(ADMIN);
+
+    await service.sendMessage(ADMIN, sessionId, message());
+
+    expect(turnMeta.markAssistant).toHaveBeenCalledWith(
+      `preview:${ADMIN}:${sessionId}`,
+      'ASKED',
+      'ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยคะ',
+    );
+  });
+
+  it('keeps nothing when the reply carries no act', async () => {
+    const { service, turnMeta } = build();
+    const { sessionId } = await service.createSession(ADMIN);
+
+    await service.sendMessage(ADMIN, sessionId, message());
+
+    expect(turnMeta.markAssistant).not.toHaveBeenCalled();
   });
 
   it('clears preview context when the chatbot ends the topic', async () => {
