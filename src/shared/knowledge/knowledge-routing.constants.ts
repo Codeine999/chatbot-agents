@@ -25,5 +25,13 @@ export const DEFAULT_LEXICAL_MIN_COVERAGE = 0.5;
 export const DEFAULT_RAG_MIN_VECTOR_SIMILARITY = 0.75;
 export const MAX_RAG_EVIDENCE_CHARACTERS = 12_000;
 
+/**
+ * A knowledge row with this `intentKey` only anchors routing: a match means the
+ * customer asked for a human, so the system hands off for real (requestAdmin).
+ * Its stored answer is never shown or fed to the model, because text cannot
+ * promise an action the system did not take.
+ */
+export const HANDOFF_INTENT_KEY = 'contact.admin';
+
 export const INSUFFICIENT_CONTEXT = 'INSUFFICIENT_CONTEXT';
 export const CLARIFY_MESSAGE = 'ช่วยอธิบายเพิ่มเติมหน่อยได้มั้ยคะ';

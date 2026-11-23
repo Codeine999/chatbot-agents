@@ -40,6 +40,7 @@ import {
 import { composeAiAnswerPrompt } from '../../ai/prompt/ai-setting-prompt.composer';
 import { isUsableKnowledge } from '../../knowledge/utils/knowledge-answer.policy';
 import { ProductAnswerService } from '../../products/rag/product-answer.service';
+import { isHandoffAnchor } from '../intent/utils/route-stages';
 import { IMAGE_ANSWER_RULES } from './image/image-answer.rules';
 import {
   GROUNDED_JSON_SCHEMA,
@@ -116,7 +117,11 @@ export class AiChatService {
 
     const setting = await this.getActiveAiSetting();
 
-    const usableItems = retrieval.selectedItems.filter(isUsableKnowledge);
+    // Handoff anchors only route; their text claims an action the system
+    // would not have taken, so the model must never see or paraphrase it.
+    const usableItems = retrieval.selectedItems.filter(
+      (item) => isUsableKnowledge(item) && !isHandoffAnchor(item),
+    );
     if (usableItems.length > 0) {
       return this.generateFromKnowledge(usableItems, message, setting, context);
     }

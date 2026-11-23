@@ -10,6 +10,7 @@ describe('AdminAiSetting DTOs', () => {
       responseStyle: {
         targetLength: 'adaptive',
         emojiLevel: 'light',
+        politeParticle: 'ค่ะ',
       },
       promptVersion: 1,
       active: true,
@@ -26,6 +27,23 @@ describe('AdminAiSetting DTOs', () => {
       skills: [{ name: 'sales', prompt: 'ตอบอย่างเป็นธรรมชาติ' }],
       responseStyle: { targetLength: 'short', emojiLevel: 'none' },
     });
+  });
+
+  it('accepts a polite particle and defaults it when only the old keys are sent', () => {
+    expect(
+      CreateAdminAiSettingDto.schema.parse({
+        responseStyle: {
+          targetLength: 'short',
+          emojiLevel: 'none',
+          politeParticle: 'ครับ',
+        },
+      }).responseStyle.politeParticle,
+    ).toBe('ครับ');
+    expect(
+      CreateAdminAiSettingDto.schema.parse({
+        responseStyle: { targetLength: 'short', emojiLevel: 'none' },
+      }).responseStyle.politeParticle,
+    ).toBe('ค่ะ');
   });
 
   it('rejects malformed skills, unsupported styles and mass-assignment fields', () => {

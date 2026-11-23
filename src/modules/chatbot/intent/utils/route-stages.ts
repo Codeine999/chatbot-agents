@@ -1,9 +1,11 @@
 import type {
   IntentResult,
   IntentSource,
+  KnowledgeItem,
   KnowledgeRetrievalResult,
   RouteDecision,
 } from '../../../../shared/contracts/chat.types';
+import { HANDOFF_INTENT_KEY } from '../../../../shared/knowledge/knowledge-routing.constants';
 import { fromRule } from './intent.utils';
 
 /** A keyword rule at or above this confidence routes without AI. */
@@ -155,6 +157,13 @@ export function decideFromRetrieval(
     };
   }
 
+  if (
+    retrieval.route !== 'LOW_CONFIDENCE' &&
+    isHandoffAnchor(retrieval.selectedItems[0])
+  ) {
+    return handoffFromKnowledge();
+  }
+
   if (retrieval.route !== 'LOW_CONFIDENCE') {
     return {
       action: 'ANSWER_KNOWLEDGE',
@@ -190,6 +199,22 @@ export function decideFromRetrieval(
   }
 
   return null;
+}
+
+/** A knowledge row that only anchors the "talk to a human" intent. */
+export function isHandoffAnchor(item: KnowledgeItem | undefined): boolean {
+  return item?.metadata?.intentKey === HANDOFF_INTENT_KEY;
+}
+
+/** The system performs the handoff; the stored answer text is never used. */
+export function handoffFromKnowledge(): RouteDecision {
+  return {
+    action: 'CONTACT_ADMIN',
+    intent: 'CONTACT_ADMIN',
+    confidence: 1,
+    source: 'DATABASE',
+    reason: `knowledge intent ${HANDOFF_INTENT_KEY} → system handoff`,
+  };
 }
 
 /**

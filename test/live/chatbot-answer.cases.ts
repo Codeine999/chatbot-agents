@@ -729,4 +729,78 @@ export const CASES: EvalCase[] = [
     turns: ['ช่วยเช็คสถานะการจองของผมหน่อย'],
     expect: ['ADMIN'],
   },
+
+  // persona lock: the customer writes "ครับ", the assistant stays "ค่ะ/คะ".
+  // Only the assistant's own voice is graded, so none of these cases asks for
+  // a story with another speaker. P6/P7 are written for the BKS transport KB
+  // (see test/scripts/seed-transport-live.mjs), like their gold ids.
+  {
+    id: 'P1',
+    group: 'persona',
+    turns: ['วันนี้อากาศเป็นยังไงบ้างครับ'],
+    expect: ['GENERAL'],
+    facts: [/ค่ะ|คะ/],
+    forbid: [/ครับ/],
+  },
+  {
+    id: 'P2',
+    group: 'persona',
+    turns: ['ช่วยแนะนำวิธีนอนหลับให้สบายหน่อยครับ'],
+    expect: ['GENERAL'],
+    facts: [/ค่ะ|คะ/],
+    forbid: [/ครับ/],
+  },
+  {
+    id: 'P3',
+    group: 'persona',
+    turns: ['แปลคำว่า breakfast เป็นภาษาไทยหน่อยครับ'],
+    expect: ['GENERAL'],
+    facts: [/ค่ะ|คะ/],
+    forbid: [/ครับ/],
+    note: 'a scope refusal is fine here; only the particle is graded',
+  },
+  {
+    id: 'P4',
+    group: 'persona',
+    turns: ['คุณคือใครครับ'],
+    expect: ['GENERAL'],
+    facts: [/ค่ะ|คะ/],
+    forbid: [/ครับ/],
+  },
+  {
+    id: 'P5',
+    group: 'persona',
+    turns: ['12 คูณ 12 เท่ากับเท่าไหร่ครับ'],
+    expect: ['GENERAL'],
+    facts: ['144', /ค่ะ|คะ/],
+    forbid: [/ครับ/],
+  },
+  {
+    id: 'P6',
+    group: 'persona',
+    turns: ['ขนกระเป๋าใบใหญ่ขึ้นรถทัวร์ได้กี่กิโลครับ'],
+    expect: KB,
+    gold: ['AP:222918b1'],
+    facts: ['20', /ค่ะ|คะ/],
+    forbid: [/ครับ/],
+    note: 'grounded answer; if the KB preset itself says ครับ, fix the KB, not the prompt',
+  },
+  {
+    id: 'P7',
+    group: 'persona',
+    turns: ['จ่ายค่าตั๋วผ่านแอปด้วยช่องทางไหนได้บ้างครับ'],
+    expect: KB,
+    gold: ['AP:0c6aac65'],
+    facts: [/พร้อมเพย์/, /ค่ะ|คะ/],
+    forbid: [/ครับ/],
+    note: 'grounded answer; same KB caveat as P6',
+  },
+  {
+    id: 'P8',
+    group: 'persona',
+    turns: ['ขนกระเป๋าใบใหญ่ขึ้นรถทัวร์ได้กี่กิโลครับ', 'โอเคครับ'],
+    expect: ['GENERAL'],
+    forbid: [/ครับ/, /สวัสดี/],
+    note: 'short acknowledgement after an answer: no greeting, no gender flip',
+  },
 ];

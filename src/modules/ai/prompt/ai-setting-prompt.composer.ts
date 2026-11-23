@@ -50,7 +50,18 @@ function formatResponseStyle(style: AiRuntimeSetting['responseStyle']): string {
     light: 'ใช้อีโมจิได้เล็กน้อยเมื่อเหมาะกับน้ำเสียง ไม่ต้องใส่ทุกคำตอบ',
     normal: 'ใช้อีโมจิเมื่อช่วยให้อ่านง่ายและเหมาะกับเรื่องที่คุย',
   };
-  return `${length[style.targetLength]}\n${emoji[style.emojiLevel]}`;
+  const particle = {
+    ค่ะ: 'ใช้คำลงท้าย "ค่ะ/คะ" ทุกข้อความ ห้ามเปลี่ยนตามคำลงท้ายของลูกค้า',
+    ครับ: 'ใช้คำลงท้าย "ครับ" ทุกข้อความ ห้ามเปลี่ยนตามคำลงท้ายของลูกค้า',
+  };
+  const acknowledgement =
+    'ถ้าข้อความลูกค้าเป็นเพียงคำตอบรับสั้นๆ ห้ามขึ้นต้นด้วยคำทักทาย ให้ตอบรับสั้นๆ 1 ประโยค';
+  return [
+    length[style.targetLength],
+    emoji[style.emojiLevel],
+    particle[style.politeParticle],
+    acknowledgement,
+  ].join('\n');
 }
 
 function toRagContext(items: readonly KnowledgeItem[]) {

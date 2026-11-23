@@ -27,6 +27,7 @@ const createAiSettingSchema = z
     responseStyle: aiSettingFields.responseStyle.default({
       targetLength: 'adaptive',
       emojiLevel: 'light',
+      politeParticle: 'ค่ะ',
     }),
     promptVersion: aiSettingFields.promptVersion.default(1),
     fallbackMessage: aiSettingFields.fallbackMessage.optional(),

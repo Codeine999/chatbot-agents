@@ -14,6 +14,8 @@ export const aiResponseStyleSchema = z
   .object({
     targetLength: z.enum(['short', 'medium', 'adaptive']),
     emojiLevel: z.enum(['none', 'light', 'normal']),
+    /** Polite particle the assistant keeps whatever the customer writes. */
+    politeParticle: z.enum(['ค่ะ', 'ครับ']).default('ค่ะ'),
   })
   .strict();
 
@@ -23,6 +25,7 @@ export type AiResponseStyle = z.infer<typeof aiResponseStyleSchema>;
 export const DEFAULT_AI_RESPONSE_STYLE: AiResponseStyle = {
   targetLength: 'adaptive',
   emojiLevel: 'light',
+  politeParticle: 'ค่ะ',
 };
 
 export function parseAiSkills(value: unknown): AiSkill[] {

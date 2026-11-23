@@ -23,6 +23,8 @@ import {
   decideFromRetrieval,
   evidenceStrength,
   gateBeforeSearch,
+  handoffFromKnowledge,
+  isHandoffAnchor,
 } from './utils/route-stages';
 import { DecisionTraceService } from '../../decision-log/decision-trace.service';
 
@@ -231,6 +233,12 @@ export class IntentRouterService {
     // classifier says BUSINESS they still ground the answer (paraphrases whose
     // vocabulary differs from the stored knowledge).
     if (evidence?.selectedItems.length && !analysis.failed) {
+      // A handoff anchor means the customer asked for a human: hand off for
+      // real instead of answering from the row's text.
+      if (isHandoffAnchor(evidence.selectedItems[0])) {
+        return this.logDecision(input, handoffFromKnowledge(), evidence);
+      }
+
       return this.logDecision(
         input,
         {
