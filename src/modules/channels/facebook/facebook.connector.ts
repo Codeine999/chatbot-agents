@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import type {
   ChannelConnector,
+  ContactProfile,
   InboundMessage,
   OutboundTarget,
   SendResult,
@@ -16,6 +17,7 @@ import {
 import {
   facebookWebhookSchema,
   graphErrorSchema,
+  graphProfileSchema,
   graphSendResultSchema,
   parseMessaging,
 } from './facebook.schema';
@@ -113,6 +115,44 @@ export class FacebookConnector implements ChannelConnector, OnModuleInit {
 
   async resolveCompany(accountId: string): Promise<string | null> {
     return (await this.credentials.forPageId(accountId))?.companyId ?? null;
+  }
+
+  /**
+   * Name and picture of a customer by PSID, read with the Page token. Needs
+   * pages_messaging (the user must have messaged the Page); the picture URL is
+   * on Facebook's CDN and expires.
+   */
+  async fetchProfile(target: OutboundTarget): Promise<ContactProfile | null> {
+    const credentials = await this.credentials.forPageId(target.accountId);
+    if (!credentials) return null;
+    const { graphBaseUrl, sendTimeoutMs } = this.config.transport;
+    try {
+      const response = await fetch(
+        `${graphBaseUrl}/${encodeURIComponent(target.externalUserId)}?fields=first_name,last_name,profile_pic`,
+        {
+          headers: { Authorization: `Bearer ${credentials.pageAccessToken}` },
+          signal: AbortSignal.timeout(sendTimeoutMs),
+        },
+      );
+      if (!response.ok) return null;
+      const parsed = graphProfileSchema.safeParse(
+        await response.json().catch(() => null),
+      );
+      if (!parsed.success) return null;
+      const { first_name, last_name, name, profile_pic } = parsed.data;
+      const displayName =
+        [first_name, last_name].filter(Boolean).join(' ').trim() ||
+        name?.trim() ||
+        undefined;
+      return displayName || profile_pic
+        ? { displayName, pictureUrl: profile_pic }
+        : null;
+    } catch (error) {
+      this.logger.warn(
+        `profile lookup failed: ${error instanceof Error ? error.name : 'unknown'}`,
+      );
+      return null;
+    }
   }
 
   async send(target: OutboundTarget, text: string): Promise<SendResult> {

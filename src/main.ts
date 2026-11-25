@@ -53,6 +53,7 @@ async function bootstrap() {
       '/api/line/webhooks',
       '/api/line/webhooks/:channelKey',
       '/api/channels/:kind/webhooks',
+      '/api/channels/:kind/webhooks/:routeKey',
     ],
   });
 

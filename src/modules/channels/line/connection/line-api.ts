@@ -1,4 +1,5 @@
 import type { ConfigService } from '@nestjs/config';
+import { publicApiBaseUrl } from '../../core/public-api-base-url';
 
 const LINE_API = 'https://api.line.me';
 
@@ -23,15 +24,13 @@ export function lineApiRequest(
 
 /**
  * The URL LINE should call. A connected channel gets its own keyed route; the
- * deployment's environment channel uses the bare route. Null when
- * PUBLIC_API_BASE_URL is not configured.
+ * deployment's environment channel uses the bare route. The origin is
+ * PUBLIC_API_BASE_URL, or the default public API when it is not set.
  */
 export function webhookUrlFor(
   config: ConfigService,
   channelKey: string | null,
-): string | null {
-  const base = config.get<string>('PUBLIC_API_BASE_URL')?.trim();
-  if (!base) return null;
-  const root = `${base.replace(/\/+$/, '')}/api/line/webhooks`;
+): string {
+  const root = `${publicApiBaseUrl(config)}/api/line/webhooks`;
   return channelKey ? `${root}/${channelKey}` : root;
 }

@@ -50,3 +50,11 @@ export const graphErrorSchema = z.object({
 export const graphSendResultSchema = z.object({
   message_id: z.string().optional(),
 });
+
+/** GET /<PSID>?fields=first_name,last_name,profile_pic */
+export const graphProfileSchema = z.object({
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  name: z.string().optional(),
+  profile_pic: z.string().url().optional(),
+});

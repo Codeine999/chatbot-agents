@@ -6,6 +6,7 @@ import type { StoredChannelKind } from '../../../shared/channel/channel-kinds';
 import type { ChatResponse } from '../../../shared/contracts/chat.types';
 import { MessageProcessorService } from '../../conversation/message/message-processor.service';
 import type { InboundMessage } from './channel-connector';
+import { ChannelConnectorRegistry } from './channel-connector.registry';
 import {
   CHANNEL_TURN_LOCK_SEC,
   ChannelStoreAdapter,
@@ -33,6 +34,21 @@ const isUniqueViolation = (error: unknown) =>
 
 export type InboundContact = Readonly<{ contactId: string }>;
 
+/** A found profile is reread after this long (its picture URL expires). */
+const PROFILE_TTL_MS = 12 * 3_600_000;
+/** A refused lookup (no permission, deleted user) is not retried on every message. */
+const PROFILE_RETRY_MS = 3_600_000;
+const MAX_DISPLAY_NAME = 100;
+
+type StoredProfile = {
+  checkedAt?: string;
+  ok?: boolean;
+  pictureUrl?: string;
+};
+
+const asRecord = (value: Prisma.JsonValue | null): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+
 /**
  * Turns one verified platform message into a stored inbound row and runs it
  * through the shared MessageProcessorService, exactly once per
@@ -44,6 +60,7 @@ export class ChannelInboundService {
     private readonly prisma: PrismaService,
     private readonly processor: MessageProcessorService,
     private readonly store: ChannelStoreAdapter,
+    private readonly connectors: ChannelConnectorRegistry,
   ) {}
 
   /** The customer's row; created on first contact. Never trusts a payload company. */
@@ -52,6 +69,16 @@ export class ChannelInboundService {
     companyId: string,
     message: InboundMessage,
   ): Promise<InboundContact> {
+    const row = await this.findOrCreate(kind, companyId, message);
+    await this.refreshProfile(kind, message, row);
+    return { contactId: row.id };
+  }
+
+  private async findOrCreate(
+    kind: StoredChannelKind,
+    companyId: string,
+    message: InboundMessage,
+  ) {
     const where = {
       companyId_channel_externalUserId: {
         companyId,
@@ -59,8 +86,9 @@ export class ChannelInboundService {
         externalUserId: message.externalUserId,
       },
     };
+    const select = { id: true, displayName: true, metadata: true } as const;
     try {
-      const row = await this.prisma.channelContact.upsert({
+      return await this.prisma.channelContact.upsert({
         where,
         // `accountId` is written by the server, used to address replies.
         create: {
@@ -70,16 +98,64 @@ export class ChannelInboundService {
           metadata: { accountId: message.accountId },
         },
         update: {},
-        select: { id: true },
+        select,
       });
-      return { contactId: row.id };
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
-      const row = await this.prisma.channelContact.findUniqueOrThrow({
-        where,
-        select: { id: true },
+      return this.prisma.channelContact.findUniqueOrThrow({ where, select });
+    }
+  }
+
+  /**
+   * Keeps the customer's name and picture up to date from the platform. Runs
+   * outside any transaction, never throws, and asks the platform at most once
+   * per PROFILE_TTL_MS (PROFILE_RETRY_MS after a refusal).
+   */
+  private async refreshProfile(
+    kind: StoredChannelKind,
+    message: InboundMessage,
+    row: {
+      id: string;
+      displayName: string | null;
+      metadata: Prisma.JsonValue | null;
+    },
+  ): Promise<void> {
+    const connector = this.connectors.find(kind);
+    if (!connector?.fetchProfile) return;
+
+    const metadata = asRecord(row.metadata);
+    const previous = (metadata.profile ?? {}) as StoredProfile;
+    const age = previous.checkedAt
+      ? Date.now() - Date.parse(previous.checkedAt)
+      : Number.NaN;
+    if (age < (previous.ok ? PROFILE_TTL_MS : PROFILE_RETRY_MS)) return;
+
+    try {
+      const profile = await connector.fetchProfile({
+        accountId: message.accountId,
+        externalUserId: message.externalUserId,
       });
-      return { contactId: row.id };
+      const displayName = sanitizeText(profile?.displayName ?? '').slice(
+        0,
+        MAX_DISPLAY_NAME,
+      );
+      await this.prisma.channelContact.update({
+        where: { id: row.id },
+        data: {
+          ...(displayName ? { displayName } : {}),
+          metadata: {
+            ...metadata,
+            profile: {
+              checkedAt: new Date().toISOString(),
+              ok: Boolean(profile),
+              // A refused lookup keeps the last picture; the dashboard falls back to initials if it expired.
+              pictureUrl: profile?.pictureUrl ?? previous.pictureUrl,
+            },
+          },
+        },
+      });
+    } catch {
+      // A profile is a nicety; the next message tries again.
     }
   }
 
