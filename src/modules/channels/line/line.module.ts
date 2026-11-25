@@ -25,6 +25,7 @@ import { NotificationModule } from '../../admin/notification/notification.module
 import { LineHandoffHandler } from './handoff/line-handoff.handler';
 import { StorageModule } from '../../../infra/storage/storage.module';
 import { LineImageArchiveService } from './media/line-image-archive.service';
+import { LineChatImportQueueModule } from './chat-import/line-chat-import-queue.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { LineImageArchiveService } from './media/line-image-archive.service';
     ChatEventsQueueModule,
     NotificationModule,
     StorageModule,
+    LineChatImportQueueModule,
   ],
   controllers: [
     LineWebhookController,

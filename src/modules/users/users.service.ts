@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { LineChatSender, Prisma } from '../../generated/prisma/client';
+import {
+  LineChatHistorySource,
+  LineChatSender,
+  Prisma,
+} from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GetAllUsersDto } from './dto/get-all-users.dto';
 import type {
@@ -40,6 +44,18 @@ export type LineUserListItem = {
   messageCount: number;
 };
 
+/**
+ * Hides LINE members a chat history import created from the follower list
+ * until they have a room (imported history or a first message): an OA can
+ * have 100k followers who never chatted.
+ */
+const CONTACTED_LINE_MEMBER: Prisma.LineMemberWhereInput = {
+  OR: [
+    { source: { not: 'followers_sync' } },
+    { conversation: { isNot: null } },
+  ],
+};
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -77,7 +93,9 @@ export class UsersService {
   async getCounts(): Promise<{ registered: number; line: number }> {
     const [registered, line] = await Promise.all([
       this.prisma.member.count(),
-      this.prisma.lineMember.count({ where: { memberId: null } }),
+      this.prisma.lineMember.count({
+        where: { memberId: null, ...CONTACTED_LINE_MEMBER },
+      }),
     ]);
 
     return { registered, line };
@@ -167,6 +185,7 @@ export class UsersService {
     const search = query.search?.trim();
 
     const where: Prisma.LineMemberWhereInput = {
+      AND: [CONTACTED_LINE_MEMBER],
       ...(query.registered === 'false'
         ? { memberId: null }
         : query.registered === 'true'
@@ -198,7 +217,15 @@ export class UsersService {
         createdAt: true,
         lastActiveAt: true,
         _count: {
-          select: { chatHistories: { where: { sender: LineChatSender.USER } } },
+          // Live messages only: imported history is not activity on this system.
+          select: {
+            chatHistories: {
+              where: {
+                sender: LineChatSender.USER,
+                source: LineChatHistorySource.LIVE,
+              },
+            },
+          },
         },
       },
     });

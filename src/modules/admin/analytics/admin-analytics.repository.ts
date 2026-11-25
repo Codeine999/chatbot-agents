@@ -152,6 +152,8 @@ export class AdminAnalyticsRepository {
         FROM "lineChatHistory" h
         LEFT JOIN "lineDelivery" d ON d."id" = h."deliveryId"
         WHERE ${this.withinRange(Prisma.sql`h."createdAt"`, range)}
+          -- Rows from a chat history import are past traffic, not activity.
+          AND h."source" = 'live'
       ),
       counts AS (
         SELECT

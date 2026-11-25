@@ -10,6 +10,11 @@ export async function findOrCreateLineMember(
   prisma: PrismaService,
   lineAdminService: Pick<LineAdminService, 'getProfile'>,
   lineUserId: string,
+  /**
+   * Runs once when this call created the member (not when it already
+   * existed). Fire-and-forget: it must not throw or delay the webhook.
+   */
+  onCreated?: (member: { id: string; displayName: string }) => void,
 ) {
   const existingMember = await prisma.lineMember.findUnique({
     where: {
@@ -24,7 +29,7 @@ export async function findOrCreateLineMember(
   const profile = await lineAdminService.getProfile(lineUserId);
   const syncedAt = new Date();
 
-  return prisma.lineMember.upsert({
+  const member = await prisma.lineMember.upsert({
     where: {
       lineUserId,
     },
@@ -42,4 +47,7 @@ export async function findOrCreateLineMember(
       profileSyncedAt: syncedAt,
     },
   });
+
+  onCreated?.(member);
+  return member;
 }

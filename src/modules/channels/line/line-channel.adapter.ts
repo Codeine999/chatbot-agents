@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { LineChatSender } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { RichMenuReplyCacheService } from '../../chatbot/menu/rich-menu-reply-cache.service';
@@ -16,6 +16,7 @@ import { UserSessionService } from '../../session/user-session.service';
 import { isUniqueConstraint, toChatMessage } from './line-message.mapper';
 import { findOrCreateLineMember } from './line-member.repository';
 import { LineImageArchiveService } from './media/line-image-archive.service';
+import { LineChatImportHook } from './chat-import/line-chat-import.hook';
 
 type SavedIncomingEvent = {
   conversationId: string;
@@ -38,6 +39,7 @@ export class LineChannelAdapter implements ChannelAdapter<
     private readonly richMenuReplies: RichMenuReplyCacheService,
     private readonly sessions: UserSessionService,
     private readonly images: LineImageArchiveService,
+    @Optional() private readonly chatImport?: LineChatImportHook,
   ) {}
 
   async indicateProcessing(event: LineWebhookEvent): Promise<void> {
@@ -278,6 +280,7 @@ export class LineChannelAdapter implements ChannelAdapter<
       this.prisma,
       this.lineAdminService,
       lineUserId,
+      (created) => void this.chatImport?.memberCreated(created),
     );
     const messageAt = new Date(event.timestamp || Date.now());
 

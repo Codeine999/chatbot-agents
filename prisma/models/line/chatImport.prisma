@@ -1,0 +1,114 @@
+/// LINE OA chat history import (docs/line-chat-import-plan.md).
+///
+/// A batch is one uploaded backup zip. Each CSV inside becomes a thread that
+/// keeps its parsed messages (staging) until the batch expires, so a thread
+/// linked to the wrong customer can be unlinked or relinked without losing
+/// anything. Linked threads are copied into lineChatHistory as IMPORT rows.
+
+enum LineChatImportStatus {
+  UPLOADED
+  SYNCING_FOLLOWERS
+  PARSING
+  MATCHING
+  MATERIALIZING
+  COMPLETED
+  FAILED
+  CANCELLED
+  /// DELETE /:batchId is removing what the batch wrote (chunked job).
+  DELETING
+  /// Retention passed: staged messages were cleared; written history stays
+  /// and the batch can still be deleted (rolled back), not relinked.
+  EXPIRED
+}
+
+enum LineChatImportThreadStatus {
+  PENDING
+  MATCHED_PENDING_WRITE
+  MATERIALIZED
+  UNMATCHED
+  AMBIGUOUS
+  SKIPPED
+}
+
+model LineChatImportBatch {
+  id          String  @id @db.Uuid
+  createdById String  @db.Uuid
+  /// Built by the server from the batch id (line-imports/<id>.zip), never sent by a client.
+  uploadKey   String  @db.VarChar(200)
+  /// S3 multipart upload id while the browser is still uploading parts.
+  multipartUploadId String? @db.VarChar(1024)
+  fileName    String  @db.VarChar(255)
+  /// Declared by the client at upload time; replaced by the stored size on start.
+  fileSize    BigInt
+  status      LineChatImportStatus @default(UPLOADED)
+  /// {fromDate, toDate, syncFollowers, overlapMode, dryRun}
+  options     Json?
+  /// Checkpoint of the running stage: followers `next` page token, next zip entry index.
+  cursor      Json?
+
+  totalEntries     Int @default(0)
+  parsedEntries    Int @default(0)
+  totalMessages    Int @default(0)
+  skippedByDate    Int @default(0)
+  skippedOverlap   Int @default(0)
+  errorRows        Int @default(0)
+  syncedFollowers  Int @default(0)
+  linkedThreads    Int @default(0)
+  unmatchedThreads Int @default(0)
+  ambiguousThreads Int @default(0)
+  /// At most 20 {entry, line, reason}; never message text.
+  errorSamples     Json?
+  errorMessage     String?
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+  /// Staging (thread messages) is purged at this time; materialized rows stay.
+  expiresAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  threads LineChatImportThread[]
+
+  @@index([status])
+  @@index([expiresAt])
+  @@map("lineChatImportBatch")
+}
+
+model LineChatImportThread {
+  id        String              @id @default(uuid()) @db.Uuid
+  batchId   String              @db.Uuid
+  batch     LineChatImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  /// Index of the entry in the zip; with batchId it is the parse checkpoint.
+  entryIndex Int
+  entryName  String @db.VarChar(512)
+  /// Customer name from the CSV rows (the file name only as a fallback).
+  rawName        String @db.VarChar(255)
+  normalizedName String @db.VarChar(255)
+  status         LineChatImportThreadStatus @default(PENDING)
+
+  lineMemberId   String? @db.Uuid
+  conversationId String? @db.Uuid
+  /// The room was created by this import, so unlinking may remove it.
+  createdConversation Boolean @default(false)
+  /// followers_name | lazy_first_message | admin_manual
+  matchMethod String?  @db.VarChar(32)
+  linkedById  String?  @db.Uuid
+  linkedAt    DateTime?
+
+  messageCount Int
+  firstAt      DateTime
+  lastAt       DateTime
+  lastText     String?  @db.VarChar(200)
+  /// Staged messages: [{s:"U"|"A", t:ISO time, x:text, m:messageType, h:contentHash}].
+  /// Large: never select it in list queries.
+  messages     Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([batchId, entryIndex])
+  @@index([normalizedName, status])
+  @@index([batchId, status])
+  @@index([lineMemberId])
+  @@map("lineChatImportThread")
+}
