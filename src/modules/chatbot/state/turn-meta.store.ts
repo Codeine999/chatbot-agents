@@ -2,8 +2,12 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../../infra/redis/redis.module';
-import type { AssistantAct } from '../../../shared/contracts/chat.types';
+import type {
+  AssistantAct,
+  RoomStateContext,
+} from '../../../shared/contracts/chat.types';
 import { redactPii } from '../../../utils/text.utils';
+import { DEFAULT_PHATIC_LIMITS } from '../intent/utils/phatic-policy';
 import { readTurnUnderstandingConfig } from './turn-understanding.config';
 
 const KEY_PREFIX = 'chat:turnmeta:';
@@ -40,10 +44,41 @@ export function askedTextOf(text: string): string {
   return Array.from(redactPii(text)).slice(0, MAX_ASKED_CHARACTERS).join('');
 }
 
+/**
+ * Compact, PII-free room state for the classifier and general chat.
+ * Undefined on normal open rooms so existing prompts stay byte-for-byte identical.
+ */
+export function roomStateOf(
+  handoffPending: boolean | undefined,
+  meta: TurnMeta | undefined,
+  now = Date.now(),
+  adminActiveWindowSec = DEFAULT_PHATIC_LIMITS.adminActiveWindowSec,
+): RoomStateContext | undefined {
+  if (!handoffPending) return undefined;
+
+  const waitingSinceMinutes =
+    meta?.handoffNoticeAt !== undefined && now >= meta.handoffNoticeAt
+      ? Math.floor((now - meta.handoffNoticeAt) / 60_000)
+      : undefined;
+  const adminRecentlyReplied =
+    meta?.lastAdminAt !== undefined &&
+    meta.lastAdminAt > (meta.lastActAt ?? 0) &&
+    now >= meta.lastAdminAt &&
+    (now - meta.lastAdminAt) / 1000 <= adminActiveWindowSec;
+
+  return {
+    waitingForStaff: true,
+    ...(meta?.lastAct ? { lastAssistantAct: meta.lastAct } : {}),
+    ...(waitingSinceMinutes !== undefined ? { waitingSinceMinutes } : {}),
+    ...(adminRecentlyReplied ? { adminRecentlyReplied: true } : {}),
+  };
+}
+
 @Injectable()
 export class TurnMetaStore {
   private readonly logger = new Logger(TurnMetaStore.name);
   private readonly ttlSec: number;
+  readonly adminActiveWindowSec: number;
   /** Off means no reads and no writes: the deployment behaves as before. */
   readonly enabled: boolean;
 
@@ -53,6 +88,7 @@ export class TurnMetaStore {
   ) {
     const settings = readTurnUnderstandingConfig(config);
     this.ttlSec = settings.turnMetaTtlSec;
+    this.adminActiveWindowSec = settings.limits.adminActiveWindowSec;
     this.enabled = settings.phaticEnabled;
   }
 

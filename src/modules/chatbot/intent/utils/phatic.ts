@@ -16,9 +16,16 @@ export type PhaticKind =
   | 'THANKS'
   | 'CLOSING'
   | 'PING'
+  | 'WAITING_NUDGE'
   | 'LAUGH';
 
-type Category = 'PARTICLE' | 'ACK' | 'THANKS' | 'CLOSING' | 'PING';
+type Category =
+  | 'PARTICLE'
+  | 'ACK'
+  | 'THANKS'
+  | 'CLOSING'
+  | 'PING'
+  | 'WAITING_NUDGE';
 
 /** Polite sentence-final particles. Lower case; Latin forms included. */
 const PARTICLES = [
@@ -27,15 +34,25 @@ const PARTICLES = [
   'คับ',
   'ค้าบ',
   'คร้าบ',
+  'คร๊าบ',
+  'ค๊าบ',
+  'ครั๊บ',
+  'คั๊บ',
   'ครัช',
   'ขรับ',
   'ฮะ',
   'ฮับ',
   'ค่ะ',
   'คะ',
+  'ค้ะ',
+  'ค๊ะ',
   'ค่า',
   'ค้า',
+  'ค๊า',
   'คร่ะ',
+  'คร้ะ',
+  'คร้า',
+  'คร๊า',
   'จ้า',
   'จ้ะ',
   'จ๊ะ',
@@ -50,7 +67,7 @@ const PARTICLES = [
   'kha',
 ] as const;
 
-/** Typos seen in real chats. Matched as whole words, never by distance. */
+/** Typos seen in real mobile chats. Matched as whole words, never by distance. */
 const TYPOS = [
   'ครัค่ะ',
   'ค่ร่ะ',
@@ -58,7 +75,19 @@ const TYPOS = [
   'ครับค่ะ',
   'คัฟ',
   'ครัฟ',
+  'คั๊ฟ',
+  'ครั๊ฟ',
+  'คัป',
+  'ครัป',
   'คาบ',
+  'ครั่บ',
+  'ครั้บ',
+  'คั่บ',
+  'คั้บ',
+  'ครั่ะ',
+  'ครั่',
+  'ครั้',
+  'ครั',
 ] as const;
 
 const ACKS = [
@@ -94,6 +123,85 @@ const CLOSINGS = ['บาย', 'บ๊ายบาย', 'แค่นี้ก�
 const PINGS = ['ฮัลโหล', 'hello', 'ยังอยู่ไหม', 'มีใครอยู่ไหม'] as const;
 
 /**
+ * Pure waiting-queue nudges ("นานจังเลย รออยู่นะ", "แอดมินอยู่ไหม").
+ * Only short-circuited by `decidePhatic` when the room is actually
+ * `waiting_admin`; non-waiting rooms ignore this kind and route normally.
+ */
+const WAITING_NUDGES = [
+  'นานจังเลย',
+  'นานจัง',
+  'นานมากเลย',
+  'นานมาก',
+  'นานแล้วนะ',
+  'นานแล้ว',
+  'รอนานมากแล้วนะ',
+  'รอนานมากแล้ว',
+  'รอนานมากเลย',
+  'รอนานมาก',
+  'รอนานจังเลย',
+  'รอนานจัง',
+  'รอนานแล้วนะ',
+  'รอนานแล้ว',
+  'รอนาน',
+  'รอตั้งนานแล้ว',
+  'รอตั้งนาน',
+  'ยังรออยู่นะ',
+  'ยังรออยู่',
+  'รออยู่นะ',
+  'รออยู่',
+  'รอแอดมิน',
+  'รอเจ้าหน้าที่',
+  'รอพนักงาน',
+  'รอตอบ',
+  'รอคำตอบ',
+  'ตอบช้าจังเลย',
+  'ตอบช้าจัง',
+  'ตอบช้ามากเลย',
+  'ตอบช้ามาก',
+  'ตอบช้า',
+  'ตอบหน่อย',
+  'ตอบด้วย',
+  'ตอบที',
+  'ทำไมนานจังเลย',
+  'ทำไมนานจัง',
+  'ทำไมรอนานจังเลย',
+  'ทำไมรอนานจัง',
+  'ทำไมรอนานมาก',
+  'ทำไมรอนาน',
+  'ทำไมตอบช้าจังเลย',
+  'ทำไมตอบช้าจัง',
+  'ทำไมตอบช้า',
+  'ทำไมยังไม่ตอบเลย',
+  'ทำไมยังไม่ตอบ',
+  'ยังไม่ตอบเลย',
+  'ยังไม่ตอบ',
+  'ยังไม่มีใครตอบเลย',
+  'ยังไม่มีใครตอบ',
+  'ยังไม่ได้คำตอบเลย',
+  'ยังไม่ได้คำตอบ',
+  'ไม่มีใครตอบเลย',
+  'ไม่มีใครตอบ',
+  'ไม่มีคนตอบ',
+  'แอดมินอยู่ไหม',
+  'แอดมินอยู่มั้ย',
+  'เจ้าหน้าที่อยู่ไหม',
+  'เจ้าหน้าที่อยู่มั้ย',
+  'มีใครไหม',
+  'มีใครมั้ย',
+  'มีคนอยู่ไหม',
+  'มีคนอยู่มั้ย',
+  'มีใครตอบไหม',
+  'มีใครตอบมั้ย',
+  'อีกนานไหม',
+  'อีกนานมั้ย',
+  'รอนานไหม',
+  'รอนานมั้ย',
+  'ถึงคิวหรือยัง',
+  'ถึงคิวยัง',
+  'คิวถึงไหนแล้ว',
+] as const;
+
+/**
  * Words that make a message a question. "ได้", "ใช่", "ไม่", "เค" are not
  * phatic either (they answer a question or an offer), simply by being absent
  * from the lexicon above.
@@ -126,6 +234,13 @@ const QUESTION_WORDS = [
 const SAFE_EMOJI = ['👍', '👌', '🙏', '🙂', '😊', '☺'] as const;
 
 /**
+ * Thai tone marks (่ ้ ๊ ๋) never legally precede an above/below vowel (ั ิ ี ึ ื ุ ู).
+ * Mobile fast-typing frequently swaps them ("คร่ั" -> "ครั่", "คร่ับ" -> "ครั่บ").
+ */
+const reorderThaiMarks = (value: string) =>
+  value.replace(/([\u0E48-\u0E4B]+)([\u0E31\u0E34-\u0E3A]+)/gu, '$2$1');
+
+/**
  * "ค่าาาา" -> "ค่า". A stretched word is matched on a collapsed copy of the
  * message against a collapsed lexicon, so "hello" still matches "hellooo".
  */
@@ -138,6 +253,7 @@ const LEXICON: readonly (readonly [string, Category])[] = [
   ...THANKS.map((word) => [word, 'THANKS'] as const),
   ...CLOSINGS.map((word) => [word, 'CLOSING'] as const),
   ...PINGS.map((word) => [word, 'PING'] as const),
+  ...WAITING_NUDGES.map((word) => [word, 'WAITING_NUDGE'] as const),
 ];
 
 const longestFirst = (entries: readonly (readonly [string, Category])[]) =>
@@ -148,7 +264,10 @@ const COLLAPSED_ENTRIES = longestFirst(
   LEXICON.map(([word, category]) => [collapse(word), category] as const),
 );
 
-const COLLAPSED_PINGS = PINGS.map(collapse);
+/** Phrases that intentionally contain a question word (e.g. "ไหม", "ทำไม"). */
+const COLLAPSED_QUESTION_EXCEPTIONS = [...WAITING_NUDGES, ...PINGS]
+  .map(collapse)
+  .sort((a, b) => b.length - a.length);
 
 /**
  * Cut-off particles ("ครั" in "ครัค่ะ"): proper prefixes, at least two code
@@ -165,6 +284,7 @@ const PARTICLE_PREFIXES: readonly string[] = [
 ].sort((a, b) => b.length - a.length);
 
 const KIND_PRIORITY: readonly [Category, PhaticKind][] = [
+  ['WAITING_NUDGE', 'WAITING_NUDGE'],
   ['THANKS', 'THANKS'],
   ['CLOSING', 'CLOSING'],
   ['PING', 'PING'],
@@ -176,10 +296,12 @@ const LAUGH = /^5{3,}$/u;
 
 export function detectPhatic(text: string): { kind: PhaticKind } | null {
   // 1. normalize; spaces, ZWJ and variation selectors never carry meaning.
-  const normalized = text
-    .normalize('NFC')
-    .toLowerCase()
-    .replace(/(?:\s|\u200D|\uFE0F)+/gu, '');
+  const normalized = reorderThaiMarks(
+    text
+      .normalize('NFC')
+      .toLowerCase()
+      .replace(/(?:\s|\u200D|\uFE0F)+/gu, ''),
+  );
   if (!normalized) return null;
 
   // 2. digits mean content ("ok 2 คน"); only a run of 555 is laughter.
@@ -202,16 +324,16 @@ export function detectPhatic(text: string): { kind: PhaticKind } | null {
     if (emoji.includes('🙏')) return { kind: 'THANKS' };
     return emoji.length ? { kind: 'ACK' } : null;
   }
-  // "ยังอยู่ไหม?", "ฮัลโหล?": a nudge is still a nudge with a question mark;
+  // "ยังอยู่ไหม?", "อีกนานไหม?": a ping or waiting nudge may carry "?";
   // any other "?" makes the message a question.
-  if (hasQuestionMark) return isPingOnly(letters) ? { kind: 'PING' } : null;
+  if (hasQuestionMark) return pingOrNudgeKind(letters);
 
   // 5. stretched letters are shortened, on a copy used only for matching.
   //    The message is tried as typed first: collapsing would break a real
   //    double letter at a word boundary ("โอเค"+"ค่ะ", "ก่อน"+"นะ").
   const collapsed = collapse(letters);
 
-  // 6. a question word means a question, except inside a PING phrase.
+  // 6. a question word means a question, except inside a PING / WAITING_NUDGE phrase.
   if (hasQuestionWord(collapsed)) return null;
 
   // 7. every character must be explained by the lexicon.
@@ -226,22 +348,28 @@ export function detectPhatic(text: string): { kind: PhaticKind } | null {
   return kind ? { kind: kind[1] } : null;
 }
 
-/** Only nudge phrases and particles ("ยังอยู่ไหมคะ", "ฮัลโหลครับ"). */
-function isPingOnly(letters: string): boolean {
+/** Only nudge/ping phrases and particles ("ยังอยู่ไหมคะ", "อีกนานไหม?", "รออยู่นะ?"). */
+function pingOrNudgeKind(letters: string): { kind: PhaticKind } | null {
   const categories =
     segment(letters, RAW_ENTRIES) ??
     segment(collapse(letters), COLLAPSED_ENTRIES);
-  return (
-    !!categories?.includes('PING') &&
-    categories.every(
-      (category) => category === 'PING' || category === 'PARTICLE',
-    )
+  if (!categories?.length) return null;
+  const allowed = categories.every(
+    (category) =>
+      category === 'WAITING_NUDGE' ||
+      category === 'PING' ||
+      category === 'PARTICLE',
   );
+  if (!allowed) return null;
+  if (categories.includes('WAITING_NUDGE')) return { kind: 'WAITING_NUDGE' };
+  if (categories.includes('PING')) return { kind: 'PING' };
+  return null;
 }
 
 function hasQuestionWord(text: string): boolean {
   let rest = text;
-  for (const ping of COLLAPSED_PINGS) rest = rest.split(ping).join('\u0000');
+  for (const phrase of COLLAPSED_QUESTION_EXCEPTIONS)
+    rest = rest.split(phrase).join('\u0000');
   return QUESTION_WORDS.some((word) => rest.includes(word));
 }
 

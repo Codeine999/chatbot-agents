@@ -23,7 +23,7 @@ export function readTurnUnderstandingConfig(
   config: ConfigService,
 ): TurnUnderstandingConfig {
   return {
-    phaticEnabled: booleanFlag(config, 'PHATIC_FAST_PATH_ENABLED'),
+    phaticEnabled: booleanFlag(config, 'PHATIC_FAST_PATH_ENABLED', true),
     turnMetaTtlSec: positiveInteger(
       config.get<unknown>('TURN_META_TTL_SEC'),
       TURN_UNDERSTANDING_OFF.turnMetaTtlSec,
@@ -49,18 +49,24 @@ export function readTurnUnderstandingConfig(
   };
 }
 
-/** Same strictness as CommerceFeatureService: a typo must not silently mean "off". */
-function booleanFlag(config: ConfigService, key: string): boolean {
-  const value = config.get<unknown>(key) ?? false;
+/** Same strictness as CommerceFeatureService: a typo must not silently flip the flag. */
+function booleanFlag(
+  config: ConfigService,
+  key: string,
+  fallback = false,
+): boolean {
+  const raw = config.get<unknown>(key);
+  if (raw === undefined || raw === null) return fallback;
+  if (typeof raw === 'string' && raw.trim() === '') return fallback;
   if (
-    typeof value !== 'boolean' &&
-    (typeof value !== 'string' || !/^(true|false)$/i.test(value.trim()))
+    typeof raw !== 'boolean' &&
+    (typeof raw !== 'string' || !/^(true|false)$/i.test(raw.trim()))
   ) {
     throw new Error(`${key} must be true or false`);
   }
   return (
-    value === true ||
-    (typeof value === 'string' && value.trim().toLowerCase() === 'true')
+    raw === true ||
+    (typeof raw === 'string' && raw.trim().toLowerCase() === 'true')
   );
 }
 

@@ -117,7 +117,11 @@ export type RouteDecision = {
 };
 
 /** A bare acknowledgement answered without retrieval or the classifier. */
-export type SmallTalkReply = 'HANDOFF_WAITING' | 'SILENT' | 'GENERAL';
+export type SmallTalkReply =
+  | 'HANDOFF_WAITING'
+  | 'HANDOFF_WAITING_NUDGE'
+  | 'SILENT'
+  | 'GENERAL';
 
 export type ChatContextRole = 'user' | 'assistant';
 
@@ -213,12 +217,26 @@ export type StickerChatRequest = LineAiUsageContext &
   }>;
 
 /**
+ * Compact room-state facts passed to the classifier and general chat when the
+ * room is waiting for staff, so non-whitelisted typos or follow-ups never get
+ * greeted as a brand-new conversation.
+ */
+export type RoomStateContext = Readonly<{
+  waitingForStaff: boolean;
+  lastAssistantAct?: AssistantAct;
+  waitingSinceMinutes?: number;
+  adminRecentlyReplied?: boolean;
+}>;
+
+/**
  * `userId`, `lineMemberId` and `conversationId` travel together so a billed
  * AI call can be attributed to the LINE thread that triggered it.
  */
 export type AiRequestContext = LineAiUsageContext &
   Readonly<{
     recentMessages?: readonly ChatContextMessage[];
+    /** Present only when room state matters (e.g. `waiting_admin`). */
+    roomState?: RoomStateContext;
   }>;
 
 export type KnowledgeAnswerContext = AiRequestContext &

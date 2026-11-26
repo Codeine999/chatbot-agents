@@ -103,6 +103,11 @@ export class ReplyTemplateService {
     return `รับทราบ${particle} ตอนนี้แจ้งเจ้าหน้าที่ไว้แล้ว จะรีบเข้ามาตอบในแชทนี้โดยเร็วที่สุดนะ${tail(particle)}`;
   }
 
+  /** Said to an impatient waiting customer: apologetic, no greeting, no promised ETA. */
+  handoffWaitingNudge(particle: PoliteParticle = 'ค่ะ'): string {
+    return `ขออภัยที่ให้รอนานนะ${tail(particle)} ตอนนี้เรื่องอยู่ในคิวเจ้าหน้าที่แล้ว แอดมินจะรีบเข้ามาดูแลในแชทนี้โดยเร็วที่สุด${particle}`;
+  }
+
   stickerGreeting(): string {
     return 'สวัสดีค่ะ สอบถามเรื่องไหนคะ';
   }

@@ -337,7 +337,7 @@ export function buildHarness(options: HarnessOptions = {}) {
     handle: registrationHandle,
   } as unknown as RegistrationFlowService;
 
-  // On only when the test sets PHATIC_FAST_PATH_ENABLED; otherwise it is inert.
+  // Defaults to on unless the test sets PHATIC_FAST_PATH_ENABLED=false.
   const turnMeta = new TurnMetaStore(redis as never, config);
 
   const chatbot = new ChatbotService(

@@ -14,6 +14,7 @@ import {
   ChatResponseSource,
   ImageChatRequest,
   KnowledgeRetrievalResult,
+  RoomStateContext,
   StickerChatRequest,
   AiAnswerResult,
   ChatContextMessage,
@@ -29,7 +30,11 @@ import { InsufficientCreditException } from '../usage/credit-point/insufficient-
 import { isCancelKeyword } from './intent/utils/cancel-keyword';
 import { DecisionTraceService } from '../decision-log/decision-trace.service';
 import { CHANNEL_KINDS } from '../../shared/channel/channel-kinds';
-import { TurnMetaStore, askedTextOf } from './state/turn-meta.store';
+import {
+  TurnMetaStore,
+  askedTextOf,
+  roomStateOf,
+} from './state/turn-meta.store';
 
 @Injectable()
 export class ChatbotService {
@@ -146,6 +151,12 @@ export class ChatbotService {
     // Preview rooms have no conversation row; their context is keyed by user.
     const metaKey = conversationId ?? (preview ? userId : undefined);
     const meta = metaKey ? await this.turnMeta?.load(metaKey) : undefined;
+    const roomState = roomStateOf(
+      request.handoffPending,
+      meta,
+      Date.now(),
+      this.turnMeta?.adminActiveWindowSec,
+    );
 
     const decision = await this.intentRouterService.resolve({
       ...usage,
@@ -238,16 +249,23 @@ export class ChatbotService {
         );
 
       case 'CONTINUE_AI_CHAT':
-      case 'GENERAL_QUESTION':
-        return this.aiResponse(
-          await this.aiChatService.answerGeneral(input, {
-            ...usage,
-            recentMessages,
-          }),
+      case 'GENERAL_QUESTION': {
+        const result = await this.aiChatService.answerGeneral(input, {
+          ...usage,
+          recentMessages,
+          ...(roomState ? { roomState } : {}),
+        });
+        const waiting = roomState?.waitingForStaff === true;
+        const response = await this.aiResponse(
+          result,
           'AI',
           userId,
-          'GENERAL',
+          waiting ? 'HANDOFF_NOTICE' : 'GENERAL',
         );
+        return waiting && !result.isFallback
+          ? { ...response, contextPolicy: 'EXCLUDE' }
+          : response;
+      }
 
       case 'CLARIFY':
         return this.response(
@@ -262,12 +280,14 @@ export class ChatbotService {
         return this.smallTalkResponse(decision.smallTalk?.reply, input, {
           ...usage,
           recentMessages,
+          ...(roomState ? { roomState } : {}),
         });
 
       case 'ANSWER_KNOWLEDGE': {
         const result = await this.aiChatService.answerKnowledge(input, {
           ...usage,
           recentMessages,
+          ...(roomState ? { roomState } : {}),
           retrievalQuery: decision.resolvedQuery,
           retrieval: decision.retrieval,
           // Only a route that skipped both the classifier and a trusted rule
@@ -282,17 +302,24 @@ export class ChatbotService {
         const general =
           decision.retrieval?.product?.plan.mode === 'GENERAL' ||
           result.general;
+        const waitingGeneral =
+          general && roomState?.waitingForStaff === true && !result.isFallback;
 
-        return this.aiResponse(
+        const response = await this.aiResponse(
           result,
           general ? 'AI' : 'KNOWLEDGE',
           userId,
-          general
-            ? 'GENERAL'
-            : this.productAsksCustomer(decision.retrieval, result)
-              ? 'ASKED'
-              : 'ANSWERED',
+          waitingGeneral
+            ? 'HANDOFF_NOTICE'
+            : general
+              ? 'GENERAL'
+              : this.productAsksCustomer(decision.retrieval, result)
+                ? 'ASKED'
+                : 'ANSWERED',
         );
+        return waitingGeneral
+          ? { ...response, contextPolicy: 'EXCLUDE' }
+          : response;
       }
 
       case 'RICH_MENU_REPLY': {
@@ -445,6 +472,7 @@ export class ChatbotService {
     context: LineAiUsageContext & {
       userId: string;
       recentMessages: readonly ChatContextMessage[];
+      roomState?: RoomStateContext;
     },
   ): Promise<ChatResponse> {
     if (reply === 'SILENT') {
@@ -452,11 +480,13 @@ export class ChatbotService {
       return this.response('', 'RULE', 'EXCLUDE');
     }
 
-    if (reply === 'HANDOFF_WAITING') {
+    if (reply === 'HANDOFF_WAITING' || reply === 'HANDOFF_WAITING_NUDGE') {
       const particle = await this.aiChatService.politeParticle();
       this.decisionTrace?.answer({ mode: 'SMALL_TALK' });
       return this.response(
-        this.replyTemplateService.handoffWaiting(particle),
+        reply === 'HANDOFF_WAITING_NUDGE'
+          ? this.replyTemplateService.handoffWaitingNudge(particle)
+          : this.replyTemplateService.handoffWaiting(particle),
         'RULE',
         'EXCLUDE',
         'HANDOFF_NOTICE',
@@ -464,6 +494,7 @@ export class ChatbotService {
     }
 
     const hasHistory = context.recentMessages.length > 0;
+    const waiting = context.roomState?.waitingForStaff === true;
     this.decisionTrace?.note('answer', {
       phatic: true,
       skipped: ['retrieval', 'classifier'],
@@ -473,15 +504,18 @@ export class ChatbotService {
       result,
       'AI',
       context.userId,
-      // In a conversation it only acknowledges, so a second "ครับ" right after
-      // is left alone; in a new room it opens the conversation.
-      hasHistory ? 'ACKED' : 'GREETED',
+      // In a waiting room it confirms the queue; in a conversation it only
+      // acknowledges, so a second "ครับ" right after is left alone; in a new
+      // room it opens the conversation.
+      waiting ? 'HANDOFF_NOTICE' : hasHistory ? 'ACKED' : 'GREETED',
     );
     if (result.isFallback) return response;
 
     this.decisionTrace?.answer({ mode: 'PHATIC_GENERAL' });
-    // "โอเคครับ" must not push the topic out of the three-turn context.
-    return hasHistory ? { ...response, contextPolicy: 'EXCLUDE' } : response;
+    // "โอเคครับ" / waiting ack must not push the topic out of the three-turn context.
+    return hasHistory || waiting
+      ? { ...response, contextPolicy: 'EXCLUDE' }
+      : response;
   }
 
   /** The product answer is a question back to the customer, not information. */

@@ -17,6 +17,7 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   GENERAL_RULES,
   PARTIAL_ANSWER_NOTE,
+  WAITING_ADMIN_GENERAL_RULES,
 } from '../../ai/prompt/ai-chat.constants';
 import { INSUFFICIENT_CONTEXT } from '../../../shared/knowledge/knowledge-routing.constants';
 import {
@@ -154,10 +155,16 @@ export class AiChatService {
       context.recentMessages ?? [],
       message,
     );
+    const waitingForStaff = context.roomState?.waitingForStaff === true;
     const systemInstruction = composeAiAnswerPrompt({
       setting,
       ragContext: [],
-      modeRules: GENERAL_RULES,
+      modeRules: waitingForStaff
+        ? `${GENERAL_RULES}\n\n${WAITING_ADMIN_GENERAL_RULES}`
+        : GENERAL_RULES,
+      ...(waitingForStaff
+        ? { dataSections: { roomState: context.roomState } }
+        : {}),
     });
 
     return this.generateText(

@@ -44,7 +44,7 @@ const SILENT: SmallTalkDecision = { reply: 'SILENT' };
  * else goes to general chat, which reads the history (one call).
  */
 export function decidePhatic(
-  _kind: PhaticKind,
+  kind: PhaticKind,
   context: PhaticContext,
 ): SmallTalkDecision | null {
   const { meta, handoffPending, now } = context;
@@ -52,6 +52,28 @@ export function decidePhatic(
   const ageSec = (at: number) => (now - at) / 1000;
   const recent = (at: number | undefined) =>
     at !== undefined && ageSec(at) <= limits.recentWindowSec;
+
+  // Waiting-queue nudges ("นานจังเลย รออยู่นะ") are fast-pathed ONLY when the
+  // room is actually waiting for staff; open rooms route them normally.
+  if (kind === 'WAITING_NUDGE') {
+    if (!handoffPending) return null;
+    if (
+      meta.lastAdminAt !== undefined &&
+      meta.lastAdminAt > (meta.lastActAt ?? 0) &&
+      ageSec(meta.lastAdminAt) <= limits.adminActiveWindowSec
+    ) {
+      return SILENT;
+    }
+    if (meta.handoffNoticeAt !== undefined) {
+      if (ageSec(meta.handoffNoticeAt) > limits.handoffWaitingMaxAgeSec) {
+        return null;
+      }
+      if (ageSec(meta.handoffNoticeAt) <= limits.handoffPingCooldownSec) {
+        return SILENT;
+      }
+    }
+    return { reply: 'HANDOFF_WAITING_NUDGE' };
+  }
 
   // 0. The assistant asked and is waiting: this is the answer, not small talk.
   if (meta.lastAct === 'ASKED' && recent(meta.lastActAt)) return null;

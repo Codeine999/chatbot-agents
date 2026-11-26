@@ -61,7 +61,11 @@ export class AiIntentClassifierService {
           systemInstruction: LOW_CONFIDENCE_CLASSIFIER_SYSTEM_INSTRUCTION,
           messages: toAiProviderMessages(
             context.recentMessages ?? [],
-            lowConfidenceClassifierPrompt(input, businessContext),
+            lowConfidenceClassifierPrompt(
+              input,
+              businessContext,
+              context.roomState,
+            ),
           ),
           temperature: 0.1,
           maxOutputTokens: 1000,

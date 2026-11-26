@@ -1,3 +1,5 @@
+import type { RoomStateContext } from '../../../shared/contracts/chat.types';
+
 /**
  * Static rules live in the system instruction (one constant: load tests and
  * audits identify classifier calls by it); the user turn carries only data.
@@ -11,6 +13,7 @@ Choose the answer path for the latest customer message:
 Always GENERAL:
 - Questions about the assistant itself: who or what is replying, its name or role, whether it is a bot or a person, what it can help with.
 - Greetings, thanks, goodbyes, acknowledgements and casual small talk.
+- When Room state has waitingForStaff=true: short acknowledgements, garbled polite particles/typos, or waiting follow-ups checking on staff progress that do not ask a new business question.
 - General knowledge that does not depend on this business.
 
 Always BUSINESS:
@@ -46,14 +49,16 @@ latest "ส่งกี่วันและเก็บเงินปลาย
 Return JSON only: {"classification":"BUSINESS|GENERAL","confidence":0.0,"reason":"short reason","standaloneQuery":"...","questions":[]}
 `.trim();
 
-/** The user turn: operator description (optional) and the message, as JSON data. */
+/** The user turn: operator description, room state (both optional) and the message, as JSON data. */
 export function lowConfidenceClassifierPrompt(
   input: string,
   businessContext?: string,
+  roomState?: RoomStateContext,
 ): string {
   const business = businessContext
     ? `Assistant and business description: ${JSON.stringify(businessContext)}\n`
     : '';
+  const state = roomState ? `Room state: ${JSON.stringify(roomState)}\n` : '';
 
-  return `${business}Customer message: ${JSON.stringify(input)}`;
+  return `${business}${state}Customer message: ${JSON.stringify(input)}`;
 }

@@ -11,6 +11,7 @@ import {
   ChatContextMessage,
   KnowledgeRetrievalResult,
   RetrievalFallbackReason,
+  RoomStateContext,
   RouteDecision,
 } from '../../../shared/contracts/chat.types';
 import { fromRule } from './utils/intent.utils';
@@ -30,7 +31,7 @@ import {
 import { DecisionTraceService } from '../../decision-log/decision-trace.service';
 import { detectPhatic } from './utils/phatic';
 import { decidePhatic } from './utils/phatic-policy';
-import type { TurnMeta } from '../state/turn-meta.store';
+import { roomStateOf, type TurnMeta } from '../state/turn-meta.store';
 import {
   TURN_UNDERSTANDING_OFF,
   readTurnUnderstandingConfig,
@@ -160,6 +161,12 @@ export class IntentRouterService {
       recentMessages,
       retrieval,
       fallbackReason: retrieval.fallbackReason,
+      roomState: roomStateOf(
+        handoffPending,
+        meta,
+        Date.now(),
+        this.turnUnderstanding.limits.adminActiveWindowSec,
+      ),
     });
   }
 
@@ -209,6 +216,7 @@ export class IntentRouterService {
       recentMessages?: readonly ChatContextMessage[];
       retrieval?: KnowledgeRetrievalResult;
       fallbackReason?: RetrievalFallbackReason;
+      roomState?: RoomStateContext;
     },
   ): Promise<RouteDecision> {
     const {
@@ -217,6 +225,7 @@ export class IntentRouterService {
       recentMessages = [],
       retrieval,
       fallbackReason,
+      roomState,
       lineMemberId,
       conversationId,
       turnId,
@@ -230,6 +239,7 @@ export class IntentRouterService {
         conversationId,
         turnId,
         recentMessages,
+        ...(roomState ? { roomState } : {}),
       },
     );
 
