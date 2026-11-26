@@ -24,6 +24,13 @@ export type OutboundTarget = Readonly<{
   externalUserId: string;
 }>;
 
+/** What a platform knows about a customer; every field is best effort. */
+export type ContactProfile = Readonly<{
+  displayName?: string;
+  /** A URL on the platform's CDN; it expires, so it is refreshed, not trusted forever. */
+  pictureUrl?: string;
+}>;
+
 /** `retryable` failures are tried again; `permanent` ones are recorded and dropped. */
 export type SendResult =
   | Readonly<{ ok: true; externalMessageId?: string }>
@@ -71,4 +78,10 @@ export interface ChannelConnector {
    */
   resolveCompany(accountId: string): Promise<string | null>;
   send(target: OutboundTarget, text: string): Promise<SendResult>;
+  /**
+   * The customer's name and picture, or null when the platform will not say
+   * (missing permission, deleted user, network). Never throws: a profile is
+   * a nicety and must not fail a turn.
+   */
+  fetchProfile?(target: OutboundTarget): Promise<ContactProfile | null>;
 }

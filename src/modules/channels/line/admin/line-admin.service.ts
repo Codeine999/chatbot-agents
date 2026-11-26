@@ -7,7 +7,7 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { getJson } from './line-api.utils';
+import { getJson, getLineJson, LineApiError } from './line-api.utils';
 import { RateLimitService } from '../../../usage/rate-limit/rate-limit.service';
 import { CompanyService } from '../../../admin/company/company.service';
 import { AiProviderSettingsService } from '../../../ai/ai-provider-settings.service';
@@ -91,6 +91,41 @@ export class LineAdminService {
     return getJson<LineProfile>(
       `/v2/bot/profile/${encodeURIComponent(lineUserId)}`,
       'LINE profile',
+      await this.getAccessToken(),
+      this.httpTimeoutMs,
+    );
+  }
+
+  /**
+   * Profile for the chat history import: null when the user blocked the OA or
+   * deleted their account (404). Other failures throw `LineApiError`.
+   */
+  async findProfile(lineUserId: string): Promise<LineProfile | null> {
+    try {
+      return await getLineJson<LineProfile>(
+        `/v2/bot/profile/${encodeURIComponent(lineUserId)}`,
+        'LINE profile',
+        await this.getAccessToken(),
+        this.httpTimeoutMs,
+      );
+    } catch (error) {
+      if (error instanceof LineApiError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  /**
+   * One page of follower user ids (verified/premium OAs only; others get 403,
+   * thrown as `LineApiError`). Blocked users are not included.
+   */
+  async getFollowerIds(
+    start?: string,
+  ): Promise<{ userIds: string[]; next?: string }> {
+    const query = new URLSearchParams({ limit: '1000' });
+    if (start) query.set('start', start);
+    return getLineJson<{ userIds: string[]; next?: string }>(
+      `/v2/bot/followers/ids?${query.toString()}`,
+      'LINE follower ids',
       await this.getAccessToken(),
       this.httpTimeoutMs,
     );

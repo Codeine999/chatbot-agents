@@ -27,6 +27,13 @@ enum LineChatSender {
   SYSTEM @map("system")
 }
 
+/// LIVE rows came through the webhook or our own sends; IMPORT rows were
+/// loaded from a LINE OA chat history backup (docs/line-chat-import-plan.md).
+enum LineChatHistorySource {
+  LIVE   @map("live")
+  IMPORT @map("import")
+}
+
 enum LineChatMessageType {
   TEXT     @map("text")
   IMAGE    @map("image")
@@ -308,6 +315,10 @@ model LineMember {
   /// Lead tier for LINE users. Unregistered users have no Customer, so it lives here.
   grade LineMemberGrade @default(NORMAL)
 
+  /// "webhook" = first seen through a webhook event; "followers_sync" = created
+  /// ahead of contact by a chat history import (lists hide these until they chat).
+  source String @default("webhook") @db.VarChar(20)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -329,6 +340,8 @@ model LineConversation {
   lastMessageType LineChatMessageType
   lastMessageAt   DateTime
   unreadCount     Int                 @default(0)
+  /// Set when a chat history import wrote into this room.
+  importedAt      DateTime?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   lineMember      LineMember          @relation(fields: [lineMemberId], references: [id])
@@ -361,6 +374,13 @@ model LineChatHistory {
   sentByAdminId String?      @db.Uuid
   sentByAdmin   AdminMember? @relation(fields: [sentByAdminId], references: [id], onDelete: SetNull)
 
+  source         LineChatHistorySource @default(LIVE)
+  importBatchId  String?               @db.Uuid
+  importThreadId String?               @db.Uuid
+  /// 128-bit hex. Unique only where set: a partial unique index added in the
+  /// migration SQL, because Prisma schema cannot express one.
+  importKey      String?               @db.VarChar(32)
+
   createdAt    DateTime         @default(now())
   conversation LineConversation @relation(fields: [conversationId], references: [id])
   lineMember   LineMember       @relation(fields: [lineMemberId], references: [id])
@@ -370,6 +390,8 @@ model LineChatHistory {
   @@index([sentByAdminId])
   @@index([createdAt])
   @@index([sender, createdAt])
+  @@index([lineMemberId, sender])
+  @@index([importThreadId])
   @@map("lineChatHistory")
 }
 

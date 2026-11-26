@@ -78,8 +78,17 @@ export class ChannelInboxService {
   ) {
     const { companyId } = await this.scopes.forAdmin(admin);
     const scope = this.roomScope(companyId, channel);
+    // Newest message only: its type is what the room list previews.
     const include = {
       contact: { select: { id: true, displayName: true, metadata: true } },
+      messages: {
+        select: { messageType: true },
+        orderBy: [
+          { createdAt: 'desc' },
+          { id: 'desc' },
+        ] as Prisma.ChannelMessageOrderByWithRelationInput[],
+        take: 1,
+      },
     } as const;
 
     if (isPagedInboxQuery(query)) {
@@ -105,7 +114,7 @@ export class ChannelInboxService {
           include,
         }),
       );
-      return { ...page, items: page.items.map((row) => this.roomItem(row)) };
+      return { ...page, items: await this.roomItems(channel, page.items) };
     }
 
     const rows = await this.prisma.channelConversation.findMany({
@@ -114,7 +123,7 @@ export class ChannelInboxService {
       take: LIST_LIMIT,
       include,
     });
-    const view = rows.map((row) => this.roomItem(row));
+    const view = await this.roomItems(channel, rows);
     return [
       ...view.filter((row) => row.status === 'waiting_admin'),
       ...view.filter((row) => row.status !== 'waiting_admin'),
@@ -172,10 +181,38 @@ export class ChannelInboxService {
     };
   }
 
+  /**
+   * Mute lives in Redis and is the only source of truth for the bot mode, so
+   * the list carries it (like the LINE inbox) to keep every admin's view in
+   * sync and to survive a reload.
+   */
+  private roomItems(
+    channel: StoredChannelKind,
+    rows: Parameters<ChannelInboxService['roomItem']>[0][],
+  ) {
+    return Promise.all(
+      rows.map(async (row) => {
+        const mute = await this.sessions.getMuteState(
+          channelUserId(channel, row.contactId),
+        );
+        return {
+          ...this.roomItem(row),
+          botMode: mute
+            ? mute.mode === 'ADMIN'
+              ? ('admin' as const)
+              : ('paused' as const)
+            : ('auto' as const),
+          botMuteUntil: mute?.expiresAt?.toISOString() ?? null,
+        };
+      }),
+    );
+  }
+
   private roomItem(
     row: Prisma.ChannelConversationGetPayload<{
       include: {
         contact: { select: { id: true; displayName: true; metadata: true } };
+        messages: { select: { messageType: true } };
       };
     }>,
   ) {
@@ -184,10 +221,15 @@ export class ChannelInboxService {
       channel: row.channel,
       status: row.status,
       lastMessage: row.lastMessage,
+      // Raw stored type (TEXT, IMAGE, UNSUPPORTED, ...); the dashboard decides how to show it.
+      lastMessageType: row.messages[0]?.messageType ?? 'TEXT',
       lastMessageAt: row.lastMessageAt,
       unreadCount: row.unreadCount,
       createdAt: row.createdAt,
-      contact: row.contact,
+      contact: {
+        ...row.contact,
+        pictureUrl: profilePicture(row.contact.metadata),
+      },
     };
   }
 
@@ -439,6 +481,15 @@ export class ChannelInboxService {
       throw new BadRequestException(`Invalid ${name} date`);
     return date;
   }
+}
+
+/** The customer's picture kept by the inbound profile refresh, https only. */
+function profilePicture(metadata: Prisma.JsonValue | null): string | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
+    return null;
+  const profile = (metadata as { profile?: { pictureUrl?: unknown } }).profile;
+  const url = profile?.pictureUrl;
+  return typeof url === 'string' && url.startsWith('https://') ? url : null;
 }
 
 function sentStatus(row: Pick<ChannelMessage, 'sender' | 'status'>) {

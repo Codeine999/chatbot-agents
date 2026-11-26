@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { publicApiBaseUrl } from '../../core/public-api-base-url';
 import {
   BadGatewayException,
   BadRequestException,
@@ -17,10 +18,35 @@ import { FacebookConfig } from '../facebook.config';
 import { FacebookCredentialService } from '../facebook-credential.service';
 import { connectFacebookChannelSchema } from './facebook-channel.dto';
 
-const pageSchema = z.object({
-  id: z.string().regex(/^\d{1,32}$/),
-  name: z.string().max(255).optional(),
+const pageNameSchema = z.object({ name: z.string().max(255).optional() });
+
+/** What Graph's debug_token says about a token; needs no page permission. */
+const debugTokenSchema = z.object({
+  data: z.object({
+    app_id: z.string().regex(/^\d{1,32}$/),
+    type: z.string(),
+    is_valid: z.boolean(),
+    profile_id: z
+      .string()
+      .regex(/^\d{1,32}$/)
+      .optional(),
+  }),
 });
+
+/** Machine-readable reasons the connect form can act on. */
+export const FACEBOOK_CONNECT_ERRORS = {
+  invalidToken: 'FB_INVALID_TOKEN',
+  notPageToken: 'FB_NOT_PAGE_TOKEN',
+  appSecretMismatch: 'FB_APP_SECRET_MISMATCH',
+} as const;
+
+const badRequest = (message: string, code: string) =>
+  new BadRequestException({
+    statusCode: 400,
+    error: 'Bad Request',
+    message,
+    code,
+  });
 
 /** Every column except the encrypted values. */
 const PUBLIC_SELECT = {
@@ -70,7 +96,7 @@ export class FacebookChannelAdminService {
     const token = this.credentials.seal(input.pageAccessToken);
     const verifyToken = randomBytes(24).toString('base64url');
     const sealedVerify = this.credentials.seal(verifyToken);
-    const page = await this.fetchPage(input.pageAccessToken);
+    const page = await this.fetchPage(input.pageAccessToken, input.appSecret);
     const { companyId } = await this.scopes.forAdmin(admin);
 
     const values = {
@@ -169,17 +195,57 @@ export class FacebookChannelAdminService {
     };
   }
 
-  private webhookUrl(channelKey: string): string | null {
-    const base = this.config.get<string>('PUBLIC_API_BASE_URL')?.trim();
-    return base
-      ? `${base.replace(/\/+$/, '')}/api/channels/facebook/webhooks/${channelKey}`
-      : null;
+  private webhookUrl(channelKey: string): string {
+    return `${publicApiBaseUrl(this.config)}/api/channels/facebook/webhooks/${channelKey}`;
   }
 
-  private async fetchPage(pageAccessToken: string) {
+  /**
+   * Checks the token with Graph's debug_token, which works for a token that
+   * only has pages_messaging (what the Messenger "Generate token" button
+   * issues). The token proves which app and Page it belongs to, then the app
+   * secret is proven against that same app. The Page name is a best effort:
+   * it needs pages_read_engagement, so a token without it just has no name.
+   */
+  private async fetchPage(pageAccessToken: string, appSecret: string) {
+    const token = await this.inspectToken(pageAccessToken, pageAccessToken);
+    if (!token.is_valid)
+      throw badRequest(
+        'Facebook page access token is invalid',
+        FACEBOOK_CONNECT_ERRORS.invalidToken,
+      );
+    if (token.type !== 'PAGE' || !token.profile_id)
+      throw badRequest(
+        'Facebook token is not a Page access token',
+        FACEBOOK_CONNECT_ERRORS.notPageToken,
+      );
+
+    // An app access token (<app id>|<secret>) is only accepted with the right
+    // secret, so this also proves the secret belongs to the token's app.
+    try {
+      await this.inspectToken(pageAccessToken, `${token.app_id}|${appSecret}`);
+    } catch (error) {
+      if (error instanceof BadRequestException)
+        throw badRequest(
+          'Facebook app secret does not belong to the app that issued this token',
+          FACEBOOK_CONNECT_ERRORS.appSecretMismatch,
+        );
+      throw error;
+    }
+
+    return {
+      id: token.profile_id,
+      name: await this.fetchPageName(pageAccessToken),
+    };
+  }
+
+  private async inspectToken(inputToken: string, accessToken: string) {
     let response: Response;
     try {
-      response = await this.graph('GET', '/me?fields=id,name', pageAccessToken);
+      response = await this.graph(
+        'GET',
+        `/debug_token?input_token=${encodeURIComponent(inputToken)}`,
+        accessToken,
+      );
     } catch {
       throw new BadGatewayException('Facebook could not be reached');
     }
@@ -188,19 +254,39 @@ export class FacebookChannelAdminService {
       response.status === 401 ||
       response.status === 403
     )
-      throw new BadRequestException('Facebook page access token is invalid');
+      throw badRequest(
+        'Facebook page access token is invalid',
+        FACEBOOK_CONNECT_ERRORS.invalidToken,
+      );
     if (!response.ok)
       throw new BadGatewayException(
         `Facebook did not confirm the token (HTTP ${response.status})`,
       );
-    const parsed = pageSchema.safeParse(
+    const parsed = debugTokenSchema.safeParse(
       await response.json().catch(() => null),
     );
     if (!parsed.success)
       throw new BadGatewayException(
-        'Facebook returned an unexpected page profile; use a Page access token',
+        'Facebook returned an unexpected token description',
       );
-    return parsed.data;
+    return parsed.data.data;
+  }
+
+  private async fetchPageName(pageAccessToken: string) {
+    try {
+      const response = await this.graph(
+        'GET',
+        '/me?fields=name',
+        pageAccessToken,
+      );
+      if (!response.ok) return undefined;
+      const parsed = pageNameSchema.safeParse(
+        await response.json().catch(() => null),
+      );
+      return parsed.success ? parsed.data.name : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   /** Subscribes the app to the Page's messages. Non-fatal: reported to the UI. */
@@ -224,11 +310,11 @@ export class FacebookChannelAdminService {
     }
   }
 
-  private graph(method: 'GET' | 'POST', path: string, pageAccessToken: string) {
+  private graph(method: 'GET' | 'POST', path: string, bearer: string) {
     const { graphBaseUrl, sendTimeoutMs } = this.facebook.transport;
     return fetch(`${graphBaseUrl}${path}`, {
       method,
-      headers: { Authorization: `Bearer ${pageAccessToken}` },
+      headers: { Authorization: `Bearer ${bearer}` },
       signal: AbortSignal.timeout(sendTimeoutMs),
     });
   }

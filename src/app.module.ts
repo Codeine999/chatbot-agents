@@ -20,6 +20,7 @@ import { DecisionLogModule } from './modules/decision-log/decision-log.module';
 import { ChannelGatewayModule } from './modules/channels/core/channel-gateway.module';
 import { ChatEventsWorkerModule } from './modules/channels/chat-events-worker.module';
 import { FacebookModule } from './modules/channels/facebook/facebook.module';
+import { LineChatImportModule } from './modules/channels/line/chat-import/line-chat-import.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { FacebookModule } from './modules/channels/facebook/facebook.module';
     }),
 
     LineModule,
+    LineChatImportModule,
 
     RegistrationModule,
 
