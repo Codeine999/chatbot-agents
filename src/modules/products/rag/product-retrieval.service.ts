@@ -32,7 +32,7 @@ import type {
   RetrievalFallbackReason,
 } from '../../../shared/contracts/chat.types';
 import { toAiProviderMessages } from '../../ai/prompt/ai-provider-context';
-import { redactPii } from '../../../utils/text.utils';
+import { redactBotReply, redactPii } from '../../../utils/text.utils';
 import { stripJsonCodeFence } from '../../../utils/json.utils';
 import { rethrowPendingAiUsage } from '../../usage/billing/pending-ai-usage.error';
 import { rethrowInsufficientCredit } from '../../usage/credit-point/insufficient-credit.exception';
@@ -140,7 +140,13 @@ export class ProductRetrievalService {
     const history = (context.recentMessages ?? [])
       .slice(-6)
       .filter((m) => m.source !== 'REGISTRATION')
-      .map((m) => ({ ...m, text: redactPii(m.text).slice(0, 1000) }));
+      .map((m) => ({
+        ...m,
+        text: (m.role === 'assistant'
+          ? redactBotReply(m.text)
+          : redactPii(m.text)
+        ).slice(0, 1000),
+      }));
 
     let turn: CommerceTurn | null;
     try {

@@ -1,6 +1,6 @@
 import type { AiProviderMessage } from '../../../ai-provider/types/ai-provider.types';
 import { ChatContextMessage } from '../../../shared/contracts/chat.types';
-import { redactPii } from '../../../utils/text.utils';
+import { redactBotReply, redactPii } from '../../../utils/text.utils';
 
 const MAX_RECENT_CONTEXT_CHARACTERS = 6_000;
 
@@ -12,7 +12,10 @@ export function toAiProviderMessages(
   const selectedMessages = selectNewestMessagesWithinBudget(recentMessages);
   const messages: AiProviderMessage[] = selectedMessages.map((message) => ({
     role: message.role,
-    text: redactPii(message.text),
+    text:
+      message.role === 'assistant'
+        ? redactBotReply(message.text)
+        : redactPii(message.text),
   }));
 
   messages.push({

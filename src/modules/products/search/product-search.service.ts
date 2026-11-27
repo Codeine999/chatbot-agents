@@ -794,7 +794,7 @@ export class ProductSearchService {
             variantId: variant.id,
             name: redactPii(product.name),
             category: product.category ? redactPii(product.category) : null,
-            aliases: product.aliases.map(redactPii),
+            aliases: product.aliases.map((alias) => redactPii(alias)),
             sku: variant.sku,
             description: stableProductDescription(product.description).slice(
               0,

@@ -6,7 +6,7 @@ import {
   ChatResponse,
   ChatResponseSource,
 } from '../../../shared/contracts/chat.types';
-import { redactPii } from '../../../utils/text.utils';
+import { redactBotReply, redactPii } from '../../../utils/text.utils';
 import type { CatalogRef } from '../../products/search/product-search.types';
 import { z } from 'zod';
 
@@ -94,8 +94,12 @@ export class LoadContextService {
    */
   async appendTurn(params: AppendContextTurnParams): Promise<boolean> {
     const { conversationId, eventId, response } = params;
-    const userText = this.prepareText(params.userText);
-    const assistantText = this.prepareText(response.text);
+    const userText = this.prepareText(redactPii(params.userText));
+    // The bot's reply keeps KB phone numbers (call center) so a follow-up can
+    // repeat them; only numbers the customer typed in this turn are removed.
+    const assistantText = this.prepareText(
+      redactBotReply(response.text, params.userText),
+    );
 
     if (
       response.contextPolicy !== 'INCLUDE' ||
@@ -198,10 +202,9 @@ export class LoadContextService {
     return parsed.success ? parsed.data : undefined;
   }
 
+  /** Caps an already-redacted value to the stored length. */
   private prepareText(value: string): string {
-    return Array.from(redactPii(value))
-      .slice(0, MAX_STORED_MESSAGE_CHARACTERS)
-      .join('');
+    return Array.from(value).slice(0, MAX_STORED_MESSAGE_CHARACTERS).join('');
   }
 
   private parseTurn(value: string): StoredChatTurn | null {
