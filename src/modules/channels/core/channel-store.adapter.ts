@@ -175,6 +175,14 @@ export class ChannelStoreAdapter implements ChannelAdapter<
   }
 
   /**
+   * The App channel is the back-office test chat, so it keeps answering while
+   * the global pause silences customer-facing channels (LINE, Facebook).
+   */
+  bypassesPipelinePause(event: ChannelInboundEvent): boolean {
+    return event.channel === 'APP';
+  }
+
+  /**
    * Push channels: send (or resume sending) the stored reply; a retryable
    * failure throws so the queue tries again. Chat context is appended only
    * once the platform accepted the reply. App: nothing to send.

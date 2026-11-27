@@ -43,7 +43,11 @@ export class MessageProcessorService {
 
     // Global stop: the message is already stored above; skip search, model and
     // reply entirely. Only identifiers are logged, never the message text.
-    if (await this.pipelineSwitch.isPaused()) {
+    // Adapters may opt an event out (the App test chat keeps answering).
+    if (
+      !adapter.bypassesPipelinePause?.(event) &&
+      (await this.pipelineSwitch.isPaused())
+    ) {
       this.logger.warn(
         `pipeline paused, message stored without reply conversation=${thread.conversationId}`,
       );

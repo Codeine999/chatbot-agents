@@ -2,7 +2,7 @@ name: deploy-backend
 
 on:
   push:
-    branches: [product]
+    branches: [understanding]
   workflow_dispatch:
 
 env:

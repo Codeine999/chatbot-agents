@@ -42,6 +42,11 @@ export interface ChannelAdapter<TEvent, TThread extends ConversationThread> {
     claimOwner?: string,
   ): Promise<DeliveryReference | null>;
   /**
+   * True when this event must be answered even while the global pipeline
+   * switch is paused. Omitted = the pause applies.
+   */
+  bypassesPipelinePause?(event: TEvent): boolean;
+  /**
    * Settle an already-stored inbound event as "decided without a reply" (global
    * pause): no model call, no delivery, and a redelivery must not answer it.
    */
